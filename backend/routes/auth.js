@@ -33,7 +33,8 @@ router.post('/signup', async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    await sendEmail(
+    // Send email asynchronously in the background so the user doesn't wait
+    sendEmail(
       email, 
       'Your DFCCI Threshold Verification Code', 
       `<p>Your verification code is: <strong>${otp}</strong></p><p>It will expire in 15 minutes.</p>`
@@ -113,7 +114,8 @@ router.post('/resend-otp', async (req, res) => {
 
     resendRateLimits.set(email, Date.now());
 
-    await sendEmail(
+    // Send email asynchronously
+    sendEmail(
       email, 
       'Your New DFCCI Threshold Verification Code', 
       `<p>Your new verification code is: <strong>${newOtp}</strong></p><p>It will expire in 15 minutes.</p>`
@@ -183,7 +185,8 @@ router.post('/forgot-password', async (req, res) => {
     user.otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
     await user.save();
 
-    await sendEmail(
+    // Send email asynchronously
+    sendEmail(
       email,
       'DFCCI Threshold — Password Reset Code',
       `<p>You requested a password reset.</p>
