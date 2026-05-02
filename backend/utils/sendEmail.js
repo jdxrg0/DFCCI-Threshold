@@ -1,5 +1,9 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
 
+// Force Node.js to use IPv4. Render's free tier has issues with outbound IPv6
+// which causes the ENETUNREACH error when connecting to smtp.gmail.com.
+dns.setDefaultResultOrder('ipv4first');
 const sendEmail = async (to, subject, html, retries = 3, backoff = 1000) => {
   try {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
