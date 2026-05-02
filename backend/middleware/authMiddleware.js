@@ -3,9 +3,15 @@ const User = require('../models/User');
 
 const requireAuth = async (req, res, next) => {
   try {
-    const token = req.cookies.token;
+    let token = req.cookies.token;
+
+    // Support Authorization header for cross-domain production stability (Vercel/Render)
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
     if (!token) {
-      console.warn('[Auth] No token cookie found. Cookies:', req.cookies);
+      console.warn('[Auth] No token found in cookies or header.');
       return res.status(401).json({ message: 'Authentication required' });
     }
 

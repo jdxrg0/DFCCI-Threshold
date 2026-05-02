@@ -61,8 +61,11 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
-    setUser(res.data.user);
-    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(res.data.user));
+    const { user: userData, token } = res.data;
+    
+    setUser(userData);
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(userData));
+    localStorage.setItem('dfcci_token', token);
     return res.data;
   };
 
@@ -70,6 +73,7 @@ export const AuthProvider = ({ children }) => {
     await api.post('/auth/logout');
     setUser(null);
     localStorage.removeItem(USER_CACHE_KEY);
+    localStorage.removeItem('dfcci_token');
   };
 
   const signup = async (userData) => {

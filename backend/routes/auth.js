@@ -157,11 +157,12 @@ router.post('/login', async (req, res) => {
 
     res.json({
       message: 'Logged in successfully',
+      token, // Send token in body for mobile/Vercel support
       user: {
         _id: user._id,
         displayName: user.displayName,
         role: user.role,
-        email: user.email // sending email to frontend helps with logic but UI must hide it
+        email: user.email 
       }
     });
   } catch (error) {
