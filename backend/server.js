@@ -15,6 +15,7 @@ const ticketRoutes = require('./routes/tickets');
 const affirmationRoutes = require('./routes/affirmations');
 const fruitRoutes = require('./routes/fruitEndorsements');
 const fundRoutes = require('./routes/funds');
+const { initReminderScheduler } = require('./utils/reminderScheduler');
 
 const app = express();
 
@@ -85,4 +86,7 @@ app.listen(PORT, () => {
       console.log('Self-ping sent to keep server awake.');
     }, 14 * 60 * 1000); // Ping every 14 minutes
   }
+
+  // Start the background scheduler
+  initReminderScheduler();
 });

@@ -31,6 +31,10 @@ const userSchema = new mongoose.Schema({
   otpExpires: {
     type: Date,
   },
+  subscribedToDuesReminders: {
+    type: Boolean,
+    default: false,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

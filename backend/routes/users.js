@@ -42,6 +42,27 @@ router.put('/:id/role', requireAuth, requireRole(['ADMIN']), async (req, res) =>
   }
 });
 
+// Toggle dues reminders subscription (Admin only)
+router.put('/:id/toggle-reminders', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.subscribedToDuesReminders = !user.subscribedToDuesReminders;
+    await user.save();
+
+    res.json({ 
+      message: `Dues reminders ${user.subscribedToDuesReminders ? 'enabled' : 'disabled'} for ${user.displayName}`,
+      subscribedToDuesReminders: user.subscribedToDuesReminders 
+    });
+  } catch (error) {
+    console.error('Error toggling reminders:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get all verified members for selection (Authenticated, Verified MEMBER or above)
 router.get('/members', requireAuth, requireVerified, async (req, res) => {
   try {

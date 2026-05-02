@@ -219,6 +219,21 @@ const Navbar = () => {
                   )}
                 </Link>
               )}
+              <Link to="/funds" className="btn btn-secondary" style={{ padding: '0.5rem', position: 'relative' }} title={t('fund_tracker')}>
+                <Wallet size={20} color={location.pathname === '/funds' ? 'var(--primary)' : 'var(--text-main)'} style={{ transition: 'color 0.2s' }} />
+                {location.pathname === '/funds' && (
+                  <span style={{
+                    position: 'absolute',
+                    bottom: '3px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    width: '4px',
+                    height: '4px',
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--primary)',
+                  }} />
+                )}
+              </Link>
 
               {/* Notification bell */}
               <button
@@ -346,6 +361,9 @@ const Navbar = () => {
                     <Users size={20} /> {t('counselor')}
                   </Link>
                 )}
+                <Link to="/funds" onClick={() => setIsMobileMenuOpen(false)} className="btn btn-secondary">
+                  <Wallet size={20} /> {t('fund_tracker')}
+                </Link>
 
                 <button onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="btn btn-secondary">
                   <LogOut size={20} /> {t('logout')}

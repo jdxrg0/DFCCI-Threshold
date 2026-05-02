@@ -80,23 +80,20 @@ export default function FundTrackerDashboard() {
       setLoadingOverview(true);
       const sumRes = await api.get('/funds/summary');
       setSummary(sumRes.data);
-      if (isPrivileged) {
-        const params = new URLSearchParams();
-        if (month) params.append('month', month);
-        if (year) params.append('year', year);
-        const [txRes, catRes] = await Promise.all([
-          api.get(`/funds?${params.toString()}`),
-          api.get('/funds/categories'),
-        ]);
-        setTransactions(txRes.data);
-        setCategories(catRes.data);
-      }
+      const params = new URLSearchParams();
+      if (month) params.append('month', month);
+      if (year) params.append('year', year);
+      const [txRes, catRes] = await Promise.all([
+        api.get(`/funds?${params.toString()}`),
+        api.get('/funds/categories'),
+      ]);
+      setTransactions(txRes.data);
+      setCategories(catRes.data);
     } catch (err) { console.error(err); }
     finally { setLoadingOverview(false); }
   }, [month, year, isPrivileged]);
 
   const fetchLedger = useCallback(async () => {
-    if (!isPrivileged) return;
     try {
       setLoadingDues(true);
       const res = await api.get('/funds/dues/ledger');
@@ -387,35 +384,29 @@ ${formattedDesc}
       </div>
 
       {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: isPrivileged ? 'repeat(3, 1fr)' : '1fr', gap: '0.5rem', marginBottom: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
         <div className="card" style={{ textAlign: 'center', padding: '0.75rem' }}>
           <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('current_balance')}</p>
           <p style={{ fontSize: '1.25rem', fontWeight: 'bold', color: summary.currentBalance >= 0 ? '#22c55e' : '#ef4444' }}>{fmt(summary.currentBalance)}</p>
         </div>
-        {isPrivileged && (
-          <>
-            <div className="card" style={{ textAlign: 'center', padding: '0.75rem' }}>
-              <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_income')}</p>
-              <p style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#22c55e' }}>+{fmt(summary.totalIncome)}</p>
-            </div>
-            <div className="card" style={{ textAlign: 'center', padding: '0.75rem' }}>
-              <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_expense')}</p>
-              <p style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>-{fmt(summary.totalExpense)}</p>
-            </div>
-          </>
-        )}
+        <div className="card" style={{ textAlign: 'center', padding: '0.75rem' }}>
+          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_income')}</p>
+          <p style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#22c55e' }}>+{fmt(summary.totalIncome)}</p>
+        </div>
+        <div className="card" style={{ textAlign: 'center', padding: '0.75rem' }}>
+          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_expense')}</p>
+          <p style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>-{fmt(summary.totalExpense)}</p>
+        </div>
       </div>
 
-      {/* Tabs (Admin/Treasurer only) */}
-      {isPrivileged && (
-        <>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '2px solid var(--border-color)' }}>
-            {['overview', 'dues'].map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: 'none', border: 'none', padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: activeTab === tab ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === tab ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-2px', transition: 'color 0.2s' }}>
-                {tab === 'overview' ? t('overview_tab') : t('weekly_dues_tab')}
-              </button>
-            ))}
-          </div>
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '2px solid var(--border-color)' }}>
+        {['overview', 'dues'].map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: 'none', border: 'none', padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: activeTab === tab ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === tab ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-2px', transition: 'color 0.2s' }}>
+            {tab === 'overview' ? t('overview_tab') : t('weekly_dues_tab')}
+          </button>
+        ))}
+      </div>
 
           {/* ── OVERVIEW TAB ── */}
           {activeTab === 'overview' && (
@@ -431,10 +422,12 @@ ${formattedDesc}
                     <option value="">{t('all_years')}</option>
                     {[new Date().getFullYear(), new Date().getFullYear()-1].map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button onClick={() => setShowFellowshipForm(true)} className="btn btn-secondary" style={{ fontSize: '0.85rem' }}>+ Fellowship Exp.</button>
-                    <button onClick={() => openForm()} className="btn btn-primary" style={{ fontSize: '0.85rem' }}>+ {t('add_transaction')}</button>
-                  </div>
+                  {isPrivileged && (
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button onClick={() => setShowFellowshipForm(true)} className="btn btn-secondary" style={{ fontSize: '0.85rem' }}>+ Fellowship Exp.</button>
+                      <button onClick={() => openForm()} className="btn btn-primary" style={{ fontSize: '0.85rem' }}>+ {t('add_transaction')}</button>
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="hide-on-mobile" style={{ overflowX: 'auto' }}>
@@ -461,11 +454,17 @@ ${formattedDesc}
                         <td style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>{tx.description || '—'}</td>
                         <td style={{ padding: '0.75rem 1rem', fontWeight: '600', color: tx.type === 'INCOME' ? '#22c55e' : '#ef4444' }}>{tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}</td>
                         <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
-                          {tx.description?.startsWith('Registration fee') && (
+                          {tx.description?.startsWith('Registration fee') && isPrivileged && (
                             <button onClick={() => handleCopyAnnouncement(tx)} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', marginRight: '0.75rem', fontSize: '0.8rem' }} title="Copy Announcement"><Copy size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '2px' }}/> Copy</button>
                           )}
-                          <button onClick={() => openForm(tx)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', marginRight: '0.75rem', fontSize: '0.8rem' }}>{t('edit')}</button>
-                          <button onClick={() => handleDelete(tx._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem' }}>{t('delete')}</button>
+                          {isPrivileged ? (
+                            <>
+                              <button onClick={() => openForm(tx)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', marginRight: '0.75rem', fontSize: '0.8rem' }}>{t('edit')}</button>
+                              <button onClick={() => handleDelete(tx._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem' }}>{t('delete')}</button>
+                            </>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -496,11 +495,15 @@ ${formattedDesc}
                           {tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}
                         </span>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          {tx.description?.startsWith('Registration fee') && (
+                          {tx.description?.startsWith('Registration fee') && isPrivileged && (
                             <button onClick={() => handleCopyAnnouncement(tx)} style={{ background: 'none', border: 'none', color: 'var(--text-main)', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }} title="Copy Announcement"><Copy size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '2px' }}/> Copy</button>
                           )}
-                          <button onClick={() => openForm(tx)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }}>{t('edit')}</button>
-                          <button onClick={() => handleDelete(tx._id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }}>{t('delete')}</button>
+                          {isPrivileged && (
+                            <>
+                              <button onClick={() => openForm(tx)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }}>{t('edit')}</button>
+                              <button onClick={() => handleDelete(tx._id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }}>{t('delete')}</button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -543,7 +546,7 @@ ${formattedDesc}
                       className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.9rem' }}>›
                     </button>
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Click any cell to edit amount</span>
+                  {isPrivileged && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Click any cell to edit amount</span>}
                 </div>
 
                 {loadingDues ? (
@@ -592,12 +595,12 @@ ${formattedDesc}
                               return (
                                 <td 
                                   key={i} 
-                                  onClick={() => !isEditing && handleCellClick(m._id, dateStr, amt)}
+                                  onClick={() => isPrivileged && !isEditing && handleCellClick(m._id, dateStr, amt)}
                                   style={{ 
                                     padding: '0.1rem', 
                                     textAlign: 'center', 
                                     borderLeft: '1px solid var(--border-color)',
-                                    cursor: isEditing ? 'default' : 'pointer',
+                                    cursor: (isPrivileged && !isEditing) ? 'pointer' : 'default',
                                     background: bg,
                                     minWidth: '40px'
                                   }}
@@ -644,34 +647,34 @@ ${formattedDesc}
                 )}
               </div>
 
-              {/* Roster management */}
-              <div className="card">
-                <button type="button" onClick={() => setShowRoster(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', fontWeight: '600', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: showRoster ? '1rem' : 0 }}>
-                  <span style={{ fontSize: '0.8rem', transform: showRoster ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
-                  {t('dues_roster')} ({totalCount} {t('member_name').toLowerCase()}s)
-                </button>
-                {showRoster && (
-                  <>
-                    {ledgerData.members.map(m => (
-                      <div key={m._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--border-color)' }}>
-                        <span style={{ color: 'var(--text-main)' }}>{m.name}</span>
-                        <button onClick={() => handleRemoveMember(m._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem' }}>{t('remove_from_roster')}</button>
-                      </div>
-                    ))}
-                    <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder={t('enter_name')} style={{ ...inputStyle, flex: 1 }} />
-                        <button type="submit" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>{t('add_member')}</button>
-                      </div>
-                      {addError && <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: 0 }}>{addError}</p>}
-                    </form>
-                  </>
-                )}
-              </div>
+              {/* Roster management (Privileged only) */}
+              {isPrivileged && (
+                <div className="card">
+                  <button type="button" onClick={() => setShowRoster(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', fontWeight: '600', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: showRoster ? '1rem' : 0 }}>
+                    <span style={{ fontSize: '0.8rem', transform: showRoster ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
+                    {t('dues_roster')} ({totalCount} {t('member_name').toLowerCase()}s)
+                  </button>
+                  {showRoster && (
+                    <>
+                      {ledgerData.members.map(m => (
+                        <div key={m._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--border-color)' }}>
+                          <span style={{ color: 'var(--text-main)' }}>{m.name}</span>
+                          <button onClick={() => handleRemoveMember(m._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem' }}>{t('remove_from_roster')}</button>
+                        </div>
+                      ))}
+                      <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder={t('enter_name')} style={{ ...inputStyle, flex: 1 }} />
+                          <button type="submit" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>{t('add_member')}</button>
+                        </div>
+                        {addError && <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: 0 }}>{addError}</p>}
+                      </form>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
-        </>
-      )}
 
       {/* Transaction Modal */}
       {showForm && (

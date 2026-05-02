@@ -47,7 +47,7 @@ router.get('/summary', requireAuth, requireVerified, async (req, res) => {
 });
 
 // Get all transactions (with optional month/year filter)
-router.get('/', adminOrTreasurerAuth, async (req, res) => {
+router.get('/', requireAuth, requireVerified, async (req, res) => {
   try {
     const { month, year } = req.query;
     let query = {};
@@ -80,7 +80,7 @@ router.get('/', adminOrTreasurerAuth, async (req, res) => {
 });
 
 // Get distinct categories
-router.get('/categories', adminOrTreasurerAuth, async (req, res) => {
+router.get('/categories', requireAuth, requireVerified, async (req, res) => {
   try {
     const categories = await Transaction.distinct('category');
     res.json(categories);
@@ -175,7 +175,7 @@ router.delete('/:id', adminOrTreasurerAuth, async (req, res) => {
 // ─── WEEKLY DUES ROSTER ──────────────────────────────────────────────────────
 
 // Get all active roster members
-router.get('/dues/members', adminOrTreasurerAuth, async (req, res) => {
+router.get('/dues/members', requireAuth, requireVerified, async (req, res) => {
   try {
     const members = await DuesMember.find({ isActive: true }).sort({ name: 1 });
     res.json(members);
@@ -216,7 +216,7 @@ router.delete('/dues/members/:id', adminOrTreasurerAuth, async (req, res) => {
 // ─── WEEKLY DUES LEDGER ─────────────────────────────────────────────────────
 
 // Get all members and payments for ledger grid
-router.get('/dues/ledger', adminOrTreasurerAuth, async (req, res) => {
+router.get('/dues/ledger', requireAuth, requireVerified, async (req, res) => {
   try {
     const [members, payments] = await Promise.all([
       DuesMember.find({ isActive: true }).sort({ name: 1 }),
