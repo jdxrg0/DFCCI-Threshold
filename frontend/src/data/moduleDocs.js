@@ -247,6 +247,17 @@ export const moduleDocs = {
           ],
           example: "Topic: Thank you for your leadership!\nAppreciation: I really appreciate how you stepped up to lead the team project last week.\nImpact: Your clear communication kept us all calm and focused, and we met the deadline stress-free.\nEncouragement: Please keep using your gift of leadership and administration—it makes a huge difference.\nBible Verse: Matthew 5:16 - 'Let your light shine before others, that they may see your good deeds...'"
         }
+      ],
+      fruits: [
+        { name: 'Love', description: 'Unconditional care and sacrifice for others.' },
+        { name: 'Joy', description: 'Deep-seated happiness that persists regardless of circumstances.' },
+        { name: 'Peace', description: 'Tranquility and harmony rooted in trust in God.' },
+        { name: 'Patience', description: 'Endurance and forbearance under provocation or hardship.' },
+        { name: 'Kindness', description: 'Being friendly, generous, and considerate.' },
+        { name: 'Goodness', description: 'Moral excellence and virtue in action.' },
+        { name: 'Faithfulness', description: 'Being reliable, loyal, and steadfast in commitments.' },
+        { name: 'Gentleness', description: 'Mildness of manner and humble strength.' },
+        { name: 'Self-control', description: 'Mastery over one\'s desires and impulses.' }
       ]
     },
     fil: {
@@ -282,6 +293,17 @@ export const moduleDocs = {
           ],
           example: "Paksa: Salamat sa iyong pamumuno!\nPagpapahalaga: Talagang pinahahalagahan ko kung paano ka nanguna sa proyekto ng team natin noong nakaraang linggo.\nEpekto: Ang iyong malinaw na komunikasyon ay nagpanatiling kalmado sa amin, at natapos namin ito nang walang stress.\nPagpapalakas-loob: Sana ay patuloy mong gamitin ang iyong talento sa pamumuno—malaking tulong ito.\nTalata sa Bibliya: Mateo 5:16 - 'Gayon din naman, magliwanag ang inyong ilaw sa harap ng mga tao...'"
         }
+      ],
+      fruits: [
+        { name: 'Pag-ibig', description: 'Walang kondisyong pagmamalasakit at sakripisyo para sa iba.' },
+        { name: 'Kagalakan', description: 'Malalim na kaligayahan na nananatili anuman ang sitwasyon.' },
+        { name: 'Kapayapaan', description: 'Katahimikan at pagkakasundo na nagmumula sa pagtitiwala sa Diyos.' },
+        { name: 'Katiyagaan', description: 'Pagtitiis at pagpapanatili ng kalmado sa gitna ng hirap o pagsubok.' },
+        { name: 'Kabaitan', description: 'Pagiging palakaibigan, mapagbigay, at maalalahanin.' },
+        { name: 'Kabutihan', description: 'Kahusayang moral at paggawa ng tama sa lahat ng pagkakataon.' },
+        { name: 'Katapatan', description: 'Pagiging maaasahan at matatag sa mga pangako at tungkulin.' },
+        { name: 'Kahinahunan', description: 'Pagiging mabini at pagkakaroon ng mapagpakumbabang lakas.' },
+        { name: 'Pagpipigil sa sarili', description: 'Pagkakaroon ng kontrol sa sariling mga pagnanasa at udyok.' }
       ]
     },
     conyo: {
@@ -317,6 +339,17 @@ export const moduleDocs = {
           ],
           example: "Topic: Thank you for stepping up!\nAppreciation: I literally appreciate how you took the lead on the project last week.\nImpact: Your clear comms kept everyone sane and we met the deadline with zero stress.\nEncouragement: Please keep flexing your leadership skills—it makes such a huge difference.\nBible Verse: Matthew 5:16 - 'Let your light shine before others...'"
         }
+      ],
+      fruits: [
+        { name: 'Love', description: 'Literal na unconditional care and sacrifice for others, bes.' },
+        { name: 'Joy', description: 'That deep-seated happiness that stays even when things are, like, super messy.' },
+        { name: 'Peace', description: 'Inner chill and harmony because you totally trust God.' },
+        { name: 'Patience', description: 'Staying calm and enduring even when things are taking forever or people are annoying.' },
+        { name: 'Kindness', description: 'Being friendly and generous — basically spreading good vibes.' },
+        { name: 'Goodness', description: 'Doing what\'s right and being a literal saint in your actions.' },
+        { name: 'Faithfulness', description: 'Being super reliable and loyal to your commitments.' },
+        { name: 'Gentleness', description: 'Having that humble strength and being mild in your approach.' },
+        { name: 'Self-control', description: 'Not letting your impulses and cravings take over. You\'re the boss of you!' }
       ]
     }
   },

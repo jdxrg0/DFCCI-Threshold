@@ -115,6 +115,26 @@ const ModuleDocs = () => {
           </ul>
         </section>
 
+        {currentDocs.fruits && (
+          <section style={{ marginBottom: '2.5rem' }}>
+            <h2 style={{ color: 'var(--primary)', fontSize: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
+              The Fruits of the Holy Spirit
+            </h2>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
+              {currentDocs.fruits.map((fruit, index) => (
+                <div key={index} style={{ backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                  <h3 style={{ color: 'var(--primary)', fontSize: '1.1rem', marginBottom: '0.25rem', fontWeight: 'bold' }}>
+                    {fruit.name}
+                  </h3>
+                  <p style={{ color: 'var(--text-main)', fontSize: '0.9rem', lineHeight: '1.4' }}>
+                    {fruit.description}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {currentDocs.templates && (
           <section id="templates">
             <h2 style={{ color: 'var(--primary)', fontSize: '1.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
