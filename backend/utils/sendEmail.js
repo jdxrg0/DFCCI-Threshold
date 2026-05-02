@@ -9,11 +9,14 @@ const sendEmail = async (to, subject, html, retries = 3, backoff = 1000) => {
     }
 
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_APP_PASSWORD,
       },
+      connectionTimeout: 10000, // Fail fast if blocked by network
     });
 
     const mailOptions = {
