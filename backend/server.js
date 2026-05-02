@@ -14,6 +14,7 @@ const counselorRoutes = require('./routes/counselor');
 const ticketRoutes = require('./routes/tickets');
 const affirmationRoutes = require('./routes/affirmations');
 const fruitRoutes = require('./routes/fruitEndorsements');
+const fundRoutes = require('./routes/funds');
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/api/counselor', counselorRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/affirmations', affirmationRoutes);
 app.use('/api/fruits', fruitRoutes);
+app.use('/api/funds', fundRoutes);
 
 // Ping route for uptime monitoring
 app.get('/api/ping', (req, res) => {

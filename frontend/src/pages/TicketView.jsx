@@ -83,7 +83,7 @@ const TicketView = () => {
       <div style={{
         display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
         padding: '0.25rem 0.75rem', borderRadius: '4px',
-        backgroundColor: 'var(--bg-main)', color: 'var(--text-muted)',
+        backgroundColor: 'var(--bg-color)', color: 'var(--text-muted)',
         fontSize: '0.85rem', fontWeight: 'bold', textTransform: 'uppercase'
       }}>
         {icon} {t(`type_${type}`)}
@@ -122,7 +122,7 @@ const TicketView = () => {
         </div>
 
         <div style={{ 
-          backgroundColor: 'var(--bg-main)', 
+          backgroundColor: 'var(--bg-color)', 
           padding: '1.5rem', 
           borderRadius: '8px', 
           color: 'var(--text-main)',

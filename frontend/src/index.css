@@ -277,7 +277,7 @@ a.btn, a.btn:hover {
 
 .main-content {
   flex: 1;
-  padding: 3rem 0;
+  padding: 2rem 0;
 }
 
 /* Elegant Structured Cards */
@@ -287,7 +287,7 @@ a.btn, a.btn:hover {
   -webkit-backdrop-filter: blur(8px);
   border-radius: var(--radius);
   box-shadow: var(--shadow-md);
-  padding: 2rem;
+  padding: 1.5rem;
   border: 1px solid var(--surface-border);
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
@@ -328,7 +328,7 @@ a.btn, a.btn:hover {
 /* Sharp Inputs */
 .form-input, .form-textarea {
   width: 100%;
-  padding: 0.75rem 1rem;
+  padding: 0.6rem 0.8rem;
   background-color: rgba(255, 255, 255, 0.4);
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
@@ -364,7 +364,7 @@ a.btn, a.btn:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.75rem 1.5rem;
+  padding: 0.6rem 1.25rem;
   font-weight: 600; /* Increased from 500 */
   border-radius: var(--radius);
   border: none;
@@ -456,6 +456,8 @@ a.btn-primary:hover:not(:disabled) {
 .gap-2 { gap: 0.5rem; }
 .gap-4 { gap: 1rem; }
 .w-full { width: 100%; }
+
+.show-on-mobile { display: none; }
 
 /* Skeleton Loaders */
 .skeleton {
@@ -604,13 +606,13 @@ a.btn-primary:hover:not(:disabled) {
 
   /* ── Cards ── */
   .card {
-    padding: 0.85rem;
+    padding: 0.75rem;
   }
 
   /* ── Buttons ── */
   .btn {
-    padding: 0.55rem 1rem;
-    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
   }
 
   /* ── Fun-form card (reply / send mirror) ── */
@@ -639,13 +641,13 @@ a.btn-primary:hover:not(:disabled) {
   /* Form adjustments */
   .form-input, .form-textarea {
     font-size: 16px; /* Prevents iOS auto-zoom */
-    padding: 0.6rem 0.875rem;
+    padding: 0.5rem 0.75rem;
   }
 
   /* ── Utility ── */
-  .hide-text-mobile {
-    display: none;
-  }
+  .hide-text-mobile { display: none; }
+  .hide-on-mobile { display: none !important; }
+  .show-on-mobile { display: flex !important; }
 
   .flex-mobile-col {
     flex-direction: column;

@@ -319,5 +319,67 @@ export const moduleDocs = {
         }
       ]
     }
+  },
+  'fund-tracker': {
+    en: {
+      title: 'Treasury & Fund Tracker',
+      description: 'A centralized system for the Youth Treasurer and Administrators to manage the community\'s finances, including weekly dues and overall ledger.',
+      whatIsIt: 'The Fund Tracker is a complete ledger system that tracks income, expenses, and weekly member dues. It eliminates manual record-keeping by providing a real-time, interactive grid to track arrears and advances, and a unified overview of all financial transactions.',
+      howToUse: [
+        'Use the "Overview" tab to view all recent income and expense transactions. You can filter by month and year.',
+        'Use the "Add Transaction" button to record external income, expenses, or bulk payments.',
+        'Switch to the "Weekly Dues" tab to manage individual member contributions. The interactive grid shows Sundays for the selected month.',
+        'Click on any empty cell in the grid to input a payment. The system will automatically create an Income Transaction in the background.',
+        'If a member owes money, their status will show in red as a negative balance. If they are paid in advance, it shows as a positive balance.',
+        'A green checkmark means that week\'s ₱10 dues have been fully covered by their total payments.',
+        'To add or remove members from the Weekly Dues grid, use the roster management section at the bottom of the Weekly Dues tab.'
+      ],
+      rules: [
+        'Only Administrators and the Youth Treasurer have access to this module.',
+        'Deleting a transaction from the Overview tab will automatically remove it from the Weekly Dues grid if it was created there.',
+        'Ensure all entries are accurate as they directly impact the total balance and member arrears calculations.',
+        'The default weekly dues are set to ₱10 per Sunday, starting from May 1, 2026.'
+      ]
+    },
+    fil: {
+      title: 'Treasury & Fund Tracker',
+      description: 'Isang sentralisadong sistema para sa Youth Treasurer at mga Administrator upang pamahalaan ang pondo ng komunidad, kabilang ang lingguhang ambagan at pangkalahatang ledger.',
+      whatIsIt: 'Ang Fund Tracker ay isang kumpletong ledger system na nagtatala ng pondo, gastos, at lingguhang ambagan ng mga miyembro. Pinapadali nito ang pag-record gamit ang isang interactive grid upang madaling makita kung sino ang may utang o abanse, pati na rin ang buod ng lahat ng transaksyon.',
+      howToUse: [
+        'Gamitin ang "Overview" tab upang makita ang lahat ng kamakailang pondo at gastos. Maaari kang mag-filter base sa buwan at taon.',
+        'Gamitin ang "Add Transaction" button para mag-record ng external income, gastos, o isahang malaking bayad.',
+        'Pumunta sa "Weekly Dues" tab upang pamahalaan ang ambag ng bawat miyembro. Ipinapakita ng grid ang mga araw ng Linggo para sa napiling buwan.',
+        'I-click ang anumang blangkong cell sa grid para maglagay ng bayad. Awtomatikong gagawa ang sistema ng Income Transaction.',
+        'Kung may utang ang miyembro, magiging pula ang kanilang status na nagpapakita ng negatibong balanse. Kung sobra ang bayad, ito ay magpapakita bilang positibong balanse.',
+        'Ang berdeng checkmark ay nangangahulugan na ang ₱10 na ambag para sa linggong iyon ay bayad na base sa kanilang kabuuang naibigay.',
+        'Upang magdagdag o magtanggal ng miyembro sa Weekly Dues grid, gamitin ang roster management sa ibaba ng Weekly Dues tab.'
+      ],
+      rules: [
+        'Tanging mga Administrator at ang Youth Treasurer lamang ang may access sa module na ito.',
+        'Kapag nagbura ka ng transaksyon mula sa Overview tab, awtomatiko itong mabubura sa Weekly Dues grid kung doon ito ginawa.',
+        'Siguraduhing tama ang lahat ng nilalagay dahil direktang naapektuhan nito ang kabuuang balanse at kalkulasyon ng utang ng miyembro.',
+        'Ang default na lingguhang ambagan ay nakatakda sa ₱10 kada Linggo, simula Mayo 1, 2026.'
+      ]
+    },
+    conyo: {
+      title: 'Treasury & Fund Tracker',
+      description: 'The ultimate finance hub for the Youth Treasurer and Admins to literally manage all the community\'s funds, weekly dues, and expenses.',
+      whatIsIt: 'So basically, the Fund Tracker is an all-in-one ledger system. It ditches the manual notebook stuff and gives you an interactive grid to track exactly who owes money, who paid in advance, and an overview of where all the money is going.',
+      howToUse: [
+        'Check the "Overview" tab to literally see all recent cash flow (income and expenses). You can sort it by month and year.',
+        'Hit "Add Transaction" to record random income, expenses, or big bulk payments.',
+        'Go to the "Weekly Dues" tab to manage individual member payments. The grid shows every Sunday of the month you picked.',
+        'Just tap any cell in the grid to enter a payment. It automatically creates an Income Transaction in the background for you.',
+        'If they owe money, their status goes red with a negative balance. If they paid in advance, it shows up as a positive flex.',
+        'A green checkmark means their ₱10 dues for that specific week is already covered by their total payments.',
+        'To add or drop members from the list, scroll down to the roster management section under the Weekly Dues tab.'
+      ],
+      rules: [
+        'Strictly for Admins and the Youth Treasurer only.',
+        'If you delete a transaction from the Overview tab, it cascades and deletes the specific entry in the Weekly Dues grid too.',
+        'Make sure your numbers are accurate because it literally messes up the total balance and people\'s arrears if it\'s wrong.',
+        'The baseline weekly dues is pegged at ₱10 per Sunday, starting exactly on May 1, 2026.'
+      ]
+    }
   }
 };

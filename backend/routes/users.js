@@ -14,7 +14,7 @@ router.get('/', requireAuth, requireRole(['ADMIN']), async (req, res) => {
   }
 });
 
-// Assign/remove COUNSELOR role (Admin only)
+// Assign/remove roles (Admin only)
 router.put('/:id/role', requireAuth, requireRole(['ADMIN']), async (req, res) => {
   try {
     const { role } = req.body;
@@ -23,7 +23,7 @@ router.put('/:id/role', requireAuth, requireRole(['ADMIN']), async (req, res) =>
       return res.status(400).json({ message: 'You cannot change your own role.' });
     }
 
-    if (!['MEMBER', 'COUNSELOR', 'ADMIN'].includes(role)) {
+    if (!['MEMBER', 'COUNSELOR', 'ADMIN', 'YOUTH_TREASURER'].includes(role)) {
       return res.status(400).json({ message: 'Invalid role' });
     }
 

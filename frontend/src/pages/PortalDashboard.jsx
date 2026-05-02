@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Compass, BookOpen, Wrench, Sun } from 'lucide-react';
+import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -85,6 +85,29 @@ const PortalDashboard = () => {
                 </Link>
                 <Link to="/tickets/dashboard" className="btn btn-primary" title={t('open_module')} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Wrench size={20} />
+                </Link>
+            </div>
+          </div>
+        </div>
+
+        {/* Youth Fund Tracker Module */}
+        <div style={{ textDecoration: 'none' }}>
+          <div className="card module-card">
+            <div className="module-card-header">
+              <div className="module-card-icon" style={{ backgroundColor: 'rgba(var(--primary-rgb, 2, 132, 199), 0.15)' }}>
+                <Wallet className="module-card-icon-svg" style={{ color: 'var(--primary)' }} />
+              </div>
+              <h2 className="module-card-title">{t('fund_tracker')}</h2>
+            </div>
+              <p className="module-card-desc" style={{ marginBottom: '1rem' }}>
+                {t('fund_desc')}
+              </p>
+            <div className="module-card-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
+                <Link to="/docs/fund-tracker" className="btn btn-secondary" title={t('read_docs')} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BookOpen size={20} />
+                </Link>
+                <Link to="/funds" className="btn btn-primary" title={t('open_module')} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Wallet size={20} />
                 </Link>
             </div>
           </div>

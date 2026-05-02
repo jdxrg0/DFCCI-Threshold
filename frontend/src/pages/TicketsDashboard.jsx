@@ -89,7 +89,7 @@ const TicketsDashboard = () => {
                     <span style={{ 
                       display: 'flex', alignItems: 'center', gap: '0.25rem', 
                       fontSize: '0.8rem', padding: '0.25rem 0.5rem', 
-                      backgroundColor: 'var(--bg-main)', borderRadius: '4px',
+                      backgroundColor: 'var(--bg-color)', borderRadius: '4px',
                       color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 'bold'
                     }}>
                       {getTypeIcon(ticket.type)} {t(`type_${ticket.type}`)}
@@ -97,7 +97,7 @@ const TicketsDashboard = () => {
                     <span style={{ 
                       display: 'flex', alignItems: 'center', gap: '0.25rem', 
                       fontSize: '0.8rem', padding: '0.25rem 0.5rem', 
-                      backgroundColor: 'var(--bg-main)', borderRadius: '4px',
+                      backgroundColor: 'var(--bg-color)', borderRadius: '4px',
                       color: 'var(--text-muted)', textTransform: 'capitalize', fontWeight: 'bold'
                     }}>
                       {getStatusIcon(ticket.status)} {t(`status_${ticket.status.replace('-', '_')}`)}

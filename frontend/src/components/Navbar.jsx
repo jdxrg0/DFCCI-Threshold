@@ -4,7 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-import { Bell, LayoutDashboard, Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, BookOpen, Sun } from 'lucide-react';
+import { Bell, LayoutDashboard, Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, BookOpen, Sun, Wallet } from 'lucide-react';
 import ThemePanel, { ThemePanelContent } from './ThemePanel';
 import LanguageSwitcher from './LanguageSwitcher';
 import api from '../api';
@@ -29,6 +29,13 @@ const MODULE_MAP = [
     docsPath: '/docs/shining-light',
     label: 'Shining Light',
     Icon: Sun,
+  },
+  {
+    prefix: '/funds',
+    dashboardPath: '/funds',
+    docsPath: '/docs/fund-tracker',
+    label: 'Fund Tracker',
+    Icon: Wallet,
   },
 ];
 

@@ -23,6 +23,7 @@ import TicketView from './pages/TicketView';
 import AffirmationDashboard from './pages/AffirmationDashboard';
 import SendAffirmation from './pages/SendAffirmation';
 import AffirmationView from './pages/AffirmationView';
+import FundTrackerDashboard from './pages/FundTrackerDashboard';
 
 const App = () => {
   return (
@@ -52,6 +53,7 @@ const App = () => {
                 <Route path="/affirm/dashboard" element={<AffirmationDashboard />} />
                 <Route path="/affirm/send" element={<SendAffirmation />} />
                 <Route path="/affirm/:id" element={<AffirmationView />} />
+                <Route path="/funds" element={<FundTrackerDashboard />} />
               </Routes>
             </main>
           </div>

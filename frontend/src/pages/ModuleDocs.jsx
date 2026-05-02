@@ -122,7 +122,7 @@ const ModuleDocs = () => {
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
               {currentDocs.templates.map((template, index) => (
-                <div key={index} style={{ backgroundColor: 'var(--bg-secondary)', padding: '1.5rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div key={index} style={{ backgroundColor: 'var(--bg-color)', padding: '1.5rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
                   <h3 style={{ color: 'var(--text-main)', fontSize: '1.25rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>
                     {template.title}
                   </h3>
@@ -143,7 +143,7 @@ const ModuleDocs = () => {
 
                   <div>
                     <h4 style={{ color: 'var(--text-main)', fontSize: '1.1rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>Example:</h4>
-                    <div style={{ backgroundColor: 'var(--bg-main)', padding: '1rem', borderRadius: '6px', border: '1px solid var(--border-color)', whiteSpace: 'pre-line' }}>
+                    <div style={{ backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '6px', border: '1px solid var(--border-color)', whiteSpace: 'pre-line' }}>
                       {template.example.split('\n').map((line, i) => {
                         const colonIndex = line.indexOf(':');
                         if (colonIndex === -1) {
