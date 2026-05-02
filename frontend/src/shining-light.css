@@ -1,0 +1,33 @@
+/* Shining Light Mobile Compactness */
+.sl-card-header {
+  padding: 1.5rem;
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
+}
+.sl-card-body {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+.sl-card-footer {
+  padding: 1.5rem 2rem;
+  background-color: var(--surface-alt);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+@media (max-width: 640px) {
+  .sl-card-header {
+    padding: 1rem;
+  }
+  .sl-card-body {
+    padding: 1.25rem 1rem;
+    gap: 1.5rem;
+  }
+  .sl-card-footer {
+    padding: 1.25rem 1rem;
+  }
+}

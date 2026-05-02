@@ -1,0 +1,323 @@
+export const moduleDocs = {
+  'gentle-mirror': {
+    en: {
+      title: 'Gentle Mirror',
+      description: 'A structured, safe space to share concerns, encourage growth, and reflect together. It uses intentional constraints to promote deep understanding rather than endless arguments.',
+      whatIsIt: 'Gentle Mirror is not just a messaging tool; it is a guided reflection platform. It slows down communication by limiting replies, requiring structured reflections, and focusing on mutual understanding and positive change.',
+      howToUse: [
+        'Send a mirror anonymously or with your name to provide constructive feedback.',
+        'If you receive a mirror, you can choose to "Accept" it immediately if you agree with the feedback, ending the discussion.',
+        'If you choose to reply, you must fill out a 5-part reflection: Clarification, Feelings, Acknowledgment, Hoped Understanding, and a supporting Bible Verse.',
+        'After a message is read, there is a mandatory 1-hour reflection cooldown before a reply can be sent to prevent impulsive responses.',
+        'To prevent endless debates, each person is limited to a maximum of 3 replies.',
+        'The sender can mark the thread as "Resolved" once they observe actual, positive change in the receiver.',
+        'If the conversation becomes unproductive, either party can request counselor support, which requires mutual consent.',
+        'If necessary, the sender can request the admin to delete the thread. Once approved, it will be held in a recovery bin for 60 days before permanent deletion.'
+      ],
+      rules: [
+        'Maintain a respectful, growth-oriented tone.',
+        'Think deeply before replying—you only get 3 chances.',
+        'Use the 5-part reply structure honestly to foster true understanding.',
+        'Respect anonymity if the sender chooses to remain hidden.'
+      ],
+      templates: [
+        {
+          title: "Template: Sending a Gentle Mirror",
+          description: "Use this guide to ensure your feedback is constructive and focused on growth.",
+          structure: [
+            { label: "Topic", text: "A short, neutral title for the mirror." },
+            { label: "Concern", text: "Describe the specific behavior or action." },
+            { label: "Impact", text: "Explain how it affected you or the community." },
+            { label: "Desired Change", text: "What positive change do you hope to see?" },
+            { label: "Bible Verse", text: "A verse that anchors your feedback." }
+          ],
+          example: "Topic: Tardiness to team meetings\nConcern: I noticed you were late to the last three meetings.\nImpact: It delayed our discussions and affected the team's momentum.\nDesired Change: I hope you can adjust your schedule to arrive on time next week.\nBible Verse: Philippians 2:4 - 'Let each of you look not only to his own interests, but also to the interests of others.'"
+        },
+        {
+          title: "Template: Replying to a Mirror",
+          description: "Use this 5-part structure for your thoughtful reply.",
+          structure: [
+            { label: "Clarification", text: "What do you understand they are trying to say?" },
+            { label: "Feelings", text: "How did receiving this feedback make you feel?" },
+            { label: "Acknowledgment", text: "What part of their perspective do you acknowledge?" },
+            { label: "Hoped Understanding", text: "What do you want them to understand about you?" },
+            { label: "Bible Verse", text: "A verse that anchors your response." }
+          ],
+          example: "Clarification: I understand you feel my tardiness disrupted the team.\nFeelings: I felt embarrassed, but I appreciate you telling me.\nAcknowledgment: I admit I haven't managed my time well recently.\nHoped Understanding: I hope you understand I had unexpected family matters, but I am working on it.\nBible Verse: Ephesians 5:15-16 - 'Be very careful, then, how you live—not as unwise but as wise, making the most of every opportunity.'"
+        }
+      ]
+    },
+    fil: {
+      title: 'Gentle Mirror',
+      description: 'Isang ligtas at maayos na espasyo para magbahagi ng mga alalahanin, humikayat ng pag-unlad, at mag-reflect. Gumagamit ito ng mga tiyak na panuntunan upang isulong ang malalim na pag-unawa kaysa sa walang katapusang pagtatalo.',
+      whatIsIt: 'Ang Gentle Mirror ay hindi lamang isang chat app; ito ay isang guided reflection platform. Binabagalan nito ang usapan sa pamamagitan ng paglimita sa mga tugon at pag-obliga ng pagninilay-nilay upang nakatuon ito sa pag-unawa at positibong pagbabago.',
+      howToUse: [
+        'Magpadala ng mirror nang anonymous o nakapangalan para magbigay ng constructive feedback.',
+        'Kung makatanggap ka ng mirror, maaari mo itong "Tanggapin" agad kung sumasang-ayon ka, upang tapusin na ang usapan.',
+        'Kung pipiliin mong sumagot, kailangan mong sagutan ang 5 bahagi ng pagninilay: Nililinaw (Clarification), Nararamdaman (Feelings), Kinikilala (Acknowledgment), Inaasahang Maunawaan (Hoped Understanding), at Talata sa Bibliya.',
+        'Pagkatapos mabasa ang mensahe, mayroong sapilitang 1-oras na pagninilay (cooldown) bago makasagot upang maiwasan ang pabigla-biglang reaksyon.',
+        'Upang maiwasan ang mahabang away, limitado lamang sa 3 ang pwedeng isagot ng bawat isa.',
+        'Maaaring markahan ng sender ang usapan bilang "Nagbago Na" kapag nakita na nila ang tunay na positibong pagbabago.',
+        'Kung hindi na maganda ang patutunguhan ng usapan, maaaring humingi ng tulong sa counselor, ngunit kailangan itong sang-ayunan ng magkabilang panig.',
+        'Kung kinakailangan, maaaring humiling ang sender na burahin ang thread. Kapag naaprubahan ng admin, mapupunta ito sa recovery bin nang 60 araw bago tuluyang mabura.'
+      ],
+      rules: [
+        'Laging panatilihin ang marespeto at constructive na tono.',
+        'Mag-isip nang mabuti bago sumagot—3 beses ka lang pwedeng mag-reply.',
+        'Maging tapat sa pagsagot sa 5-bahaging pormularyo upang magkaunawaan.',
+        'Igalang ang pagkapribado kung pinili ng sender na maging anonymous.'
+      ],
+      templates: [
+        {
+          title: "Gabay: Pagpapadala ng Gentle Mirror",
+          description: "Gamitin itong gabay para masigurong maayos at nakakatulong ang iyong feedback.",
+          structure: [
+            { label: "Paksa (Topic)", text: "Maikli at neutral na pamagat para sa mirror." },
+            { label: "Alalahanin (Concern)", text: "Ilarawan ang partikular na nakakaalalang kilos o sitwasyon." },
+            { label: "Epekto (Impact)", text: "Paano ito nakaapekto sa iyo o sa komunidad?" },
+            { label: "Inaasahang Pagbabago (Desired Change)", text: "Anong magandang pagbabago ang gusto mong makita?" },
+            { label: "Talata sa Bibliya (Bible Verse)", text: "Talata na gagabay sa iyong feedback." }
+          ],
+          example: "Paksa: Pagkahuli sa mga meeting natin\nAlalahanin: Napansin kong nahuli ka sa huling tatlong meeting natin.\nEpekto: Naantala ang ating mga talakayan at naapektuhan ang oras ng team.\nInaasahang Pagbabago: Sana ay mas maayos mo ang iyong oras para makaabot sa susunod.\nTalata sa Bibliya: Filipos 2:4 - 'Huwag lamang ang sarili ninyong kapakanan ang inyong isipin, kundi ang kapakanan din ng iba.'"
+        },
+        {
+          title: "Gabay: Pagsagot sa Mirror",
+          description: "Gamitin ang 5-bahaging estruktura na ito para sa iyong pagninilay.",
+          structure: [
+            { label: "Nililinaw", text: "Ano ang naiintindihan mo sa nais nilang iparating?" },
+            { label: "Nararamdaman", text: "Ano ang naramdaman mo nang matanggap ito?" },
+            { label: "Kinikilala", text: "Anong bahagi ng kanilang pananaw ang tinatanggap mo?" },
+            { label: "Inaasahang Maunawaan", text: "Ano ang nais mong maintindihan nila sa iyong panig?" },
+            { label: "Talata sa Bibliya", text: "Talata na gagabay sa iyong tugon." }
+          ],
+          example: "Nililinaw: Naiintindihan ko na naapektuhan ang team sa pagkahuli ko.\nNararamdaman: Nahiya ako, pero salamat sa pagsasabi mo.\nKinikilala: Inaamin kong hindi naging maayos ang pag-manage ko ng oras ko kamakailan.\nInaasahang Maunawaan: Sana maintindihan mo na may hindi inaasahang problema sa pamilya, pero inaayos ko na ito.\nTalata sa Bibliya: Efeso 5:15-16 - 'Kaya't mag-ingat kayo kung paano kayo namumuhay... samantalahin ninyo ang bawat pagkakataon.'"
+        }
+      ]
+    },
+    conyo: {
+      title: 'Gentle Mirror',
+      description: 'A super safe space to share concerns and reflect together. It has strict rules so we focus on deep understanding instead of, like, arguing non-stop.',
+      whatIsIt: 'So basically, Gentle Mirror isn\'t just for chatting; it\'s a guided reflection tool. It slows things down by capping your replies and making you fill out structured answers so we can focus on actual character development.',
+      howToUse: [
+        'Send a mirror (anon or namedrop yourself) to give constructive feedback.',
+        'If you get a mirror and you agree, just click "Accept" to end the thread on a good note.',
+        'If you wanna reply, you gotta fill out 5 things: Clarification, Feelings, Acknowledgment, Hoped Understanding, and a Bible Verse.',
+        'After you open the message, there\'s a mandatory 1-hour reflection cooldown before you can reply. This literally stops you from sending impulsive answers.',
+        'To avoid endless drama, you literally only get 3 replies max per person.',
+        'The sender can mark it as "Resolved" (Nagbago Na) once they see actual, real-life character growth from you.',
+        'If the thread is giving bad vibes, either of you can request a counselor, but both of you have to agree to it.',
+        'If you really need to delete the thread, the sender can request it from the admin. It stays in the bin for 60 days just in case you wanna restore it.'
+      ],
+      rules: [
+        'Keep the vibes respectful and focused on growth.',
+        'Think carefully before you hit send—you only have 3 replies.',
+        'Fill out the 5-part form honestly so there\'s real understanding.',
+        'Respect the anon status if they choose to hide their name, literally.'
+      ],
+      templates: [
+        {
+          title: "Template: Sending a Gentle Mirror",
+          description: "Use this guide to make sure your feedback is like, constructive and growth-focused.",
+          structure: [
+            { label: "Topic", text: "A short, neutral title so they know what's up." },
+            { label: "Concern", text: "Spill the tea but nicely. What specific thing did they do?" },
+            { label: "Impact", text: "How did it affect the vibes or the community?" },
+            { label: "Desired Change", text: "What character development do you wanna see?" },
+            { label: "Bible Verse", text: "A verse to anchor your message." }
+          ],
+          example: "Topic: Being late to our meetings\nConcern: I noticed you were late to the last three meetings.\nImpact: It kinda messed up the schedule and delayed the whole team.\nDesired Change: I hope you can adjust your time management next week so we can start on time.\nBible Verse: Philippians 2:4 - 'Let each of you look not only to his own interests, but also to the interests of others.'"
+        },
+        {
+          title: "Template: Replying to a Mirror",
+          description: "Use this 5-part structure to reflect before you hit reply.",
+          structure: [
+            { label: "Clarification", text: "What's your takeaway from their message?" },
+            { label: "Feelings", text: "How did it make you feel? Be honest but respectful." },
+            { label: "Acknowledgment", text: "Take accountability for your actions." },
+            { label: "Hoped Understanding", text: "What do you want them to get about your side?" },
+            { label: "Bible Verse", text: "A verse to keep you grounded." }
+          ],
+          example: "Clarification: I get that my being late disrupted the team's flow.\nFeelings: I felt kinda called out, but I appreciate you being real with me.\nAcknowledgment: I admit my time management has been kinda off lately.\nHoped Understanding: I hope you get that I had some unexpected fam stuff, but I'm working on it.\nBible Verse: Ephesians 5:15-16 - 'Be very careful, then, how you live... making the most of every opportunity.'"
+        }
+      ]
+    }
+  },
+  'system-requests': {
+    en: {
+      title: 'System Requests',
+      description: 'A built-in helpdesk for submitting bug reports, feature suggestions, and modification requests directly to the platform administrators.',
+      whatIsIt: 'System Requests is a one-way ticket system between members and the administrator. When you encounter a problem, have a feature idea, or want something in the platform changed, you create a ticket here. Administrators review all submitted tickets, update their status as work progresses, and may post an official response. You cannot edit or delete a ticket once submitted — this ensures a clear, unmodified record for the admin to review.',
+      howToUse: [
+        'From the Main Dashboard, open the System Requests module to see your "My Requests" list.',
+        'Click "Create Request" to open the submission form.',
+        'Enter a clear, specific title for your request.',
+        'Select the correct type: "Bug Report" for something broken, "Feature Request" for a new idea, or "Modification Request" for a change to an existing feature.',
+        'Write a detailed description. For bugs, include the steps to reproduce them. For features and modifications, explain the expected behavior.',
+        'Submit your request. It is immediately saved with an "Open" status.',
+        'Click any request in your list to open the Ticket View and see its full details, current status, and any admin response.',
+        'You do not need to follow up — the admin updates the status and posts a response directly on your ticket.'
+      ],
+      rules: [
+        'Tickets are final. Once submitted, you cannot edit or delete a ticket.',
+        'One issue per ticket. Do not bundle multiple problems or ideas into a single submission.',
+        'Only three types are accepted: Bug Report, Feature Request, or Modification Request.',
+        'Your ticket can have one of four statuses: Open (waiting), In Progress (being worked on), Resolved (completed), or Closed (no further action).',
+        'Only administrators can change the status or post a response — you are in a read-only role after submitting.',
+        'For interpersonal or community concerns, use the Gentle Mirror module instead.'
+      ]
+    },
+    fil: {
+      title: 'System Requests',
+      description: 'Isang built-in na helpdesk para mag-submit ng mga ulat ng bug, mungkahi ng feature, at kahilingan ng pagbabago direkta sa mga administrator ng platform.',
+      whatIsIt: 'Ang System Requests ay isang one-way na ticket system sa pagitan ng mga miyembro at ng administrator. Kapag may natuklasang problema, may mungkahi para sa bagong feature, o nais mong baguhin ang isang bahagi ng platform, dito ka gumagawa ng tiket. Sinusuri ng mga administrator ang lahat ng isinumiteng tiket, ina-update ang status habang nagtatrabaho sila, at maaaring mag-post ng opisyal na tugon. Hindi mo maaaring baguhin o burahin ang tiket pagkatapos itong isumite — ito ay upang masiguro ang malinaw at hindi nabagong rekord para sa admin.',
+      howToUse: [
+        'Mula sa Main Dashboard, buksan ang System Requests module para makita ang iyong listahan ng "Aking mga Kahilingan".',
+        'I-click ang "Gumawa ng Kahilingan" para buksan ang form.',
+        'Maglagay ng malinaw at tiyak na pamagat para sa iyong kahilingan.',
+        'Piliin ang tamang uri: "Ulat ng Bug" para sa sirang feature, "Feature Request" para sa bagong ideya, o "Modification Request" para sa pagbabago ng kasalukuyang feature.',
+        'Sumulat ng detalyadong paglalarawan. Para sa mga bug, isama ang mga hakbang para ma-reproduce ito. Para sa mga feature at pagbabago, ipaliwanag ang inaasahang resulta.',
+        'I-submit ang iyong kahilingan. Agad itong mase-save na may status na "Open".',
+        'I-click ang anumang tiket sa iyong listahan para makita ang buong detalye, kasalukuyang status, at tugon ng admin.',
+        'Hindi na kailangan pang mag-follow up — ina-update ng admin ang status at nagpo-post ng tugon direkta sa iyong tiket.'
+      ],
+      rules: [
+        'Ang mga tiket ay pinal. Hindi mo maaaring baguhin o burahin ang tiket pagkatapos itong isumite.',
+        'Isang isyu lamang sa bawat tiket. Huwag pagsamahin ang maraming problema o ideya sa iisang submission.',
+        'Tatlong uri lamang ang tinatanggap: Ulat ng Bug, Feature Request, o Modification Request.',
+        'Ang iyong tiket ay maaaring magkaroon ng isa sa apat na status: Open (naghihintay), In Progress (inaayos), Resolved (natapos), o Closed (walang karagdagang aksyon).',
+        'Ang mga administrator lamang ang maaaring magbago ng status o mag-post ng tugon — ikaw ay nasa read-only na papel pagkatapos mag-submit.',
+        'Para sa mga personal o interpersonal na usapin, gamitin ang Gentle Mirror module.'
+      ]
+    },
+    conyo: {
+      title: 'System Requests',
+      description: 'Basically the in-app helpdesk where you submit bug reports, feature ideas, or requests to change something in the platform — straight to the admins.',
+      whatIsIt: 'So System Requests is a one-way ticket system between you and the admin. If something is broken, you have an idea, or you want a feature tweaked, you create a ticket here. The admin sees everything, updates the status as they work on it, and can post a reply directly on your ticket. Once you submit, you literally cannot edit or delete it — which is intentional so the admin gets an unmodified record to work from.',
+      howToUse: [
+        'From the Main Dashboard, open System Requests to see your "My Requests" list.',
+        'Hit "Create Request" to pull up the submission form.',
+        'Give it a clear, specific title — not just "it\'s broken."',
+        'Pick the right type: "Bug Report" if something is broken, "Feature Request" if you have a new idea, or "Modification Request" if you want an existing feature changed.',
+        'Write a super detailed description. For bugs, include the exact steps to reproduce it. For features and mods, explain what you want it to do.',
+        'Submit it. It gets saved instantly with an "Open" status.',
+        'Click any ticket in your list to open the full Ticket View — you can see the details, current status, and any admin reply there.',
+        'No need to DM anyone — the admin updates the status and replies directly on your ticket.'
+      ],
+      rules: [
+        'Tickets are final, period. You cannot edit or delete after submitting.',
+        'One topic per ticket. Don\'t dump multiple bugs or ideas into one submission.',
+        'Only three types are valid: Bug Report, Feature Request, or Modification Request.',
+        'Your ticket moves through four statuses: Open → In Progress → Resolved or Closed.',
+        'Only admins can change the status or post a response. Your role is read-only after you submit.',
+        'For people issues or interpersonal stuff, use the Gentle Mirror module — not this one.'
+      ]
+    }
+  },
+  'shining-light': {
+    en: {
+      title: 'Shining Light',
+      description: 'A platform for publicly celebrating, affirming, and recognizing what is right in a person. Instead of correcting a wrong, you are shining a light on their good deeds and character.',
+      whatIsIt: 'Shining Light is the affirmative opposite of Gentle Mirror. It is completely anonymous for the sender. It is a space to send a heartfelt message of appreciation, impact, and encouragement. It also features a "Fruit of the Spirit" endorsement system to recognize the spiritual growth of others.',
+      howToUse: [
+        'Send a Shining Light to a fellow member to express appreciation.',
+        'Your identity is hidden from the recipient — they will only see that it came from "Anonymous".',
+        'Fill out the form with your Appreciation, the Impact they had, your Encouragement, and a supporting Bible verse.',
+        'Use the "Endorse" tab to anonymously recognize members for displaying any of the 9 Fruits of the Holy Spirit.',
+        'Check your "My Fruits" tab to see an aggregated summary of the fruits others see in you. The numbers update in real-time.',
+        'When submitting an affirmation or endorsement, you will be prompted to pause and reflect on a Bible verse during a short countdown before it is sent.',
+        'The recipient can respond to an affirmation with a single, brief thank-you reply and mark it as "Received with Gratitude".',
+        'Shining Lights and Endorsements are never deleted. They remain as a permanent record of the good in our community.'
+      ],
+      rules: [
+        'Be sincere. Send this to uplift, not to flatter.',
+        'Focus on character, good deeds, and positive impact.',
+        'Endorse fruits honestly based on observed behavior.',
+        'Keep the thank-you reply brief and heartfelt.'
+      ],
+      templates: [
+        {
+          title: "Template: Sending a Shining Light",
+          description: "Use this guide to ensure your affirmation is meaningful and specific.",
+          structure: [
+            { label: "Topic", text: "A short, celebratory title." },
+            { label: "Appreciation", text: "What do you appreciate about this person?" },
+            { label: "Impact", text: "How did their actions positively affect you or the community?" },
+            { label: "Encouragement", text: "What do you hope they continue doing?" },
+            { label: "Bible Verse", text: "A verse that grounds your praise." }
+          ],
+          example: "Topic: Thank you for your leadership!\nAppreciation: I really appreciate how you stepped up to lead the team project last week.\nImpact: Your clear communication kept us all calm and focused, and we met the deadline stress-free.\nEncouragement: Please keep using your gift of leadership and administration—it makes a huge difference.\nBible Verse: Matthew 5:16 - 'Let your light shine before others, that they may see your good deeds...'"
+        }
+      ]
+    },
+    fil: {
+      title: 'Shining Light',
+      description: 'Isang plataporma para ipagdiwang, pahalagahan, at kilalanin ang kabutihan ng isang tao. Sa halip na magtama ng mali, pinaliliwanag nito ang kanilang mabubuting gawa at pagkatao.',
+      whatIsIt: 'Ang Shining Light ay ang kabaligtaran ng Gentle Mirror. Ito ay ganap na anonymous para sa nagpadala. Ito ay isang espasyo para magpadala ng taos-pusong mensahe ng pagpapahalaga, epekto, at pagpapalakas-loob. Nagtatampok din ito ng "Fruit of the Spirit" endorsement system upang kilalanin ang espirituwal na paglago ng iba.',
+      howToUse: [
+        'Magpadala ng Shining Light sa kapwa miyembro para ipahayag ang iyong pagpapahalaga.',
+        'Nakatago ang iyong pagkakakilanlan mula sa tatanggap — makikita lamang nila na galing ito kay "Anonymous".',
+        'Sagutan ang form kasama ang iyong Pagpapahalaga, ang Epekto nila, ang iyong Pagpapalakas-loob, at isang pansuportang talata sa Bibliya.',
+        'Gamitin ang "Endorse" tab para kilalanin nang anonymous ang mga miyembro na nagpapakita ng 9 na Bunga ng Espiritu Santo.',
+        'Tingnan ang iyong "My Fruits" tab para makita ang buod ng mga bungang nakikita ng iba sa iyo. Ang mga numero ay kusang nagbabago (real-time).',
+        'Sa pagpapadala ng affirmation o endorsement, bibigyan ka ng maikling oras (countdown) para magnilay sa isang talata sa Bibliya bago ito maipadala.',
+        'Maaaring sumagot ang tatanggap ng isang maikling pasasalamat at markahan ito bilang "Natanggap nang may Pasasalamat".',
+        'Ang mga Shining Light at Endorsement ay hindi kailanman binubura. Nananatili itong permanenteng talaan ng kabutihan sa ating komunidad.'
+      ],
+      rules: [
+        'Maging tapat. Ipadala ito para magpalakas ng loob, hindi para pumuri nang walang kabuluhan.',
+        'Tumutok sa pagkatao, mabubuting gawa, at positibong epekto.',
+        'Maging totoo sa pag-endorso base sa iyong nakikita.',
+        'Panatilihing maikli at taos-puso ang pasasalamat na tugon.'
+      ],
+      templates: [
+        {
+          title: "Gabay: Pagpapadala ng Shining Light",
+          description: "Gamitin ang gabay na ito para matiyak na ang iyong affirmation ay makabuluhan at tiyak.",
+          structure: [
+            { label: "Paksa", text: "Maikli at masayang pamagat." },
+            { label: "Pagpapahalaga", text: "Ano ang pinahahalagahan mo sa taong ito?" },
+            { label: "Epekto", text: "Paano nakabuti sa iyo o sa komunidad ang kanilang mga ginawa?" },
+            { label: "Pagpapalakas-loob", text: "Ano ang inaasahan mong ipagpatuloy nila?" },
+            { label: "Talata sa Bibliya", text: "Talata na sumusuporta sa iyong papuri." }
+          ],
+          example: "Paksa: Salamat sa iyong pamumuno!\nPagpapahalaga: Talagang pinahahalagahan ko kung paano ka nanguna sa proyekto ng team natin noong nakaraang linggo.\nEpekto: Ang iyong malinaw na komunikasyon ay nagpanatiling kalmado sa amin, at natapos namin ito nang walang stress.\nPagpapalakas-loob: Sana ay patuloy mong gamitin ang iyong talento sa pamumuno—malaking tulong ito.\nTalata sa Bibliya: Mateo 5:16 - 'Gayon din naman, magliwanag ang inyong ilaw sa harap ng mga tao...'"
+        }
+      ]
+    },
+    conyo: {
+      title: 'Shining Light',
+      description: 'A platform to celebrate and hype up the good in a person. Instead of calling out a wrong, you are literally shining a light on their good deeds and character.',
+      whatIsIt: 'Shining Light is the positive vibes version of Gentle Mirror. It is completely anon for the sender. It is a safe space to drop a heartfelt message of appreciation, and it also has a "Fruit of the Spirit" endorsement system to lowkey recognize other people\'s spiritual growth.',
+      howToUse: [
+        'Drop a Shining Light to a fellow member to express your appreciation.',
+        'Your identity is hidden from them — they\'ll only see that it came from "Anonymous".',
+        'Fill out the form with your Appreciation, the Impact they made, your words of Encouragement, and a supporting Bible verse.',
+        'Use the "Endorse" tab to anon-endorse people for showing any of the 9 Fruits of the Holy Spirit.',
+        'Check your "My Fruits" tab to flex your aggregated fruit counts. The numbers update in real-time, literally.',
+        'When sending an affirmation or endorsement, you gotta pause and reflect on a Bible verse during a quick countdown before it sends.',
+        'The receiver can drop a single, quick thank-you reply and mark it as "Received with Gratitude".',
+        'Shining Lights and Endorsements are never deleted. They stay as a permanent flex of the good vibes in our community.'
+      ],
+      rules: [
+        'Be genuine. Send this to uplift, not just to suck up.',
+        'Focus on character development, good deeds, and positive impact.',
+        'Endorse fruits honestly based on what you literally see in them.',
+        'Keep the thank-you reply short and sweet.'
+      ],
+      templates: [
+        {
+          title: "Template: Sending a Shining Light",
+          description: "Use this guide to make sure your affirmation is literally so meaningful and specific.",
+          structure: [
+            { label: "Topic", text: "A short, hype title." },
+            { label: "Appreciation", text: "What do you love about this person?" },
+            { label: "Impact", text: "How did their actions bring positive vibes to you or the community?" },
+            { label: "Encouragement", text: "What do you want them to keep slaying at?" },
+            { label: "Bible Verse", text: "A verse to ground your praise." }
+          ],
+          example: "Topic: Thank you for stepping up!\nAppreciation: I literally appreciate how you took the lead on the project last week.\nImpact: Your clear comms kept everyone sane and we met the deadline with zero stress.\nEncouragement: Please keep flexing your leadership skills—it makes such a huge difference.\nBible Verse: Matthew 5:16 - 'Let your light shine before others...'"
+        }
+      ]
+    }
+  }
+};

@@ -1,0 +1,809 @@
+const express = require('express');
+const router = express.Router();
+const Thread = require('../models/Thread');
+const Notification = require('../models/Notification');
+const sendEmail = require('../utils/sendEmail');
+const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
+const appEmitter = require('../utils/eventEmitter');
+
+// Get all pending deletion requests (Admin only)
+router.get('/admin/deletion-requests', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const requests = await Thread.find({ deletionRequestStatus: 'Pending', deletedAt: null })
+      .populate('sender', 'displayName email')
+      .populate('receiver', 'displayName email')
+      .sort({ deletionRequestedAt: -1 });
+    res.json(requests);
+  } catch (error) {
+    console.error('Error fetching deletion requests:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Approve deletion request (Admin only)
+router.put('/admin/:id/approve-deletion', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id).populate('sender').populate('receiver');
+    if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+    if (thread.deletionRequestStatus !== 'Pending') {
+      return res.status(400).json({ message: 'Request is not pending.' });
+    }
+
+    thread.deletionRequestStatus = 'Approved';
+    thread.deletedAt = new Date();
+    await thread.save();
+
+    // Notify Sender
+    await Notification.create({
+      user: thread.sender._id,
+      type: 'DeletionApproved',
+      message: 'Your thread deletion request has been approved.',
+      thread: thread._id
+    });
+    sendEmail(
+      thread.sender.email,
+      'Thread Deletion Approved',
+      '<p>Your request to delete the thread has been approved. It will be permanently removed in 60 days.</p>'
+    ).catch(err => console.error('Failed to send email:', err));
+
+    // Notify Receiver
+    await Notification.create({
+      user: thread.receiver._id,
+      type: 'ThreadDeleted',
+      message: 'A thread you were part of has been deleted.',
+      thread: thread._id
+    });
+    sendEmail(
+      thread.receiver.email,
+      'Thread Deleted',
+      '<p>A thread you were participating in has been deleted.</p>'
+    ).catch(err => console.error('Failed to send email:', err));
+
+    res.json({ message: 'Deletion approved', thread });
+  } catch (error) {
+    console.error('Error approving deletion:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Reject deletion request (Admin only)
+router.put('/admin/:id/reject-deletion', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id).populate('sender');
+    if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+    if (thread.deletionRequestStatus !== 'Pending') {
+      return res.status(400).json({ message: 'Request is not pending.' });
+    }
+
+    thread.deletionRequestStatus = 'Rejected';
+    await thread.save();
+
+    // Notify Sender
+    await Notification.create({
+      user: thread.sender._id,
+      type: 'DeletionRejected',
+      message: 'Your thread deletion request was rejected.',
+      thread: thread._id
+    });
+    sendEmail(
+      thread.sender.email,
+      'Thread Deletion Rejected',
+      '<p>Your request to delete the thread has been rejected by an administrator.</p>'
+    ).catch(err => console.error('Failed to send email:', err));
+
+    res.json({ message: 'Deletion rejected', thread });
+  } catch (error) {
+    console.error('Error rejecting deletion:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get all pending restore requests (Admin only)
+router.get('/admin/restore-requests', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const requests = await Thread.find({ restoreRequestStatus: 'Pending', deletedAt: { $ne: null } })
+      .populate('sender', 'displayName email')
+      .populate('receiver', 'displayName email')
+      .sort({ updatedAt: -1 });
+    res.json(requests);
+  } catch (error) {
+    console.error('Error fetching restore requests:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Approve restore request (Admin only)
+router.put('/admin/:id/approve-restore', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id).populate('sender').populate('receiver');
+    if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+    if (thread.restoreRequestStatus !== 'Pending') {
+      return res.status(400).json({ message: 'Restore request is not pending.' });
+    }
+
+    thread.deletedAt = null;
+    thread.restoreRequestStatus = 'Approved';
+    thread.deletionRequestStatus = 'None';
+    thread.lastRestoredAt = new Date();
+    await thread.save();
+
+    // Notify Sender
+    await Notification.create({
+      user: thread.sender._id,
+      type: 'RestoreApproved',
+      message: 'Your thread restoration request has been approved.',
+      thread: thread._id
+    });
+    sendEmail(
+      thread.sender.email,
+      'Thread Restoration Approved',
+      '<p>Your request to restore the thread has been approved. It is back in your active dashboard.</p>'
+    ).catch(err => console.error('Failed to send email:', err));
+
+    // Notify Receiver
+    await Notification.create({
+      user: thread.receiver._id,
+      type: 'ThreadRestored',
+      message: 'A previously deleted thread you were part of has been restored.',
+      thread: thread._id
+    });
+    sendEmail(
+      thread.receiver.email,
+      'Thread Restored',
+      '<p>A previously deleted thread you were participating in has been restored and is back in your dashboard.</p>'
+    ).catch(err => console.error('Failed to send email:', err));
+
+    res.json({ message: 'Restoration approved', thread });
+  } catch (error) {
+    console.error('Error approving restoration:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Reject restore request (Admin only)
+router.put('/admin/:id/reject-restore', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id).populate('sender');
+    if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+    if (thread.restoreRequestStatus !== 'Pending') {
+      return res.status(400).json({ message: 'Restore request is not pending.' });
+    }
+
+    thread.restoreRequestStatus = 'Rejected';
+    await thread.save();
+
+    // Notify Sender
+    await Notification.create({
+      user: thread.sender._id,
+      type: 'RestoreRejected',
+      message: 'Your thread restoration request was rejected.',
+      thread: thread._id
+    });
+    sendEmail(
+      thread.sender.email,
+      'Thread Restoration Rejected',
+      '<p>Your request to restore the thread has been rejected by an administrator.</p>'
+    ).catch(err => console.error('Failed to send email:', err));
+
+    res.json({ message: 'Restoration rejected', thread });
+  } catch (error) {
+    console.error('Error rejecting restoration:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get recently deleted threads (Admin only)
+router.get('/admin/recently-deleted', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const threads = await Thread.find({ deletedAt: { $ne: null } })
+      .populate('sender', 'displayName email')
+      .populate('receiver', 'displayName email')
+      .sort({ deletedAt: -1 });
+    res.json(threads);
+  } catch (error) {
+    console.error('Error fetching recently deleted:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get sender's recently deleted threads
+router.get('/recently-deleted', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const threads = await Thread.find({ sender: req.user._id, deletedAt: { $ne: null } })
+      .populate('receiver', 'displayName')
+      .sort({ deletedAt: -1 });
+    res.json(threads);
+  } catch (error) {
+    console.error('Error fetching sender recently deleted:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get user's threads
+router.get('/', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { type } = req.query;
+    if (!type || (type !== 'sent' && type !== 'received')) {
+      return res.status(400).json({ message: 'Please specify ?type=sent or ?type=received.' });
+    }
+
+    let query = { deletedAt: null }; // Exclude deleted threads
+    if (type === 'sent') {
+      query.sender = req.user._id;
+      // INCLUDES resolved threads
+    } else if (type === 'received') {
+      query.receiver = req.user._id;
+      // EXCLUDES resolved threads
+      query.status = { $ne: 'Resolved' };
+    }
+
+    const threads = await Thread.find(query)
+      .populate('receiver', 'displayName')
+      .populate('sender', 'displayName email') // populated for processing, stripped later if needed
+      .sort({ updatedAt: -1 });
+
+    const formattedThreads = threads.map(t => {
+      const threadObj = t.toObject();
+      if (type === 'received') {
+        threadObj.sender = { _id: t.sender._id, displayName: 'Anonymous' };
+      }
+      // If type === 'sent', the sender CAN see the receiver's display name.
+      return threadObj;
+    });
+
+    res.json(formattedThreads);
+  } catch (error) {
+    console.error('Error fetching threads:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get archived threads (Resolved received)
+// MUST BE REGISTERED BEFORE /:id
+router.get('/archive', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const threads = await Thread.find({ receiver: req.user._id, status: 'Resolved', deletedAt: null })
+      .populate('receiver', 'displayName')
+      .sort({ resolvedAt: -1 });
+
+    const formattedThreads = threads.map(t => {
+      const threadObj = t.toObject();
+      threadObj.sender = { _id: t.sender, displayName: 'Anonymous' };
+      return threadObj;
+    });
+
+    res.json(formattedThreads);
+  } catch (error) {
+    console.error('Error fetching archive:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// SSE endpoint for thread updates
+router.get('/:id/events', requireAuth, requireVerified, (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const threadId = req.params.id;
+
+  const onUpdate = () => {
+    res.write(`data: ${JSON.stringify({ type: 'UPDATE' })}\n\n`);
+  };
+
+  // Send an initial ping so the client knows connection is established
+  res.write(`data: ${JSON.stringify({ type: 'PING' })}\n\n`);
+
+  appEmitter.on(`threadUpdate_${threadId}`, onUpdate);
+
+  // Keep connection alive with periodic pings (every 30 seconds)
+  const pingInterval = setInterval(() => {
+    res.write(`data: ${JSON.stringify({ type: 'PING' })}\n\n`);
+  }, 30000);
+
+  req.on('close', () => {
+    clearInterval(pingInterval);
+    appEmitter.off(`threadUpdate_${threadId}`, onUpdate);
+  });
+});
+
+// Get thread details
+router.get('/:id', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id)
+      .populate('receiver', 'displayName')
+      .populate('sender', 'displayName email');
+
+    if (!thread) {
+      return res.status(404).json({ message: 'Thread not found' });
+    }
+
+    const isSender = thread.sender._id.toString() === req.user._id.toString();
+    const isReceiver = thread.receiver._id.toString() === req.user._id.toString();
+
+    if (!isSender && !isReceiver) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Mark related notifications as read for the viewing user conditionally
+    const unreadCount = await Notification.countDocuments({ user: req.user._id, thread: req.params.id, read: false });
+    if (unreadCount > 0) {
+      await Notification.updateMany(
+        { user: req.user._id, thread: req.params.id, read: false },
+        { $set: { read: true } }
+      );
+    }
+
+    // Mark message as read if it's the other party viewing it
+    let saved = false;
+    if (thread.messages.length > 0) {
+      const lastMessage = thread.messages[thread.messages.length - 1];
+      const viewerAuthorType = isSender ? 'Sender' : 'Receiver';
+      if (lastMessage.authorType !== viewerAuthorType && !lastMessage.readAt) {
+        lastMessage.readAt = new Date();
+        saved = true;
+      }
+    }
+    
+    if (saved) {
+      await thread.save();
+    }
+
+    const threadObj = thread.toObject();
+
+    if (isReceiver) {
+      threadObj.sender = { _id: thread.sender._id, displayName: 'Anonymous' };
+    } else if (isSender) {
+      // Sender can view full thread details, even if resolved.
+      // We don't expose receiver email
+      threadObj.receiver = { _id: thread.receiver._id, displayName: thread.receiver.displayName };
+      threadObj.sender = { _id: thread.sender._id, displayName: thread.sender.displayName };
+    }
+
+    res.json(threadObj);
+  } catch (error) {
+    console.error('Error fetching thread details:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Request thread deletion (Sender only)
+router.post('/:id/request-deletion', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id);
+    if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+    if (thread.sender.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Only the sender can request deletion.' });
+    }
+
+    if (thread.status === 'Resolved') {
+      return res.status(400).json({ message: 'Cannot request deletion for a resolved thread.' });
+    }
+
+    if (thread.deletionRequestStatus === 'Pending') {
+      return res.status(400).json({ message: 'Deletion request is already pending.' });
+    }
+
+    if (thread.lastRestoredAt) {
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      if (thread.lastRestoredAt > oneHourAgo) {
+        return res.status(400).json({ message: 'You must wait 1 hour after a thread is restored before requesting deletion again.' });
+      }
+    }
+
+    thread.deletionRequestStatus = 'Pending';
+    thread.deletionRequestedAt = new Date();
+    await thread.save();
+
+    res.json({ message: 'Deletion requested successfully', thread });
+  } catch (error) {
+    console.error('Error requesting deletion:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Request thread restoration (Sender only)
+router.post('/:id/request-restore', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id);
+    if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+    if (thread.sender.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Only the sender can request restoration.' });
+    }
+
+    if (!thread.deletedAt) {
+      return res.status(400).json({ message: 'Thread is not currently deleted.' });
+    }
+
+    if (thread.restoreRequestStatus === 'Pending') {
+      return res.status(400).json({ message: 'Restore request is already pending.' });
+    }
+
+    thread.restoreRequestStatus = 'Pending';
+    await thread.save();
+
+    res.json({ message: 'Restoration requested successfully', thread });
+  } catch (error) {
+    console.error('Error requesting restoration:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Create initial mirror message
+router.post('/', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { receiverId, content, topic } = req.body;
+    
+    if (receiverId === req.user._id.toString()) {
+      return res.status(400).json({ message: 'You cannot send a mirror to yourself.' });
+    }
+
+    const thread = new Thread({
+      sender: req.user._id,
+      receiver: receiverId,
+      topic: topic ? topic.trim().slice(0, 80) : '',
+      messages: [{
+        authorType: 'Sender',
+        isInitial: true,
+        content: {
+          concern: content.concern,
+          impact: content.impact,
+          desiredChange: content.desiredChange,
+          bibleVerse: content.bibleVerse
+        }
+      }]
+    });
+
+    await thread.save();
+    
+    await thread.populate('receiver');
+
+    await Notification.create({
+      user: receiverId,
+      type: 'NewMirror',
+      message: 'You have received a new Gentle Mirror message.',
+      thread: thread._id
+    });
+
+    // Send email in background
+    sendEmail(
+      thread.receiver.email,
+      'You have received a Gentle Mirror message',
+      '<p>You have received a Gentle Mirror message. Log in to read it.</p>'
+    ).catch(err => console.error('Failed to send email notification:', err));
+
+    res.status(201).json({ message: 'Mirror sent successfully', thread });
+  } catch (error) {
+    console.error('Error creating thread:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Submit a reply
+router.post('/:id/reply', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id).populate('receiver').populate('sender');
+    if (!thread) {
+      return res.status(404).json({ message: 'Thread not found' });
+    }
+
+    if (thread.status === 'Resolved' || thread.status === 'Accepted') {
+      return res.status(400).json({ message: 'Thread is closed to new replies.' });
+    }
+
+    const isSender = thread.sender._id.toString() === req.user._id.toString();
+    const isReceiver = thread.receiver._id.toString() === req.user._id.toString();
+
+    if (!isSender && !isReceiver) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    // Determine turn
+    const lastMessage = thread.messages[thread.messages.length - 1];
+    const authorType = isSender ? 'Sender' : 'Receiver';
+
+    if (lastMessage.authorType === authorType) {
+      return res.status(400).json({ message: 'It is not your turn to reply.' });
+    }
+
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const readAtDate = lastMessage.readAt ? new Date(lastMessage.readAt) : new Date();
+    if (readAtDate > oneHourAgo) {
+      return res.status(400).json({ message: 'Mangyaring maghintay ng isang oras (1 hour) bago sumagot upang makapagnilay nang maayos.' });
+    }
+
+    if (isSender && thread.senderRepliesUsed >= 3) {
+      return res.status(400).json({ message: 'You have used all your replies for this thread.' });
+    }
+    if (isReceiver && thread.receiverRepliesUsed >= 3) {
+      return res.status(400).json({ message: 'You have used all your replies for this thread.' });
+    }
+
+    const { content } = req.body;
+
+    thread.messages.push({
+      authorType,
+      isInitial: false,
+      content: {
+        clarification: content.clarification,
+        feelings: content.feelings,
+        acknowledgment: content.acknowledgment,
+        hopedUnderstanding: content.hopedUnderstanding,
+        bibleVerse: content.bibleVerse
+      }
+    });
+
+    if (isSender) thread.senderRepliesUsed += 1;
+    if (isReceiver) thread.receiverRepliesUsed += 1;
+
+    // Check if auto-escalation should happen
+    if (thread.senderRepliesUsed >= 3 && thread.receiverRepliesUsed >= 3) {
+      thread.status = 'Escalated';
+      
+      await Notification.insertMany([
+        { user: thread.sender._id, type: 'Escalated', message: 'Thread automatically escalated to counselor due to reply limit.', thread: thread._id },
+        { user: thread.receiver._id, type: 'Escalated', message: 'Thread automatically escalated to counselor due to reply limit.', thread: thread._id }
+      ]);
+      
+      sendEmail(
+        thread.sender.email,
+        'Thread Escalated',
+        '<p>Your thread has automatically been escalated to a counselor because the maximum reply limit was reached.</p>'
+      ).catch(e => console.error(e));
+      
+      sendEmail(
+        thread.receiver.email,
+        'Thread Escalated',
+        '<p>Your thread has automatically been escalated to a counselor because the maximum reply limit was reached.</p>'
+      ).catch(e => console.error(e));
+    }
+
+    await thread.save();
+
+    const notifyUser = isSender ? thread.receiver : thread.sender;
+
+    await Notification.create({
+      user: notifyUser._id,
+      type: 'NewReply',
+      message: 'You have a new reply in your thread.',
+      thread: thread._id
+    });
+
+    sendEmail(
+      notifyUser.email,
+      'New reply in your Gentle Mirror thread',
+      '<p>You have a new reply in your Gentle Mirror thread. Log in to read it.</p>'
+    ).catch(err => console.error('Failed to send email notification:', err));
+
+    res.json({ message: 'Reply sent successfully', thread });
+  } catch (error) {
+    console.error('Error replying to thread:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Mark as resolved (Sender only)
+router.put('/:id/resolve', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id).populate('receiver');
+    if (!thread) {
+      return res.status(404).json({ message: 'Thread not found' });
+    }
+
+    if (thread.status === 'Resolved') {
+      return res.status(400).json({ message: 'This thread is already resolved.' });
+    }
+
+    if (thread.sender.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Only the sender can mark a thread as resolved.' });
+    }
+
+    thread.status = 'Resolved';
+    thread.resolvedAt = new Date();
+    await thread.save();
+
+    await Notification.create({
+      user: thread.receiver._id,
+      type: 'Resolved',
+      message: 'Your thread has been marked as resolved.',
+      thread: thread._id
+    });
+
+    sendEmail(
+      thread.receiver.email,
+      'Your Gentle Mirror thread has been resolved',
+      '<p>Your thread has been marked as resolved. Thank you for your openness to growth.</p>'
+    ).catch(err => console.error('Failed to send email notification:', err));
+
+    res.json({ message: 'Thread resolved successfully', thread });
+  } catch (error) {
+    console.error('Error resolving thread:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Mark as accepted (Receiver only)
+router.put('/:id/accept', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id).populate('sender');
+    if (!thread) {
+      return res.status(404).json({ message: 'Thread not found' });
+    }
+
+    if (thread.status !== 'Active') {
+      return res.status(400).json({ message: 'This thread cannot be accepted.' });
+    }
+
+    if (thread.receiver.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Only the receiver can accept a thread.' });
+    }
+
+    thread.status = 'Accepted';
+    thread.acceptedAt = new Date();
+    await thread.save();
+
+    await Notification.create({
+      user: thread.sender._id,
+      type: 'Accepted',
+      message: 'The receiver has accepted your Gentle Mirror.',
+      thread: thread._id
+    });
+
+    sendEmail(
+      thread.sender.email,
+      'Your Gentle Mirror has been accepted',
+      '<p>The receiver has accepted your Gentle Mirror and is willing to change.</p>'
+    ).catch(err => console.error('Failed to send email notification:', err));
+
+    res.json({ message: 'Thread accepted successfully', thread });
+  } catch (error) {
+    console.error('Error accepting thread:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Request early escalation
+router.post('/:id/escalate', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const thread = await Thread.findById(req.params.id).populate('receiver').populate('sender');
+    if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+    if (thread.status !== 'Active') {
+      return res.status(400).json({ message: 'Thread is not active' });
+    }
+
+    const isSender = thread.sender._id.toString() === req.user._id.toString();
+    const isReceiver = thread.receiver._id.toString() === req.user._id.toString();
+
+    if (!isSender && !isReceiver) return res.status(403).json({ message: 'Access denied' });
+
+    if (thread.earlyEscalationRequestedBy) {
+      return res.status(400).json({ message: 'Early escalation already requested' });
+    }
+
+    thread.earlyEscalationRequestedBy = isSender ? 'Sender' : 'Receiver';
+    thread.escalationRequestCount = (thread.escalationRequestCount || 0) + 1;
+    if (isSender) {
+      thread.earlyEscalationSenderConsent = 'Approved';
+      thread.earlyEscalationReceiverConsent = 'Pending';
+    } else {
+      thread.earlyEscalationReceiverConsent = 'Approved';
+      thread.earlyEscalationSenderConsent = 'Pending';
+    }
+
+    await thread.save();
+
+    const notifyUser = isSender ? thread.receiver : thread.sender;
+
+    await Notification.create({
+      user: notifyUser._id,
+      type: 'EscalationConsent',
+      message: 'The other person is requesting counselor support. Do you agree?',
+      thread: thread._id
+    });
+
+    sendEmail(
+      notifyUser.email,
+      'Counselor Support Requested',
+      '<p>The other person in your Gentle Mirror thread is requesting counselor support. Log in to review the request.</p>'
+    ).catch(err => console.error('Failed to send email notification:', err));
+
+    res.json({ message: 'Escalation requested', thread });
+  } catch (error) {
+    console.error('Error requesting escalation:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Consent to early escalation
+router.put('/:id/consent-escalation', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { consent } = req.body; // 'Approved' or 'Declined'
+    if (!['Approved', 'Declined'].includes(consent)) {
+      return res.status(400).json({ message: 'Invalid consent value' });
+    }
+
+    const thread = await Thread.findById(req.params.id).populate('sender').populate('receiver');
+    if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+    const isSender = thread.sender._id.toString() === req.user._id.toString();
+    const isReceiver = thread.receiver._id.toString() === req.user._id.toString();
+
+    if (!isSender && !isReceiver) return res.status(403).json({ message: 'Access denied' });
+
+    if (isSender) {
+      thread.earlyEscalationSenderConsent = consent;
+    } else {
+      thread.earlyEscalationReceiverConsent = consent;
+    }
+
+    if (consent === 'Declined') {
+      thread.earlyEscalationRequestedBy = null;
+      thread.earlyEscalationSenderConsent = 'None';
+      thread.earlyEscalationReceiverConsent = 'None';
+      thread.escalationDeclinedCount = (thread.escalationDeclinedCount || 0) + 1;
+      // notify requester
+      const notifyUser = isSender ? thread.receiver : thread.sender;
+      await Notification.create({
+        user: notifyUser._id,
+        type: 'EscalationConsent',
+        message: 'The other person has declined the counselor escalation request.',
+        thread: thread._id
+      });
+      sendEmail(
+        notifyUser.email,
+        'Counselor Support Declined',
+        '<p>The other person in your Gentle Mirror thread has declined the request for counselor support.</p>'
+      ).catch(err => console.error('Failed to send email notification:', err));
+    } else if (thread.earlyEscalationSenderConsent === 'Approved' && thread.earlyEscalationReceiverConsent === 'Approved') {
+      thread.status = 'Escalated';
+      // Notify counselors
+    }
+
+    await thread.save();
+    res.json({ message: 'Consent updated', thread });
+  } catch (error) {
+    console.error('Error consenting to escalation:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Consent to counselor access
+router.put('/:id/counselor-consent', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { consent } = req.body; // 'Approved' or 'Declined'
+    if (!['Approved', 'Declined'].includes(consent)) {
+      return res.status(400).json({ message: 'Invalid consent value' });
+    }
+
+    const thread = await Thread.findById(req.params.id);
+    if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+    const isSender = thread.sender.toString() === req.user._id.toString();
+    const isReceiver = thread.receiver.toString() === req.user._id.toString();
+
+    if (!isSender && !isReceiver) return res.status(403).json({ message: 'Access denied' });
+
+    if (isSender) {
+      thread.counselorConsentSender = consent;
+    } else {
+      thread.counselorConsentReceiver = consent;
+    }
+
+    await thread.save();
+
+    res.json({ message: 'Counselor consent updated', thread });
+  } catch (error) {
+    console.error('Error in counselor consent:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+module.exports = router;
