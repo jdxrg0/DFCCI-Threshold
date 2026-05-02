@@ -31,7 +31,7 @@ const ProtectedRoute = ({ children, allowGuest = false, restrictAuthenticated = 
   }
 
   // If the page is private and there is no user
-  if (!allowGuest && !user) {
+  if (!allowGuest && !user && !restrictAuthenticated) {
     // Redirect to login, but keep the current location so we can redirect back after login
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
