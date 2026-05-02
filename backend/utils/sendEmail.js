@@ -14,8 +14,9 @@ const sendEmail = async (to, subject, html, retries = 3, backoff = 1000) => {
 
     const transporter = nodemailer.createTransport({
       host: 'smtp.gmail.com',
-      port: 465,
-      secure: true,
+      port: 587,
+      secure: false, // Upgrades to TLS using STARTTLS
+      requireTLS: true,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_APP_PASSWORD,
