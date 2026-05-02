@@ -42,15 +42,17 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.get('/auth/me');
       const freshUser = res.data.user;
+      console.log('[Auth] checkAuth success:', freshUser.displayName);
       setUser(freshUser);
       // Persist to localStorage for instant restore next time
       localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser));
     } catch (error) {
       if (error.response && error.response.status === 401) {
+        console.warn('[Auth] Session invalid (401), logging out...');
         setUser(null);
         localStorage.removeItem(USER_CACHE_KEY);
       } else {
-        console.warn('Network error during auth check, keeping cached user');
+        console.warn('[Auth] Network error during auth check, keeping cached user:', error.message);
       }
     } finally {
       if (!silent) setLoading(false);
