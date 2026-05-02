@@ -160,12 +160,12 @@ const Navbar = () => {
 
         {/* Brand */}
         <div className="navbar-brand">
-          <Link to={user ? '/dashboard' : '/'} onClick={() => setIsMobileMenuOpen(false)} style={{ display: 'flex', alignItems: 'center' }}>
+          <Link to={user ? '/dashboard' : '/login'} onClick={() => setIsMobileMenuOpen(false)} style={{ display: 'flex', alignItems: 'center' }}>
             <img src={logo} alt="DFCCI Logo" className="navbar-logo" />
           </Link>
           <div className="navbar-title-container">
             <Link 
-              to={user ? '/dashboard' : '/'} 
+              to={user ? '/dashboard' : '/login'} 
               className="navbar-title"
               onClick={() => setIsMobileMenuOpen(false)}
             >

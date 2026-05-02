@@ -5,6 +5,8 @@ import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider } from './context/LanguageContext';
 import Navbar from './components/Navbar';
 
+import ProtectedRoute from './components/ProtectedRoute';
+import { useAuth } from './context/AuthContext';
 
 import Login from './pages/Login';
 import Signup from './pages/Signup';
@@ -25,6 +27,13 @@ import SendAffirmation from './pages/SendAffirmation';
 import AffirmationView from './pages/AffirmationView';
 import FundTrackerDashboard from './pages/FundTrackerDashboard';
 
+const RootRedirect = () => {
+  const { user, loading } = useAuth();
+  
+  if (loading) return null; // Let the AuthProvider handle the initial loading flash
+  return <Navigate to={user ? "/dashboard" : "/login"} replace />;
+};
+
 const App = () => {
   return (
     <LanguageProvider>
@@ -35,25 +44,35 @@ const App = () => {
             <Navbar />
             <main className="main-content">
               <Routes>
-                <Route path="/" element={<Navigate to="/login" replace />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/signup" element={<Signup />} />
-                <Route path="/forgot-password" element={<ForgotPassword />} />
-                <Route path="/dashboard" element={<PortalDashboard />} />
-                <Route path="/mirror/dashboard" element={<MirrorDashboard />} />
-                <Route path="/mirror/send" element={<SendMirror />} />
-                <Route path="/mirror/thread/:id" element={<ThreadView />} />
-                <Route path="/admin" element={<AdminPanel />} />
-                <Route path="/counselor" element={<CounselorDashboard />} />
-                <Route path="/notifications" element={<Notifications />} />
-                <Route path="/docs/:moduleName" element={<ModuleDocs />} />
-                <Route path="/tickets/dashboard" element={<TicketsDashboard />} />
-                <Route path="/tickets/create" element={<CreateTicket />} />
-                <Route path="/tickets/:id" element={<TicketView />} />
-                <Route path="/affirm/dashboard" element={<AffirmationDashboard />} />
-                <Route path="/affirm/send" element={<SendAffirmation />} />
-                <Route path="/affirm/:id" element={<AffirmationView />} />
-                <Route path="/funds" element={<FundTrackerDashboard />} />
+                {/* Public / Landing logic */}
+                <Route path="/" element={<RootRedirect />} />
+                
+                {/* Auth Routes - Restricted to Guest */}
+                <Route path="/login" element={<ProtectedRoute restrictAuthenticated><Login /></ProtectedRoute>} />
+                <Route path="/signup" element={<ProtectedRoute restrictAuthenticated><Signup /></ProtectedRoute>} />
+                <Route path="/forgot-password" element={<ProtectedRoute restrictAuthenticated><ForgotPassword /></ProtectedRoute>} />
+
+                {/* Private Routes - Required Auth */}
+                <Route path="/dashboard" element={<ProtectedRoute><PortalDashboard /></ProtectedRoute>} />
+                <Route path="/mirror/dashboard" element={<ProtectedRoute><MirrorDashboard /></ProtectedRoute>} />
+                <Route path="/mirror/send" element={<ProtectedRoute><SendMirror /></ProtectedRoute>} />
+                <Route path="/mirror/thread/:id" element={<ProtectedRoute><ThreadView /></ProtectedRoute>} />
+                <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
+                <Route path="/counselor" element={<ProtectedRoute><CounselorDashboard /></ProtectedRoute>} />
+                <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+                
+                {/* Module Docs - Generally public but can be protected if desired */}
+                <Route path="/docs/:moduleName" element={<ProtectedRoute allowGuest><ModuleDocs /></ProtectedRoute>} />
+
+                <Route path="/tickets/dashboard" element={<ProtectedRoute><TicketsDashboard /></ProtectedRoute>} />
+                <Route path="/tickets/create" element={<ProtectedRoute><CreateTicket /></ProtectedRoute>} />
+                <Route path="/tickets/:id" element={<ProtectedRoute><TicketView /></ProtectedRoute>} />
+                
+                <Route path="/affirm/dashboard" element={<ProtectedRoute><AffirmationDashboard /></ProtectedRoute>} />
+                <Route path="/affirm/send" element={<ProtectedRoute><SendAffirmation /></ProtectedRoute>} />
+                <Route path="/affirm/:id" element={<ProtectedRoute><AffirmationView /></ProtectedRoute>} />
+                
+                <Route path="/funds" element={<ProtectedRoute><FundTrackerDashboard /></ProtectedRoute>} />
               </Routes>
             </main>
           </div>
