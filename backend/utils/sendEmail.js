@@ -1,48 +1,42 @@
-const nodemailer = require('nodemailer');
-const dns = require('dns');
+// We use a Google Apps Script web app proxy to bypass Render's strict firewall
+// and send 100% verified emails directly from your Gmail account over Port 443.
 
-// Force Node.js to use IPv4. Render's free tier has issues with outbound IPv6
-// which causes the ENETUNREACH error when connecting to smtp.gmail.com.
-dns.setDefaultResultOrder('ipv4first');
 const sendEmail = async (to, subject, html, retries = 3, backoff = 1000) => {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD) {
-      console.log('No EMAIL_USER or EMAIL_APP_PASSWORD set. Mocking email send:');
+    if (!process.env.APPS_SCRIPT_URL) {
+      console.log('--- DEVELOPMENT MODE: EMAIL FAILED TO SEND ---');
+      console.log(`No APPS_SCRIPT_URL set. Ensure it is added to your Render Environment.`);
       console.log(`To: ${to}, Subject: ${subject}`);
+      console.log('----------------------------------------------');
       return;
     }
 
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false, // Upgrades to TLS using STARTTLS
-      requireTLS: true,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_APP_PASSWORD,
-      },
-      connectionTimeout: 10000, // Fail fast if blocked by network
+    // Google Apps Script doesn't explicitly need headers, just the body
+    const response = await fetch(process.env.APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        secret: process.env.EMAIL_APP_PASSWORD || 'dfcci_secret', // Security token
+        to: to,
+        subject: subject,
+        html: html
+      })
     });
 
-    const mailOptions = {
-      from: `DFCCI Threshold <${process.env.EMAIL_USER}>`,
-      to,
-      subject,
-      html,
-    };
+    const data = await response.json();
 
-    const info = await transporter.sendMail(mailOptions);
-    return info;
+    if (data.error) {
+      throw new Error(`Apps Script Error: ${data.error}`);
+    }
+
+    console.log('Email sent successfully via Google Apps Script proxy!');
+    return data;
   } catch (error) {
     if (retries > 0) {
-      console.warn(`Email sending failed. Retrying in ${backoff}ms... (${retries} attempts left)`);
+      console.warn(`Apps Script proxy failed. Retrying in ${backoff}ms... (${retries} attempts left)`);
       await new Promise(resolve => setTimeout(resolve, backoff));
       return sendEmail(to, subject, html, retries - 1, backoff * 2);
     } else {
-      console.error('Failed to send email via Nodemailer after retries:', error);
-      console.log('\n--- DEVELOPMENT MODE: EMAIL FAILED TO SEND ---');
-      console.log(`To: ${to}, Subject: ${subject}`);
-      console.log('----------------------------------------------\n');
+      console.error('Failed to send email via Apps Script proxy after retries:', error.message);
     }
   }
 };
