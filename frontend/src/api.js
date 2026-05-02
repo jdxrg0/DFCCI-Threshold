@@ -1,8 +1,10 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`,
-  withCredentials: true, // Crucial for httpOnly cookies
+  // Use relative path so Vite proxy can handle it in dev
+  // In production, the backend should serve the frontend on the same origin
+  baseURL: '/api',
+  withCredentials: true,
 });
 
 // Add a response interceptor to handle unauthorized errors globally

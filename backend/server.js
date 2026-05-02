@@ -25,18 +25,18 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
 
 app.use(cors({
   origin: function (origin, callback) {
-    // In development, allow all. In production, whitelist only.
-    if (allowedOrigins === true) {
+    // In development, allow all origins (helpful for mobile testing via IP)
+    if (process.env.NODE_ENV !== 'production' || !origin) {
       return callback(null, true);
     }
-    // Allow server-to-server requests (no origin header)
-    if (!origin) {
-      return callback(null, true);
+    
+    // In production, whitelist only
+    if (allowedOrigins === true || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
     }
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    }
-    callback(new Error(`CORS policy: origin ${origin} is not allowed.`));
   },
   credentials: true,
 }));
