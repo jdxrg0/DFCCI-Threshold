@@ -62,7 +62,25 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/affirmations', affirmationRoutes);
 app.use('/api/fruits', fruitRoutes);
 
+// Ping route for uptime monitoring
+app.get('/api/ping', (req, res) => {
+  res.status(200).send('pong');
+});
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Prevent Render's free tier from sleeping (15 min timeout)
+  // Render automatically injects RENDER_EXTERNAL_URL in production
+  const renderUrl = process.env.RENDER_EXTERNAL_URL;
+  if (renderUrl) {
+    const https = require('https');
+    setInterval(() => {
+      https.get(`${renderUrl}/api/ping`).on('error', (err) => {
+        console.error('Self-ping failed:', err.message);
+      });
+      console.log('Self-ping sent to keep server awake.');
+    }, 14 * 60 * 1000); // Ping every 14 minutes
+  }
 });
