@@ -34,11 +34,11 @@ const PortalDashboard = () => {
                 {t('gentle_mirror_desc')}
               </p>
             <div className="module-card-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
-                <Link to="/docs/gentle-mirror" className="btn btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.9rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                  <BookOpen size={16} /> <span className="hide-text-mobile">{t('read_docs')}</span>
+                <Link to="/docs/gentle-mirror" className="btn btn-secondary" title={t('read_docs')} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BookOpen size={20} />
                 </Link>
-                <Link to="/mirror/dashboard" className="btn btn-primary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.9rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                  <Compass size={16} /> <span className="hide-text-mobile">{t('open_module')}</span>
+                <Link to="/mirror/dashboard" className="btn btn-primary" title={t('open_module')} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Compass size={20} />
                 </Link>
             </div>
           </div>
@@ -57,11 +57,11 @@ const PortalDashboard = () => {
                 {t('shining_light_desc')}
               </p>
             <div className="module-card-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
-                <Link to="/docs/shining-light" className="btn btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.9rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                  <BookOpen size={16} /> <span className="hide-text-mobile">{t('sl_read_docs')}</span>
+                <Link to="/docs/shining-light" className="btn btn-secondary" title={t('sl_read_docs')} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BookOpen size={20} />
                 </Link>
-                <Link to="/affirm/dashboard" className="btn btn-primary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.9rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                  <Sun size={16} /> <span className="hide-text-mobile">{t('sl_open_module')}</span>
+                <Link to="/affirm/dashboard" className="btn btn-primary" title={t('sl_open_module')} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Sun size={20} />
                 </Link>
             </div>
           </div>
@@ -80,11 +80,11 @@ const PortalDashboard = () => {
                 {t('system_requests_desc')}
               </p>
             <div className="module-card-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
-                <Link to="/docs/system-requests" className="btn btn-secondary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.9rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                  <BookOpen size={16} /> <span className="hide-text-mobile">{t('read_docs')}</span>
+                <Link to="/docs/system-requests" className="btn btn-secondary" title={t('read_docs')} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BookOpen size={20} />
                 </Link>
-                <Link to="/tickets/dashboard" className="btn btn-primary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.9rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                  <Wrench size={16} /> <span className="hide-text-mobile">{t('open_module')}</span>
+                <Link to="/tickets/dashboard" className="btn btn-primary" title={t('open_module')} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Wrench size={20} />
                 </Link>
             </div>
           </div>
