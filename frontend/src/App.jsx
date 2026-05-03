@@ -34,12 +34,23 @@ const RootRedirect = () => {
 
   if (!user) {
     // If the user was mid-signup (step 2) and the state is still valid, send them there
-    const pendingStep = localStorage.getItem('dfcci_signup_step');
-    const pendingExpiry = localStorage.getItem('dfcci_signup_expiry');
-    const isValid = pendingExpiry && Date.now() < parseInt(pendingExpiry, 10);
-    if (pendingStep === '2' && isValid) {
+    const pendingSignupStep = localStorage.getItem('dfcci_signup_step');
+    const pendingSignupExpiry = localStorage.getItem('dfcci_signup_expiry');
+    const isSignupValid = pendingSignupExpiry && Date.now() < parseInt(pendingSignupExpiry, 10);
+    
+    if (pendingSignupStep === '2' && isSignupValid) {
       return <Navigate to="/signup" replace />;
     }
+
+    // If the user was mid-password reset (step 2)
+    const pendingFPStep = localStorage.getItem('dfcci_fp_step');
+    const pendingFPExpiry = localStorage.getItem('dfcci_fp_expiry');
+    const isFPValid = pendingFPExpiry && Date.now() < parseInt(pendingFPExpiry, 10);
+
+    if (pendingFPStep === '2' && isFPValid) {
+      return <Navigate to="/forgot-password" replace />;
+    }
+
     return <Navigate to="/login" replace />;
   }
 
