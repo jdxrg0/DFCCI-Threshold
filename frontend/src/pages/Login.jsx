@@ -27,9 +27,10 @@ const Login = () => {
     } catch (err) {
       // If the account exists but email is unverified, redirect to the OTP step
       if (err.response?.status === 403) {
-        // Seed the signup sessionStorage so /signup restores to step 2
-        sessionStorage.setItem('dfcci_signup_step', '2');
-        sessionStorage.setItem('dfcci_signup_pending_email', email);
+        const expiry = String(Date.now() + 30 * 60 * 1000); // 30 min TTL
+        localStorage.setItem('dfcci_signup_step', '2');
+        localStorage.setItem('dfcci_signup_pending_email', email);
+        localStorage.setItem('dfcci_signup_expiry', expiry);
         // Silently request a fresh OTP so the code in their inbox is valid
         try { await api.post('/auth/resend-otp', { email }); } catch (_) {}
         navigate('/signup');

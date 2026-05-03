@@ -33,9 +33,11 @@ const RootRedirect = () => {
   if (loading) return null; // Let the AuthProvider handle the initial loading flash
 
   if (!user) {
-    // If the user was mid-signup (step 2), restore them there instead of /login
-    const pendingSignupStep = sessionStorage.getItem('dfcci_signup_step');
-    if (pendingSignupStep === '2') {
+    // If the user was mid-signup (step 2) and the state is still valid, send them there
+    const pendingStep = localStorage.getItem('dfcci_signup_step');
+    const pendingExpiry = localStorage.getItem('dfcci_signup_expiry');
+    const isValid = pendingExpiry && Date.now() < parseInt(pendingExpiry, 10);
+    if (pendingStep === '2' && isValid) {
       return <Navigate to="/signup" replace />;
     }
     return <Navigate to="/login" replace />;

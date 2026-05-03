@@ -9,12 +9,29 @@ import logo from '../assets/logo.svg';
 
 const SIGNUP_STEP_KEY = 'dfcci_signup_step';
 const SIGNUP_EMAIL_KEY = 'dfcci_signup_pending_email';
+const SIGNUP_EXPIRY_KEY = 'dfcci_signup_expiry';
+const SIGNUP_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+/** Returns true if the saved pending-signup state is still within the TTL */
+const isPendingSignupValid = () => {
+  const expiry = localStorage.getItem(SIGNUP_EXPIRY_KEY);
+  return expiry && Date.now() < parseInt(expiry, 10);
+};
+
+const clearPendingSignup = () => {
+  localStorage.removeItem(SIGNUP_STEP_KEY);
+  localStorage.removeItem(SIGNUP_EMAIL_KEY);
+  localStorage.removeItem(SIGNUP_EXPIRY_KEY);
+};
 
 const Signup = () => {
-  // Restore step from sessionStorage so a mobile refresh doesn't lose progress
+  // Restore step from localStorage (survives mobile tab kills, expires after 30 min)
   const [step, setStep] = useState(() => {
-    const savedStep = sessionStorage.getItem(SIGNUP_STEP_KEY);
-    return savedStep ? parseInt(savedStep, 10) : 1;
+    if (isPendingSignupValid()) {
+      const savedStep = localStorage.getItem(SIGNUP_STEP_KEY);
+      return savedStep ? parseInt(savedStep, 10) : 1;
+    }
+    return 1;
   });
   const [formData, setFormData, clearSavedForm] = useFormPersist('signup_draft', { displayName: '', email: '', password: '' }, ['password']);
   const [otp, setOtp] = useState('');
@@ -25,20 +42,22 @@ const Signup = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
 
-  // If returning to step 2 (from a refresh or from the Login redirect),
-  // always prefer the sessionStorage email over any stale localStorage draft
+  // If returning to step 2 (refresh or Login redirect), restore the pending email
   useEffect(() => {
-    if (step === 2) {
-      const pendingEmail = sessionStorage.getItem(SIGNUP_EMAIL_KEY);
+    if (step === 2 && isPendingSignupValid()) {
+      const pendingEmail = localStorage.getItem(SIGNUP_EMAIL_KEY);
       if (pendingEmail) {
         setFormData(prev => ({ ...prev, email: pendingEmail }));
       }
     }
   }, []);
 
-  // Keep sessionStorage in sync with current step
+  // Keep localStorage in sync with current step and refresh the expiry
   useEffect(() => {
-    sessionStorage.setItem(SIGNUP_STEP_KEY, String(step));
+    if (step === 2) {
+      localStorage.setItem(SIGNUP_STEP_KEY, String(step));
+      localStorage.setItem(SIGNUP_EXPIRY_KEY, String(Date.now() + SIGNUP_TTL_MS));
+    }
   }, [step]);
 
   const handleSignupSubmit = async (e) => {
@@ -47,8 +66,10 @@ const Signup = () => {
     try {
       const res = await signup(formData);
       setMsg(res.data.message);
-      // Persist the pending email so we can restore it after a mobile refresh
-      sessionStorage.setItem(SIGNUP_EMAIL_KEY, formData.email);
+      // Persist to localStorage so the state survives mobile tab kills
+      localStorage.setItem(SIGNUP_STEP_KEY, '2');
+      localStorage.setItem(SIGNUP_EMAIL_KEY, formData.email);
+      localStorage.setItem(SIGNUP_EXPIRY_KEY, String(Date.now() + SIGNUP_TTL_MS));
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.message || 'Signup failed');
@@ -65,8 +86,7 @@ const Signup = () => {
       setMsg(res.data.message);
       // Clear all persisted signup state after successful verification
       clearSavedForm();
-      sessionStorage.removeItem(SIGNUP_STEP_KEY);
-      sessionStorage.removeItem(SIGNUP_EMAIL_KEY);
+      clearPendingSignup();
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
       setError(err.response?.data?.message || 'OTP Verification failed');

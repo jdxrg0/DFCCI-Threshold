@@ -7,15 +7,31 @@ import logo from '../assets/logo.svg';
 
 const FP_STEP_KEY = 'dfcci_fp_step';
 const FP_EMAIL_KEY = 'dfcci_fp_pending_email';
+const FP_EXPIRY_KEY = 'dfcci_fp_expiry';
+const FP_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+const isFPValid = () => {
+  const expiry = localStorage.getItem(FP_EXPIRY_KEY);
+  return expiry && Date.now() < parseInt(expiry, 10);
+};
+
+const clearPendingFP = () => {
+  localStorage.removeItem(FP_STEP_KEY);
+  localStorage.removeItem(FP_EMAIL_KEY);
+  localStorage.removeItem(FP_EXPIRY_KEY);
+};
 
 const ForgotPassword = () => {
-  // Restore step from sessionStorage so a mobile refresh doesn't lose progress
+  // Restore step from localStorage (survives mobile tab kills, expires after 30 min)
   const [step, setStep] = useState(() => {
-    const savedStep = sessionStorage.getItem(FP_STEP_KEY);
-    return savedStep ? parseInt(savedStep, 10) : 1;
+    if (isFPValid()) {
+      const savedStep = localStorage.getItem(FP_STEP_KEY);
+      return savedStep ? parseInt(savedStep, 10) : 1;
+    }
+    return 1;
   });
-  // Restore email from sessionStorage
-  const [email, setEmail] = useState(() => sessionStorage.getItem(FP_EMAIL_KEY) || '');
+  // Restore email from localStorage
+  const [email, setEmail] = useState(() => (isFPValid() ? localStorage.getItem(FP_EMAIL_KEY) || '' : ''));
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -25,14 +41,20 @@ const ForgotPassword = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
 
-  // Keep sessionStorage in sync with current step and email
+  // Keep localStorage in sync with current step and email, refreshing the expiry
   useEffect(() => {
-    sessionStorage.setItem(FP_STEP_KEY, String(step));
+    if (step === 2) {
+      localStorage.setItem(FP_STEP_KEY, String(step));
+      localStorage.setItem(FP_EXPIRY_KEY, String(Date.now() + FP_TTL_MS));
+    }
   }, [step]);
 
   useEffect(() => {
-    if (email) sessionStorage.setItem(FP_EMAIL_KEY, email);
-  }, [email]);
+    if (email && step === 2) {
+      localStorage.setItem(FP_EMAIL_KEY, email);
+      localStorage.setItem(FP_EXPIRY_KEY, String(Date.now() + FP_TTL_MS));
+    }
+  }, [email, step]);
 
   const handleRequestReset = async (e) => {
     e.preventDefault();
@@ -40,8 +62,10 @@ const ForgotPassword = () => {
     try {
       const res = await api.post('/auth/forgot-password', { email });
       setMsg(res.data.message);
-      // Persist email so it survives a mobile refresh
-      sessionStorage.setItem(FP_EMAIL_KEY, email);
+      // Persist to localStorage so the state survives mobile tab kills
+      localStorage.setItem(FP_STEP_KEY, '2');
+      localStorage.setItem(FP_EMAIL_KEY, email);
+      localStorage.setItem(FP_EXPIRY_KEY, String(Date.now() + FP_TTL_MS));
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send reset code');
@@ -76,8 +100,7 @@ const ForgotPassword = () => {
       const res = await api.post('/auth/reset-password', { email, otp, newPassword });
       setMsg(res.data.message);
       // Clear all persisted reset state after successful password change
-      sessionStorage.removeItem(FP_STEP_KEY);
-      sessionStorage.removeItem(FP_EMAIL_KEY);
+      clearPendingFP();
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reset password');
