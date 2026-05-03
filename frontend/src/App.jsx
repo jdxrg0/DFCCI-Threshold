@@ -29,9 +29,19 @@ import FundTrackerDashboard from './pages/FundTrackerDashboard';
 
 const RootRedirect = () => {
   const { user, loading } = useAuth();
-  
+
   if (loading) return null; // Let the AuthProvider handle the initial loading flash
-  return <Navigate to={user ? "/dashboard" : "/login"} replace />;
+
+  if (!user) {
+    // If the user was mid-signup (step 2), restore them there instead of /login
+    const pendingSignupStep = sessionStorage.getItem('dfcci_signup_step');
+    if (pendingSignupStep === '2') {
+      return <Navigate to="/signup" replace />;
+    }
+    return <Navigate to="/login" replace />;
+  }
+
+  return <Navigate to="/dashboard" replace />;
 };
 
 const App = () => {

@@ -4,6 +4,7 @@ import { LogIn } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import useFormPersist from '../hooks/useFormPersist';
+import api from '../api';
 import logo from '../assets/logo.svg';
 
 const Login = () => {
@@ -24,6 +25,16 @@ const Login = () => {
       clearSavedForm();
       navigate('/dashboard');
     } catch (err) {
+      // If the account exists but email is unverified, redirect to the OTP step
+      if (err.response?.status === 403) {
+        // Seed the signup sessionStorage so /signup restores to step 2
+        sessionStorage.setItem('dfcci_signup_step', '2');
+        sessionStorage.setItem('dfcci_signup_pending_email', email);
+        // Silently request a fresh OTP so the code in their inbox is valid
+        try { await api.post('/auth/resend-otp', { email }); } catch (_) {}
+        navigate('/signup');
+        return;
+      }
       setError(err.response?.data?.message || 'Login failed');
     } finally {
       setLoading(false);

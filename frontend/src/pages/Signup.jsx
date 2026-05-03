@@ -25,11 +25,12 @@ const Signup = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
 
-  // If returning to step 2 from a refresh, restore the pending email into formData
+  // If returning to step 2 (from a refresh or from the Login redirect),
+  // always prefer the sessionStorage email over any stale localStorage draft
   useEffect(() => {
     if (step === 2) {
       const pendingEmail = sessionStorage.getItem(SIGNUP_EMAIL_KEY);
-      if (pendingEmail && !formData.email) {
+      if (pendingEmail) {
         setFormData(prev => ({ ...prev, email: pendingEmail }));
       }
     }
