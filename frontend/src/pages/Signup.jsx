@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { UserPlus, CheckCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -7,8 +7,15 @@ import api from '../api';
 import useFormPersist from '../hooks/useFormPersist';
 import logo from '../assets/logo.svg';
 
+const SIGNUP_STEP_KEY = 'dfcci_signup_step';
+const SIGNUP_EMAIL_KEY = 'dfcci_signup_pending_email';
+
 const Signup = () => {
-  const [step, setStep] = useState(1);
+  // Restore step from sessionStorage so a mobile refresh doesn't lose progress
+  const [step, setStep] = useState(() => {
+    const savedStep = sessionStorage.getItem(SIGNUP_STEP_KEY);
+    return savedStep ? parseInt(savedStep, 10) : 1;
+  });
   const [formData, setFormData, clearSavedForm] = useFormPersist('signup_draft', { displayName: '', email: '', password: '' }, ['password']);
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
@@ -18,12 +25,29 @@ const Signup = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
 
+  // If returning to step 2 from a refresh, restore the pending email into formData
+  useEffect(() => {
+    if (step === 2) {
+      const pendingEmail = sessionStorage.getItem(SIGNUP_EMAIL_KEY);
+      if (pendingEmail && !formData.email) {
+        setFormData(prev => ({ ...prev, email: pendingEmail }));
+      }
+    }
+  }, []);
+
+  // Keep sessionStorage in sync with current step
+  useEffect(() => {
+    sessionStorage.setItem(SIGNUP_STEP_KEY, String(step));
+  }, [step]);
+
   const handleSignupSubmit = async (e) => {
     e.preventDefault();
     setError(''); setMsg(''); setLoading(true);
     try {
       const res = await signup(formData);
       setMsg(res.data.message);
+      // Persist the pending email so we can restore it after a mobile refresh
+      sessionStorage.setItem(SIGNUP_EMAIL_KEY, formData.email);
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.message || 'Signup failed');
@@ -38,7 +62,10 @@ const Signup = () => {
     try {
       const res = await verifyOtp(formData.email, otp);
       setMsg(res.data.message);
+      // Clear all persisted signup state after successful verification
       clearSavedForm();
+      sessionStorage.removeItem(SIGNUP_STEP_KEY);
+      sessionStorage.removeItem(SIGNUP_EMAIL_KEY);
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
       setError(err.response?.data?.message || 'OTP Verification failed');

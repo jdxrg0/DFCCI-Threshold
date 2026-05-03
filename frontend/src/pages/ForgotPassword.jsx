@@ -1,13 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, KeyRound, Lock, CheckCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import api from '../api';
 import { useLanguage } from '../context/LanguageContext';
 import logo from '../assets/logo.svg';
 
+const FP_STEP_KEY = 'dfcci_fp_step';
+const FP_EMAIL_KEY = 'dfcci_fp_pending_email';
+
 const ForgotPassword = () => {
-  const [step, setStep] = useState(1); // 1: enter email, 2: enter code + new password
-  const [email, setEmail] = useState('');
+  // Restore step from sessionStorage so a mobile refresh doesn't lose progress
+  const [step, setStep] = useState(() => {
+    const savedStep = sessionStorage.getItem(FP_STEP_KEY);
+    return savedStep ? parseInt(savedStep, 10) : 1;
+  });
+  // Restore email from sessionStorage
+  const [email, setEmail] = useState(() => sessionStorage.getItem(FP_EMAIL_KEY) || '');
   const [otp, setOtp] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -17,12 +25,23 @@ const ForgotPassword = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
 
+  // Keep sessionStorage in sync with current step and email
+  useEffect(() => {
+    sessionStorage.setItem(FP_STEP_KEY, String(step));
+  }, [step]);
+
+  useEffect(() => {
+    if (email) sessionStorage.setItem(FP_EMAIL_KEY, email);
+  }, [email]);
+
   const handleRequestReset = async (e) => {
     e.preventDefault();
     setError(''); setMsg(''); setLoading(true);
     try {
       const res = await api.post('/auth/forgot-password', { email });
       setMsg(res.data.message);
+      // Persist email so it survives a mobile refresh
+      sessionStorage.setItem(FP_EMAIL_KEY, email);
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send reset code');
@@ -56,6 +75,9 @@ const ForgotPassword = () => {
     try {
       const res = await api.post('/auth/reset-password', { email, otp, newPassword });
       setMsg(res.data.message);
+      // Clear all persisted reset state after successful password change
+      sessionStorage.removeItem(FP_STEP_KEY);
+      sessionStorage.removeItem(FP_EMAIL_KEY);
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to reset password');
