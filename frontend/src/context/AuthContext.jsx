@@ -51,11 +51,14 @@ export const AuthProvider = ({ children }) => {
         console.warn('[Auth] Session invalid (401), logging out...');
         setUser(null);
         localStorage.removeItem(USER_CACHE_KEY);
+      } else if (error.message === 'Network Error' || !error.response) {
+        console.warn('[Auth] Network error (offline?), keeping cached user:', error.message);
+        // Don't clear user here, allow them to see cached data if possible
       } else {
-        console.warn('[Auth] Network error during auth check, keeping cached user:', error.message);
+        console.warn('[Auth] Unknown auth error:', error.message);
       }
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
   };
 

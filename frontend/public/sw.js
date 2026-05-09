@@ -1,113 +1,80 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// IMPORTANT: Increment this version string on EVERY deploy so the activate
-// handler correctly purges old caches and clients receive fresh assets.
+// SERVICE WORKER V4 - BULLETPROOF OFFLINE HANDLING
 // ─────────────────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'dfcci-threshold-v3';
+const CACHE_NAME = 'dfcci-threshold-v4';
 
-// Static assets to pre-cache on install
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/favicon.svg',
+  '/icons.svg'
 ];
 
-// Install: pre-cache static shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_ASSETS))
   );
-  // Take control immediately without waiting for old SW to die
   self.skipWaiting();
 });
 
-// Activate: clean up ALL old caches (different CACHE_NAME = old cache)
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) =>
-      Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => {
-            console.log('[SW] Deleting old cache:', name);
-            return caches.delete(name);
-          })
-      )
-    )
+    caches.keys().then((keys) => Promise.all(
+      keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+    ))
   );
-  // Take control of all open clients immediately
   self.clients.claim();
 });
 
-// Fetch: Smart strategy per resource type
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // ── API calls: always go to network, never cache ──────────────────────────
+  // 1. API CALLS - Always Network, with graceful Offline JSON fallback
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(request));
-    return;
-  }
-
-  // ── Navigation & index.html: Network-FIRST with Cache Fallback ────────────
-  // We try network first to get the latest deploy, but fallback to the 
-  // precached index.html if offline or on a flaky mobile connection.
-  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
     event.respondWith(
-      fetch(request, { cache: 'no-store' })
-        .then((response) => {
-          // If response is valid, update the cache for next time
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return response;
-        })
-        .catch(() => {
-          // Network failed or timeout — serve cached shell
-          return caches.match('/index.html');
-        })
-    );
-    return;
-  }
-
-  // ── Vite-hashed static assets (JS, CSS): Cache-first ─────────────────────
-  if (url.pathname.startsWith('/assets/')) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        if (cached) return cached;
-        return fetch(request).then((response) => {
-          if (!response || response.status !== 200 || response.type === 'opaque') {
-            return response;
-          }
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          return response;
+      fetch(request).catch(() => {
+        return new Response(JSON.stringify({ error: 'offline', message: 'You are currently offline.' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
         });
       })
     );
     return;
   }
 
-  // ── Everything else: Network-first with cache fallback ────────────────────
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        return response;
-      })
-      .catch(() => caches.match(request))
-  );
-});
-
-// Handle messages from the app (e.g. force update)
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
+  // 2. NAVIGATION (index.html) - Network First, Cache Fallback
+  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+          return res;
+        })
+        .catch(() => {
+          // If network fails (OFFLINE), try root or index.html
+          return caches.match('/').then(match => match || caches.match('/index.html'));
+        })
+    );
+    return;
   }
+
+  // 3. STATIC ASSETS - Cache First, Network Fallback
+  event.respondWith(
+    caches.match(request).then((cached) => {
+      return cached || fetch(request).then((res) => {
+        if (!res || res.status !== 200) return res;
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+        return res;
+      });
+    }).catch(() => {
+       // If both fail and it's an image, we could return a placeholder
+       return new Response('Offline', { status: 503 });
+    })
+  );
 });
