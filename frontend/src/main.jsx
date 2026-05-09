@@ -5,7 +5,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import './index.css';
 
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'placeholder_client_id';
+const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '737835718804-j8hghc211jrqqttj608c836qj7kfa8cr.apps.googleusercontent.com';
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
