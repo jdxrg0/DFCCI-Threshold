@@ -2,15 +2,17 @@
 // IMPORTANT: Increment this version string on EVERY deploy so the activate
 // handler correctly purges old caches and clients receive fresh assets.
 // ─────────────────────────────────────────────────────────────────────────────
-const CACHE_NAME = 'dfcci-threshold-v2';
+const CACHE_NAME = 'dfcci-threshold-v3';
 
 // Static assets to pre-cache on install
 const PRECACHE_ASSETS = [
+  '/',
+  '/index.html',
   '/manifest.json',
   '/favicon.svg',
 ];
 
-// Install: pre-cache static shell (NOT index.html — it's always fetched fresh)
+// Install: pre-cache static shell
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
@@ -53,20 +55,20 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // ── Navigation & index.html: Network-FIRST, no cache fallback on success ──
-  // This ensures new deployments are always picked up. iOS Safari and
-  // other mobile browsers will always get the freshest HTML shell.
+  // ── Navigation & index.html: Network-FIRST with Cache Fallback ────────────
+  // We try network first to get the latest deploy, but fallback to the 
+  // precached index.html if offline or on a flaky mobile connection.
   if (request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
     event.respondWith(
       fetch(request, { cache: 'no-store' })
         .then((response) => {
-          // Do NOT cache index.html — let the browser always fetch it fresh.
-          // Vite content-hashes JS/CSS, so those are safe to cache, but
-          // index.html references those hashes and must always be up-to-date.
+          // If response is valid, update the cache for next time
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
           return response;
         })
         .catch(() => {
-          // Network failed (truly offline) — serve cached shell as last resort
+          // Network failed or timeout — serve cached shell
           return caches.match('/index.html');
         })
     );
@@ -74,9 +76,6 @@ self.addEventListener('fetch', (event) => {
   }
 
   // ── Vite-hashed static assets (JS, CSS): Cache-first ─────────────────────
-  // These filenames contain content hashes (e.g. index-BxAk3jdZ.js) so a
-  // cache hit is always the correct, immutable version. New builds produce
-  // new filenames so there's never a stale-cache problem here.
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
       caches.match(request).then((cached) => {

@@ -31,9 +31,16 @@ import ForceLogout from './pages/ForceLogout';
 const RootRedirect = () => {
   const { user, loading } = useAuth();
 
-  // While loading, optimistically send to /login. If the user IS authenticated,
-  // ProtectedRoute on /login (restrictAuthenticated) will redirect them to /dashboard once resolved.
-  if (loading) return <Navigate to="/login" replace />;
+  // While loading, show a neutral loading state. 
+  // Do NOT redirect yet, as we don't know if the user is authenticated.
+  if (loading) {
+    return (
+      <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div className="skeleton-title" style={{ width: '100px' }}></div>
+        <p style={{ color: 'var(--text-muted)', marginTop: '1rem' }}>Initializing...</p>
+      </div>
+    );
+  }
 
   if (!user) {
     // If the user was mid-signup (step 2) and the state is still valid, send them there
