@@ -14,7 +14,10 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: true,
+  },
+  googleId: {
+    type: String,
+    sparse: true,
   },
   role: {
     type: String,
@@ -32,6 +35,10 @@ const userSchema = new mongoose.Schema({
     type: Date,
   },
   subscribedToDuesReminders: {
+    type: Boolean,
+    default: false,
+  },
+  nameChangeRequested: {
     type: Boolean,
     default: false,
   },

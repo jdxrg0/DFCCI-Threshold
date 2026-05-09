@@ -1,7 +1,18 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
 
-const PopupModal = ({ isOpen, onClose, title, message, onConfirm, confirmText, cancelText, isAlert }) => {
+const PopupModal = ({ isOpen, onClose, title, message, onConfirm, confirmText, cancelText, isAlert, isPrompt, promptValue, onPromptChange }) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -29,13 +40,29 @@ const PopupModal = ({ isOpen, onClose, title, message, onConfirm, confirmText, c
         
         <p style={{ margin: 0, color: 'var(--text-main)', lineHeight: '1.5' }}>{message}</p>
         
+        {isPrompt && (
+          <input 
+            type="text" 
+            value={promptValue} 
+            onChange={(e) => onPromptChange && onPromptChange(e.target.value)} 
+            style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)' }}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                if (onConfirm) onConfirm(promptValue); 
+                onClose();
+              }
+            }}
+          />
+        )}
+
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
           {!isAlert && (
             <button onClick={onClose} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }}>
               {cancelText || 'Cancel'}
             </button>
           )}
-          <button onClick={() => { if (onConfirm) onConfirm(); onClose(); }} className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
+          <button onClick={() => { if (onConfirm) onConfirm(isPrompt ? promptValue : undefined); onClose(); }} className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
             {confirmText || 'OK'}
           </button>
         </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { UserPlus, CheckCircle, RefreshCw } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../api';
@@ -38,8 +39,11 @@ const Signup = () => {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signup, verifyOtp } = useAuth();
-  const { t } = useLanguage();
+  const [googleCredential, setGoogleCredential] = useState('');
+  const [confirmedName, setConfirmedName] = useState('');
+  const [showEmailSignup, setShowEmailSignup] = useState(false);
+  const { signup, verifyOtp, googleAuth } = useAuth();
+  const { t, lang } = useLanguage();
   const navigate = useNavigate();
 
   // If returning to step 2 (refresh or Login redirect), restore the pending email
@@ -73,6 +77,41 @@ const Signup = () => {
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.message || 'Signup failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError(''); setMsg(''); setLoading(true);
+    try {
+      const res = await googleAuth(credentialResponse.credential);
+      if (res.requireNameConfirmation) {
+        setGoogleCredential(res.credential);
+        setConfirmedName(res.googleName);
+        setStep(3);
+      } else {
+        clearSavedForm();
+        clearPendingSignup();
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Google signup failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleConfirmSubmit = async (e) => {
+    e.preventDefault();
+    setError(''); setMsg(''); setLoading(true);
+    try {
+      await googleAuth(googleCredential, confirmedName);
+      clearSavedForm();
+      clearPendingSignup();
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Google signup failed');
     } finally {
       setLoading(false);
     }
@@ -124,75 +163,105 @@ const Signup = () => {
         </div>
 
         <h2 className="fun-title">
-          {step === 1 ? t('join_community') : t('check_email')}
+          {step === 1 && t('join_community')}
+          {step === 2 && t('check_email')}
+          {step === 3 && t('google_name_confirm_title')}
         </h2>
 
         {error && <div className="ff-alert ff-alert-error">{error}</div>}
         {msg   && <div className="ff-alert ff-alert-success">{msg}</div>}
 
         {step === 1 ? (
-          <form onSubmit={handleSignupSubmit}>
-            <div className="ff-field">
-              <input
-                id="signup-name"
-                type="text"
-                className="ff-input"
-                placeholder={t('display_name')}
-                value={formData.displayName}
-                onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                required
-                autoComplete="name"
+          <div>
+            <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+              <GoogleLogin
+                key={lang}
+                text="signup_with"
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google signup failed')}
+                locale={lang === 'fil' ? 'tl' : 'en_US'}
               />
-              <label htmlFor="signup-name">{t('display_name')}</label>
             </div>
 
-            <div className="ff-field">
-              <input
-                id="signup-email"
-                type="email"
-                className="ff-input"
-                placeholder={t('email')}
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
-                autoComplete="email"
-              />
-              <label htmlFor="signup-email">{t('email')}</label>
-            </div>
+            {!showEmailSignup ? (
+              <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                <button 
+                  type="button"
+                  onClick={() => setShowEmailSignup(true)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.875rem', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  {t('continue_with_email')}
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="ff-divider" style={{ marginBottom: '1.5rem' }}>or</div>
 
-            <div className="ff-field">
-              <input
-                id="signup-password"
-                type="password"
-                className="ff-input"
-                placeholder={t('password')}
-                value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                required
-                autoComplete="new-password"
-              />
-              <label htmlFor="signup-password">{t('password')}</label>
-            </div>
+                <form onSubmit={handleSignupSubmit}>
+                  <div className="ff-field">
+                    <input
+                      id="signup-name"
+                      type="text"
+                      className="ff-input"
+                      placeholder={t('display_name')}
+                      value={formData.displayName}
+                      onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                      required
+                      autoComplete="name"
+                    />
+                    <label htmlFor="signup-name">{t('display_name')}</label>
+                  </div>
 
-            <button
-              type="submit"
-              className="ff-btn ff-btn-primary"
-              disabled={loading}
-              id="signup-submit"
-            >
-              {loading ? (
-                <><span className="ff-btn-spinner" /> {t('creating_account')}</>
-              ) : (
-                <><UserPlus size={18} /> {t('create_account')}</>
-              )}
-            </button>
+                  <div className="ff-field">
+                    <input
+                      id="signup-email"
+                      type="email"
+                      className="ff-input"
+                      placeholder={t('email')}
+                      value={formData.email}
+                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      required
+                      autoComplete="email"
+                    />
+                    <label htmlFor="signup-email">{t('email')}</label>
+                  </div>
 
-            <div className="ff-divider" style={{ marginTop: '1.25rem' }}>{t('already_member')}</div>
+                  <div className="ff-field">
+                    <input
+                      id="signup-password"
+                      type="password"
+                      className="ff-input"
+                      placeholder={t('password')}
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      required
+                      autoComplete="new-password"
+                    />
+                    <label htmlFor="signup-password">{t('password')}</label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="ff-btn ff-btn-primary"
+                    disabled={loading}
+                    id="signup-submit"
+                  >
+                    {loading ? (
+                      <><span className="ff-btn-spinner" /> {t('creating_account')}</>
+                    ) : (
+                      <><UserPlus size={18} /> {t('create_account')}</>
+                    )}
+                  </button>
+                </form>
+              </>
+            )}
+
+            <div className="ff-divider" style={{ marginTop: '2.5rem' }}>{t('already_member')}</div>
             <p className="text-center" style={{ fontSize: '0.875rem', marginTop: '0.75rem' }}>
               <Link to="/login" style={{ fontWeight: 600 }}>{t('login_here')}</Link>
             </p>
-          </form>
-        ) : (
+          </div>
+        ) : step === 2 ? (
           <form onSubmit={handleOtpSubmit}>
             <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
               {t('otp_sent')} <strong>{formData.email}</strong>
@@ -237,7 +306,40 @@ const Signup = () => {
               <RefreshCw size={16} /> {t('resend_code')}
             </button>
           </form>
-        )}
+        ) : step === 3 ? (
+          <form onSubmit={handleGoogleConfirmSubmit}>
+            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+              {t('google_name_confirm_desc')}
+            </p>
+
+            <div className="ff-field">
+              <input
+                id="confirm-name"
+                type="text"
+                className="ff-input"
+                placeholder={t('display_name')}
+                value={confirmedName}
+                onChange={(e) => setConfirmedName(e.target.value)}
+                required
+                autoComplete="name"
+              />
+              <label htmlFor="confirm-name">{t('display_name')}</label>
+            </div>
+
+            <button
+              type="submit"
+              className="ff-btn ff-btn-primary"
+              disabled={loading}
+              id="confirm-name-submit"
+            >
+              {loading ? (
+                <><span className="ff-btn-spinner" /> {t('creating_account')}</>
+              ) : (
+                <><UserPlus size={18} /> {t('confirm_name_btn')}</>
+              )}
+            </button>
+          </form>
+        ) : null}
       </div>
     </div>
   );

@@ -37,50 +37,50 @@ const calculateArrears = async (displayName) => {
 };
 
 const arrearsText = (arrears, isSunday = false) => {
-  if (arrears === null) return "Don't forget to check the Fund Tracker to see your status! 📖";
+  if (arrears === null) return "Don't forget to check the Fund Tracker to see your dues status! 📖";
   
   if (arrears > 0) {
-    return `Your current arrears is <span style="color: #ef4444; font-weight: bold;">₱${arrears}</span> ${isSunday ? '(including today)' : ''}. Let's settle it? 🙏`;
+    return `Your current arrears is <span style="color: #ef4444; font-weight: bold;">₱${arrears}</span> ${isSunday ? '(including today)' : ''}. Let's settle it soon! 🙏`;
   } else if (arrears < 0) {
-    return `You're literally advanced by <span style="color: #f59e0b; font-weight: bold;">₱${Math.abs(arrears)}</span>! Super slay! 💅`;
+    return `You're advanced by <span style="color: #f59e0b; font-weight: bold;">₱${Math.abs(arrears)}</span>! You're all caught up and then some — great job! 🎉`;
   } else {
-    return `You're <span style="color: #22c55e; font-weight: bold;">Fully Updated</span>! No arrears, literal glow up! ✨`;
+    return `You're <span style="color: #22c55e; font-weight: bold;">Fully Updated</span>! No arrears at all — keep it up! ✨`;
   }
 };
 
 const SATURDAY_TEMPLATES = [
   {
-    subject: "Wait, bes! Tomorrow is Sunday na! 😱",
-    title: "Saturday Vibe Check! ✨",
-    body: (name, arrears) => `Hoy <strong>${name}</strong>! Ready na ba your ₱10 for tomorrow? ${arrearsText(arrears)} Let's keep the funds glowing, literal! See you! 👋`
+    subject: "Reminder: Tomorrow is Sunday! 😊",
+    title: "Saturday Reminder ✨",
+    body: (name, arrears) => `Hi <strong>${name}</strong>! Just a heads-up — tomorrow is Sunday and dues day. ${arrearsText(arrears)} Please prepare your ₱10. See you tomorrow! 👋`
   },
   {
-    subject: "Don't forget your dues, bestie! 💅",
+    subject: "Don't forget your dues tomorrow! 📖",
     title: "Reminder: The Ledger is Calling! 📖",
-    body: (name, arrears) => `Hi <strong>${name}</strong>! Just a friendly reminder that tomorrow is Sunday. ${arrearsText(arrears)} Prep your ₱10 so we can keep the community slaying. G? G! 🔥`
+    body: (name, arrears) => `Hi <strong>${name}</strong>! A friendly reminder that tomorrow is Sunday. ${arrearsText(arrears)} Please have your ₱10 ready so we can keep the community fund going strong. See you! 🙏`
   },
   {
     subject: "Saturday Night Reminder! 🌙",
-    title: "Dues Duty! 🫡",
-    body: (name, arrears) => `Wait, <strong>${name}</strong>! Before you sleep, remember tomorrow is dues day! ${arrearsText(arrears)} Don't be a stranger to the ₱10 rule. See you tomorrow at the gathering! ✨`
+    title: "Dues Reminder 🫡",
+    body: (name, arrears) => `Hi <strong>${name}</strong>! Before the night ends, just a reminder that tomorrow is dues day. ${arrearsText(arrears)} Don't forget your ₱10. See you at the gathering! ✨`
   }
 ];
 
 const SUNDAY_TEMPLATES = [
   {
-    subject: "Happy Sunday, bestie! ✨",
+    subject: "Happy Sunday! Dues day reminder ✨",
     title: "Sunday Fund Day! 💰",
-    body: (name, arrears) => `Morning, <strong>${name}</strong>! ☀️ Time to shine and pay your dues today. ${arrearsText(arrears, true)} Let's go! 🚀`
+    body: (name, arrears) => `Good morning, <strong>${name}</strong>! ☀️ Today is Sunday — time to pay your dues. ${arrearsText(arrears, true)} See you at the gathering! 🙏`
   },
   {
     subject: "Sunday Morning Reminder! ☀️",
     title: "Blessed Sunday! ⛪️",
-    body: (name, arrears) => `Happy Sunday, <strong>${name}</strong>! Don't forget the ₱10 contribution later. ${arrearsText(arrears, true)} Have a blessed day and see you later! 😇`
+    body: (name, arrears) => `Happy Sunday, <strong>${name}</strong>! Don't forget your ₱10 contribution today. ${arrearsText(arrears, true)} Have a blessed day and see you later! 😇`
   },
   {
-    subject: "It's literally Sunday! ⛪️",
-    title: "Gathering Time! 🤝",
-    body: (name, arrears) => `It's literally Sunday, <strong>${name}</strong>! Prep your ₱10 and maybe clear some of that arrears? ${arrearsText(arrears, true)} See you at the gathering! Stay blessed! ✨`
+    subject: "It's Sunday — gathering day! ⛪️",
+    title: "Gathering Day! 🤝",
+    body: (name, arrears) => `Good morning, <strong>${name}</strong>! Today is Sunday and gathering day. ${arrearsText(arrears, true)} Please bring your ₱10 dues. Stay blessed! ✨`
   }
 ];
 

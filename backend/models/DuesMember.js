@@ -15,6 +15,11 @@ const duesMemberSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  linkedUser: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('DuesMember', duesMemberSchema);

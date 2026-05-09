@@ -4,7 +4,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
-const seedAdmin = require('./seeds/adminSeed');
+
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -47,8 +47,6 @@ app.use(cookieParser());
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB');
-    // Run seeders
-    seedAdmin();
   })
   .catch((err) => {
     console.error('MongoDB connection error:', err);

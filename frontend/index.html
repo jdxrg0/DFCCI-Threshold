@@ -18,6 +18,17 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
+      (function() {
+        var lang = localStorage.getItem('app-language') || 'en';
+        var hl = lang === 'fil' ? 'tl' : 'en_US';
+        var script = document.createElement('script');
+        script.src = "https://accounts.google.com/gsi/client?hl=" + hl;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+      })();
+    </script>
+    <script>
       // Register Service Worker to prevent page reload on app-switch
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {

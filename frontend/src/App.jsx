@@ -57,6 +57,8 @@ const RootRedirect = () => {
   return <Navigate to="/dashboard" replace />;
 };
 
+import NameChangePrompt from './components/NameChangePrompt';
+
 const App = () => {
   return (
     <LanguageProvider>
@@ -64,6 +66,7 @@ const App = () => {
       <AuthProvider>
         <Router>
           <div className="app-container">
+            <NameChangePrompt />
             <Navbar />
             <main className="main-content">
               <Routes>

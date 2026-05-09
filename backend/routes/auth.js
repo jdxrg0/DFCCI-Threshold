@@ -6,7 +6,9 @@ const User = require('../models/User');
 const PendingUser = require('../models/PendingUser');
 const sendEmail = require('../utils/sendEmail');
 const { requireAuth } = require('../middleware/authMiddleware');
+const { OAuth2Client } = require('google-auth-library');
 
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 // Map to track resend-otp rate limits (email -> timestamp)
@@ -162,12 +164,76 @@ router.post('/login', async (req, res) => {
         _id: user._id,
         displayName: user.displayName,
         role: user.role,
-        email: user.email 
+        email: user.email,
+        nameChangeRequested: user.nameChangeRequested
       }
     });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Server error during login' });
+  }
+});
+
+router.post('/google', async (req, res) => {
+  try {
+    const { credential, confirmedName } = req.body;
+    
+    // Fallback audience is fine if env not set immediately, but recommend setting GOOGLE_CLIENT_ID
+    const audience = process.env.GOOGLE_CLIENT_ID || undefined;
+    
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: audience,
+    });
+    
+    const payload = ticket.getPayload();
+    const { email, name, sub: googleId } = payload;
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      if (!confirmedName) {
+        return res.json({ requireNameConfirmation: true, googleName: name, email, credential });
+      }
+      user = new User({
+        displayName: confirmedName,
+        email: email,
+        googleId: googleId,
+        isVerified: true
+      });
+      await user.save();
+    } else if (!user.googleId) {
+      // Link Google account to existing user
+      user.googleId = googleId;
+      if (!user.isVerified) {
+        user.isVerified = true;
+      }
+      await user.save();
+    }
+
+    const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '7d' });
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    res.json({
+      message: 'Logged in successfully with Google',
+      token, // Send token in body for mobile/Vercel support
+      user: {
+        _id: user._id,
+        displayName: user.displayName,
+        role: user.role,
+        email: user.email,
+        nameChangeRequested: user.nameChangeRequested
+      }
+    });
+  } catch (error) {
+    console.error('Google auth error:', error);
+    res.status(500).json({ message: 'Google authentication failed' });
   }
 });
 
@@ -239,7 +305,8 @@ router.get('/me', requireAuth, (req, res) => {
       _id: req.user._id,
       displayName: req.user.displayName,
       role: req.user.role,
-      email: req.user.email
+      email: req.user.email,
+      nameChangeRequested: req.user.nameChangeRequested
     }
   });
 });

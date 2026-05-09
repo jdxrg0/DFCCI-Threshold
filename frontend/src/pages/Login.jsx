@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
+import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import useFormPersist from '../hooks/useFormPersist';
@@ -12,8 +13,12 @@ const Login = () => {
   const { email, password } = form;
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const { t } = useLanguage();
+  const [requireNameConfirmation, setRequireNameConfirmation] = useState(false);
+  const [googleCredential, setGoogleCredential] = useState('');
+  const [confirmedName, setConfirmedName] = useState('');
+  const [showEmailLogin, setShowEmailLogin] = useState(false);
+  const { login, googleAuth } = useAuth();
+  const { t, lang } = useLanguage();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -42,6 +47,40 @@ const Login = () => {
     }
   };
 
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await googleAuth(credentialResponse.credential);
+      if (res.requireNameConfirmation) {
+        setGoogleCredential(res.credential);
+        setConfirmedName(res.googleName);
+        setRequireNameConfirmation(true);
+      } else {
+        clearSavedForm();
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Google login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleConfirmSubmit = async (e) => {
+    e.preventDefault();
+    setError(''); setLoading(true);
+    try {
+      await googleAuth(googleCredential, confirmedName);
+      clearSavedForm();
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Google signup failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="container" style={{ maxWidth: '420px', marginTop: '2rem' }}>
       <div style={{ textAlign: 'center', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -54,63 +93,126 @@ const Login = () => {
         </p>
       </div>
       <div className="fun-card">
-        <h2 className="fun-title">{t('welcome_back')}</h2>
+        <h2 className="fun-title">
+          {requireNameConfirmation ? t('google_name_confirm_title') : t('welcome_back')}
+        </h2>
 
         {error && <div className="ff-alert ff-alert-error">{error}</div>}
 
-        <form onSubmit={handleSubmit}>
-          <div className="ff-field">
-            <input
-              id="login-email"
-              type="email"
-              className="ff-input"
-              placeholder={t('email')}
-              value={email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-              autoComplete="email"
-            />
-            <label htmlFor="login-email">{t('email')}</label>
-          </div>
+        {requireNameConfirmation ? (
+          <form onSubmit={handleGoogleConfirmSubmit}>
+            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+              {t('google_name_confirm_desc')}
+            </p>
 
-          <div className="ff-field">
-            <input
-              id="login-password"
-              type="password"
-              className="ff-input"
-              placeholder={t('password')}
-              value={password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-              autoComplete="current-password"
-            />
-            <label htmlFor="login-password">{t('password')}</label>
-          </div>
+            <div className="ff-field">
+              <input
+                id="confirm-name"
+                type="text"
+                className="ff-input"
+                placeholder={t('display_name')}
+                value={confirmedName}
+                onChange={(e) => setConfirmedName(e.target.value)}
+                required
+                autoComplete="name"
+              />
+              <label htmlFor="confirm-name">{t('display_name')}</label>
+            </div>
 
-          <button
-            type="submit"
-            className="ff-btn ff-btn-primary"
-            disabled={loading}
-            id="login-submit"
-          >
-            {loading ? (
-              <><span className="ff-btn-spinner" /> {t('logging_in')}</>
+            <button
+              type="submit"
+              className="ff-btn ff-btn-primary"
+              disabled={loading}
+              id="confirm-name-submit"
+            >
+              {loading ? (
+                <><span className="ff-btn-spinner" /> {t('creating_account')}</>
+              ) : (
+                <><LogIn size={18} /> {t('confirm_name_btn')}</>
+              )}
+            </button>
+          </form>
+        ) : (
+          <>
+            <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
+              <GoogleLogin
+                key={lang}
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google login failed')}
+                useOneTap
+                locale={lang === 'fil' ? 'tl' : 'en_US'}
+              />
+            </div>
+
+            {!showEmailLogin ? (
+              <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+                <button 
+                  type="button"
+                  onClick={() => setShowEmailLogin(true)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.875rem', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  {t('continue_with_email')}
+                </button>
+              </div>
             ) : (
-              <><LogIn size={18} /> {t('login_btn')}</>
+              <>
+                <div className="ff-divider" style={{ marginBottom: '1.5rem' }}>or</div>
+
+                <form onSubmit={handleSubmit}>
+                  <div className="ff-field">
+                    <input
+                      id="login-email"
+                      type="email"
+                      className="ff-input"
+                      placeholder={t('email')}
+                      value={email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      required
+                      autoComplete="email"
+                    />
+                    <label htmlFor="login-email">{t('email')}</label>
+                  </div>
+
+                  <div className="ff-field">
+                    <input
+                      id="login-password"
+                      type="password"
+                      className="ff-input"
+                      placeholder={t('password')}
+                      value={password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      required
+                      autoComplete="current-password"
+                    />
+                    <label htmlFor="login-password">{t('password')}</label>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="ff-btn ff-btn-primary"
+                    disabled={loading}
+                    id="login-submit"
+                  >
+                    {loading ? (
+                      <><span className="ff-btn-spinner" /> {t('logging_in')}</>
+                    ) : (
+                      <><LogIn size={18} /> {t('login_btn')}</>
+                    )}
+                  </button>
+                </form>
+
+                <p className="text-center" style={{ fontSize: '0.875rem', marginTop: '0.75rem' }}>
+                  <Link to="/forgot-password" style={{ color: 'var(--text-muted)' }}>{t('forgot_password')}</Link>
+                </p>
+              </>
             )}
-          </button>
-        </form>
 
-        <p className="text-center" style={{ fontSize: '0.875rem', marginTop: '0.75rem' }}>
-          <Link to="/forgot-password" style={{ color: 'var(--text-muted)' }}>{t('forgot_password')}</Link>
-        </p>
-
-        <div className="ff-divider" style={{ marginTop: '1rem' }}>or</div>
-
-        <p className="text-center" style={{ fontSize: '0.875rem', marginTop: '0.75rem' }}>
-          {t('no_account')}{' '}
-          <Link to="/signup" style={{ fontWeight: 600 }}>{t('sign_up')}</Link>
-        </p>
+            <p className="text-center" style={{ fontSize: '0.875rem', marginTop: '1.5rem' }}>
+              {t('no_account')}{' '}
+              <Link to="/signup" style={{ fontWeight: 600 }}>{t('sign_up')}</Link>
+            </p>
+          </>
+        )}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api';
 import { Link } from 'react-router-dom';
 import { BookOpen, Copy } from 'lucide-react';
@@ -64,6 +64,14 @@ export default function FundTrackerDashboard() {
   const [showRoster, setShowRoster] = useState(false);
   const [addError, setAddError] = useState('');
   const [editingCell, setEditingCell] = useState(null); // { memberId, dateStr, value }
+
+  // ── Link User Modal state ──
+  const [linkModal, setLinkModal] = useState({ isOpen: false, member: null });
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(null); // memberId being emailed
+  const userSearchTimer = useRef(null);
 
   // ── Custom Modal States ──
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
@@ -205,6 +213,71 @@ export default function FundTrackerDashboard() {
         catch (err) { console.error(err); }
       }
     );
+  };
+
+  // ── Link User handlers ──
+  const openLinkModal = (member) => {
+    setLinkModal({ isOpen: true, member });
+    setUserSearchQuery('');
+    setUserSearchResults([]);
+  };
+
+  const closeLinkModal = () => {
+    setLinkModal({ isOpen: false, member: null });
+    setUserSearchQuery('');
+    setUserSearchResults([]);
+  };
+
+  useEffect(() => {
+    if (!linkModal.isOpen) return;
+    clearTimeout(userSearchTimer.current);
+    if (!userSearchQuery.trim()) { setUserSearchResults([]); return; }
+    userSearchTimer.current = setTimeout(async () => {
+      try {
+        setSearchingUsers(true);
+        const res = await api.get(`/users/search?q=${encodeURIComponent(userSearchQuery)}`);
+        setUserSearchResults(res.data);
+      } catch (err) { console.error(err); }
+      finally { setSearchingUsers(false); }
+    }, 350);
+    return () => clearTimeout(userSearchTimer.current);
+  }, [userSearchQuery, linkModal.isOpen]);
+
+  const handleConfirmLink = async (userId) => {
+    try {
+      await api.put(`/funds/dues/members/${linkModal.member._id}/link-user`, { userId });
+      await fetchLedger();
+      closeLinkModal();
+      showAlert('Linked!', 'User successfully connected to this roster entry.');
+    } catch (err) {
+      showAlert('Error', err.response?.data?.message || 'Failed to link user.');
+    }
+  };
+
+  const handleUnlinkUser = (member) => {
+    showConfirm(
+      'Unlink User',
+      `Disconnect ${member.linkedUser?.displayName} from "${member.name}"?`,
+      async () => {
+        try {
+          await api.put(`/funds/dues/members/${member._id}/link-user`, { userId: null });
+          await fetchLedger();
+        } catch (err) { console.error(err); }
+      }
+    );
+  };
+
+  const handleSendDuesEmail = async (member) => {
+    if (!member.linkedUser) return;
+    setSendingEmail(member._id);
+    try {
+      const res = await api.post(`/funds/dues/members/${member._id}/send-dues-email`);
+      showAlert('Email Sent! 📧', res.data.message);
+    } catch (err) {
+      showAlert('Error', err.response?.data?.message || 'Failed to send email.');
+    } finally {
+      setSendingEmail(null);
+    }
   };
 
   const sundays = getSundays(ledgerYear, ledgerMonth);
@@ -657,9 +730,49 @@ ${formattedDesc}
                   {showRoster && (
                     <>
                       {ledgerData.members.map(m => (
-                        <div key={m._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.5rem 0', borderBottom: '1px solid var(--border-color)' }}>
-                          <span style={{ color: 'var(--text-main)' }}>{m.name}</span>
-                          <button onClick={() => handleRemoveMember(m._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem' }}>{t('remove_from_roster')}</button>
+                        <div key={m._id} style={{ padding: '0.6rem 0', borderBottom: '1px solid var(--border-color)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <span style={{ color: 'var(--text-main)', fontWeight: '500' }}>{m.name}</span>
+                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                              {m.linkedUser ? (
+                                <>
+                                  <button
+                                    onClick={() => handleSendDuesEmail(m)}
+                                    disabled={sendingEmail === m._id}
+                                    title={`Email dues statement to ${m.linkedUser.email}`}
+                                    style={{ background: 'none', border: '1px solid #0284c7', color: '#0284c7', cursor: 'pointer', fontSize: '0.72rem', borderRadius: '4px', padding: '0.15rem 0.45rem', opacity: sendingEmail === m._id ? 0.6 : 1 }}
+                                  >
+                                    {sendingEmail === m._id ? 'Sending…' : '📧 Send Email'}
+                                  </button>
+                                  <button
+                                    onClick={() => openLinkModal(m)}
+                                    style={{ background: 'none', border: '1px solid var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', borderRadius: '4px', padding: '0.15rem 0.45rem' }}
+                                  >
+                                    🔗 Change
+                                  </button>
+                                  <button
+                                    onClick={() => handleUnlinkUser(m)}
+                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.72rem' }}
+                                  >
+                                    Unlink
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => openLinkModal(m)}
+                                  style={{ background: 'none', border: '1px dashed var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', borderRadius: '4px', padding: '0.15rem 0.45rem' }}
+                                >
+                                  🔗 Link User
+                                </button>
+                              )}
+                              <button onClick={() => handleRemoveMember(m._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.72rem' }}>{t('remove_from_roster')}</button>
+                            </div>
+                          </div>
+                          {m.linkedUser && (
+                            <p style={{ margin: '0.25rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              Linked to: <strong style={{ color: 'var(--text-main)' }}>{m.linkedUser.displayName}</strong> · <span style={{ fontFamily: 'monospace' }}>{m.linkedUser.email}</span>
+                            </p>
+                          )}
                         </div>
                       ))}
                       <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
@@ -770,6 +883,47 @@ ${formattedDesc}
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Link User Modal */}
+      {linkModal.isOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '440px' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.25rem' }}>🔗 Link User to Roster Entry</h3>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Connecting a user ensures their exact arrears amount is emailed to their account.</p>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', padding: '0.6rem 0.85rem', marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--text-main)' }}>
+              Roster entry: <strong>{linkModal.member?.name}</strong>
+              {linkModal.member?.linkedUser && <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>(currently linked to <strong>{linkModal.member.linkedUser.displayName}</strong>)</span>}
+            </div>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Search by name..."
+              value={userSearchQuery}
+              onChange={e => setUserSearchQuery(e.target.value)}
+              style={{ ...inputStyle, marginBottom: '0.75rem' }}
+            />
+            <div style={{ minHeight: '80px', maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', background: 'var(--bg-color)' }}>
+              {searchingUsers ? (
+                <p style={{ padding: '1rem', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.85rem' }}>Searching…</p>
+              ) : userSearchResults.length === 0 ? (
+                <p style={{ padding: '1rem', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.85rem' }}>{userSearchQuery ? 'No users found.' : 'Start typing to search registered users.'}</p>
+              ) : userSearchResults.map(u => (
+                <button
+                  key={u._id}
+                  onClick={() => handleConfirmLink(u._id)}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 0.85rem', background: 'none', border: 'none', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', textAlign: 'left' }}
+                >
+                  <span style={{ color: 'var(--text-main)', fontWeight: '500', fontSize: '0.9rem' }}>{u.displayName}</span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{u.role}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+              <button onClick={closeLinkModal} className="btn btn-secondary">Cancel</button>
+            </div>
           </div>
         </div>
       )}

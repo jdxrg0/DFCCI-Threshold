@@ -3,9 +3,30 @@ const router = express.Router();
 const Transaction = require('../models/Transaction');
 const DuesMember = require('../models/DuesMember');
 const DuesPayment = require('../models/DuesPayment');
+const User = require('../models/User');
+const sendEmail = require('../utils/sendEmail');
 const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
 
 const adminOrTreasurerAuth = [requireAuth, requireVerified, requireRole(['ADMIN', 'YOUTH_TREASURER'])];
+
+const DUES_START_DATE = new Date('2026-05-01');
+
+// Helper: calculate total arrears for a member
+async function calcMemberArrears(memberId) {
+  const payments = await DuesPayment.find({ member: memberId });
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+
+  const now = new Date();
+  let d = new Date(DUES_START_DATE);
+  d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); // first Sunday on/after start
+  let sundaysCount = 0;
+  while (d <= now) {
+    sundaysCount++;
+    d.setDate(d.getDate() + 7);
+  }
+  const expected = sundaysCount * 10;
+  return expected - totalPaid;
+}
 
 // Helper: get Monday of the week for a given date string
 function getWeekStart(dateStr) {
@@ -219,7 +240,7 @@ router.delete('/dues/members/:id', adminOrTreasurerAuth, async (req, res) => {
 router.get('/dues/ledger', requireAuth, requireVerified, async (req, res) => {
   try {
     const [members, payments] = await Promise.all([
-      DuesMember.find({ isActive: true }).sort({ name: 1 }),
+      DuesMember.find({ isActive: true }).sort({ name: 1 }).populate('linkedUser', 'displayName email'),
       DuesPayment.find({}),
     ]);
     res.json({ members, payments });
@@ -296,5 +317,76 @@ router.post('/dues/ledger', adminOrTreasurerAuth, async (req, res) => {
 });
 
 
-module.exports = router;
+// Link or unlink a registered user to a roster member (Admin/Treasurer only)
+router.put('/dues/members/:id/link-user', adminOrTreasurerAuth, async (req, res) => {
+  try {
+    const { userId } = req.body; // pass null/undefined to unlink
+    const member = await DuesMember.findById(req.params.id);
+    if (!member) return res.status(404).json({ message: 'Member not found' });
 
+    if (userId) {
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ message: 'User not found' });
+      member.linkedUser = user._id;
+    } else {
+      member.linkedUser = null;
+    }
+
+    await member.save();
+    await member.populate('linkedUser', 'displayName email');
+    res.json({ member });
+  } catch (err) {
+    console.error('Error linking user to member:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Send dues statement email to the linked user (Admin/Treasurer only)
+router.post('/dues/members/:id/send-dues-email', adminOrTreasurerAuth, async (req, res) => {
+  try {
+    const member = await DuesMember.findById(req.params.id).populate('linkedUser', 'displayName email');
+    if (!member) return res.status(404).json({ message: 'Member not found' });
+    if (!member.linkedUser) return res.status(400).json({ message: 'No user linked to this roster member.' });
+
+    const arrears = await calcMemberArrears(member._id);
+    const user = member.linkedUser;
+
+    let arrearsHtml;
+    if (arrears > 0) {
+      arrearsHtml = `Your current dues balance is <span style="color:#ef4444;font-weight:bold;">₱${arrears} in arrears</span>. Please settle it at your earliest convenience. 🙏`;
+    } else if (arrears < 0) {
+      arrearsHtml = `You're advanced by <span style="color:#f59e0b;font-weight:bold;">₱${Math.abs(arrears)}</span>! You're all caught up and then some — great job! 🎉`;
+    } else {
+      arrearsHtml = `You're <span style="color:#22c55e;font-weight:bold;">Fully Updated</span>! No arrears at all — keep it up! ✨`;
+    }
+
+    const html = `
+      <div style="font-family:sans-serif;max-width:520px;margin:20px auto;padding:30px;border-radius:20px;background:#ffffff;box-shadow:0 10px 30px rgba(0,0,0,0.07);border:1px solid #f0f0f0;">
+        <div style="text-align:center;margin-bottom:25px;">
+          <div style="background:#0284c7;color:white;width:60px;height:60px;line-height:60px;border-radius:50%;font-size:30px;margin:0 auto 15px;">💰</div>
+          <h2 style="color:#1e293b;margin:0;font-size:24px;font-weight:800;">Your Dues Statement</h2>
+        </div>
+        <p style="color:#475569;font-size:16px;line-height:1.6;text-align:center;">
+          Hi <strong>${user.displayName}</strong>! Here's your current dues status as of today.
+        </p>
+        <div style="background:#f8fafc;padding:20px;border-radius:15px;margin:20px 0;border:1px dashed #cbd5e1;">
+          <span style="display:block;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;text-align:center;">Weekly Dues Balance</span>
+          <p style="color:#475569;font-size:15px;line-height:1.7;text-align:center;margin:0;">
+            ${arrearsHtml}
+          </p>
+        </div>
+        <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:30px;">
+          This is an official statement from <strong>DFCCI Threshold</strong>. Keep shining! ✨
+        </p>
+      </div>
+    `;
+
+    await sendEmail(user.email, 'Your DFCCI Threshold Weekly Dues Statement 💰', html);
+    res.json({ message: `Dues statement sent to ${user.email}` });
+  } catch (err) {
+    console.error('Error sending dues email:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+module.exports = router;

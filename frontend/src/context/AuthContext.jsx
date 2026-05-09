@@ -69,6 +69,21 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
+  const googleAuth = async (credential, confirmedName = null) => {
+    const res = await api.post('/auth/google', { credential, confirmedName });
+    
+    if (res.data.requireNameConfirmation) {
+      return res.data;
+    }
+
+    const { user: userData, token } = res.data;
+    
+    setUser(userData);
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(userData));
+    localStorage.setItem('dfcci_token', token);
+    return res.data;
+  };
+
   const logout = async () => {
     await api.post('/auth/logout');
     setUser(null);
@@ -88,8 +103,16 @@ export const AuthProvider = ({ children }) => {
     return <div className="app-container" style={{justifyContent: 'center', alignItems: 'center'}}>Loading...</div>;
   }
 
+  const updateDisplayName = async (newName) => {
+    const res = await api.put('/users/me/update-name', { displayName: newName });
+    const freshUser = res.data.user;
+    setUser(freshUser);
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser));
+    return res.data;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, signup, verifyOtp }}>
+    <AuthContext.Provider value={{ user, login, logout, signup, verifyOtp, googleAuth, updateDisplayName }}>
       {children}
     </AuthContext.Provider>
   );

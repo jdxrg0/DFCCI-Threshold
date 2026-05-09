@@ -3,6 +3,7 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
+import PopupModal from '../components/PopupModal';
 import { 
   ChevronLeft, 
   Users, 
@@ -11,7 +12,8 @@ import {
   History, 
   MessageSquare,
   Bell,
-  BellOff
+  BellOff,
+  UserCog
 } from 'lucide-react';
 
 const AdminPanel = () => {
@@ -26,6 +28,12 @@ const AdminPanel = () => {
   const [recentlyDeleted, setRecentlyDeleted] = useState([]);
   const [tickets, setTickets] = useState([]);
   const navigate = useNavigate();
+
+  const [popup, setPopup] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false, isPrompt: false, promptValue: '' });
+
+  const showAlert = (title, message) => setPopup({ isOpen: true, title, message, onConfirm: null, isAlert: true, isPrompt: false, promptValue: '' });
+  const showConfirm = (title, message, onConfirm) => setPopup({ isOpen: true, title, message, onConfirm, isAlert: false, isPrompt: false, promptValue: '' });
+  const showPrompt = (title, message, onConfirm) => setPopup({ isOpen: true, title, message, onConfirm, isAlert: false, isPrompt: true, promptValue: '' });
 
   const tabs = [
     { id: 'users', label: 'Users', icon: Users },
@@ -104,14 +112,14 @@ const AdminPanel = () => {
 
   const handleRoleChange = async (userId, newRole) => {
     if (userId === user._id) {
-      alert("You cannot change your own role.");
+      showAlert('Error', 'You cannot change your own role.');
       return;
     }
     try {
       await api.put(`/users/${userId}/role`, { role: newRole });
       fetchUsers();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to update role');
+      showAlert('Error', err.response?.data?.message || 'Failed to update role');
     }
   };
 
@@ -120,7 +128,16 @@ const AdminPanel = () => {
       await api.put(`/users/${userId}/toggle-reminders`);
       fetchUsers();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to toggle reminders');
+      showAlert('Error', err.response?.data?.message || 'Failed to toggle reminders');
+    }
+  };
+
+  const handleRequestNameChange = async (userId) => {
+    try {
+      await api.put(`/users/${userId}/request-name-change`);
+      fetchUsers();
+    } catch (err) {
+      showAlert('Error', err.response?.data?.message || 'Failed to request name change');
     }
   };
 
@@ -129,7 +146,7 @@ const AdminPanel = () => {
       await api.put(`/threads/admin/${id}/approve-deletion`);
       fetchDeletionRequests();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to approve deletion');
+      showAlert('Error', err.response?.data?.message || 'Failed to approve deletion');
     }
   };
 
@@ -138,7 +155,7 @@ const AdminPanel = () => {
       await api.put(`/threads/admin/${id}/reject-deletion`);
       fetchDeletionRequests();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to reject deletion');
+      showAlert('Error', err.response?.data?.message || 'Failed to reject deletion');
     }
   };
 
@@ -147,7 +164,7 @@ const AdminPanel = () => {
       await api.put(`/threads/admin/${id}/approve-restore`);
       fetchRestoreRequests();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to approve restore');
+      showAlert('Error', err.response?.data?.message || 'Failed to approve restore');
     }
   };
 
@@ -156,7 +173,7 @@ const AdminPanel = () => {
       await api.put(`/threads/admin/${id}/reject-restore`);
       fetchRestoreRequests();
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to reject restore');
+      showAlert('Error', err.response?.data?.message || 'Failed to reject restore');
     }
   };
 
@@ -165,20 +182,32 @@ const AdminPanel = () => {
       await api.patch(`/tickets/${id}/admin`, { status });
       fetchTickets();
     } catch (err) {
-      alert(err.response?.data?.msg || 'Failed to update ticket');
+      showAlert('Error', err.response?.data?.msg || 'Failed to update ticket');
     }
   };
 
-  const handleAdminResponse = async (id) => {
-    const response = prompt("Enter admin response:");
-    if (response !== null) {
-      try {
-        await api.patch(`/tickets/${id}/admin`, { adminResponse: response });
-        fetchTickets();
-      } catch (err) {
-        alert(err.response?.data?.msg || 'Failed to update response');
+  const handleAdminResponse = (id) => {
+    showPrompt('Admin Response', 'Enter admin response:', async (response) => {
+      if (response && response.trim() !== '') {
+        try {
+          await api.patch(`/tickets/${id}/admin`, { adminResponse: response.trim() });
+          fetchTickets();
+        } catch (err) {
+          showAlert('Error', err.response?.data?.msg || 'Failed to update response');
+        }
       }
-    }
+    });
+  };
+
+  const handleDeleteUser = (id) => {
+    showConfirm('Delete User', 'Are you sure you want to delete this user? This action cannot be undone.', async () => {
+      try {
+        await api.delete(`/users/${id}`);
+        fetchUsers();
+      } catch (err) {
+        showAlert('Error', err.response?.data?.message || 'Failed to delete user');
+      }
+    });
   };
 
   if (loading) return <div className="container mt-4">Loading...</div>;
@@ -233,39 +262,70 @@ const AdminPanel = () => {
                       </td>
                       <td style={{ padding: '1rem' }}>
                         {u.isVerified && (
-                          <button 
-                            onClick={() => handleToggleReminders(u._id)}
-                            style={{ 
-                              background: u.subscribedToDuesReminders ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', 
-                              color: u.subscribedToDuesReminders ? '#22c55e' : '#ef4444',
-                              border: 'none',
-                              padding: '0.4rem 0.75rem',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
-                              cursor: 'pointer',
-                              fontWeight: '600',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.4rem'
-                            }}
-                          >
-                            {u.subscribedToDuesReminders ? <Bell size={14} /> : <BellOff size={14} />}
-                            {u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled')}
-                          </button>
+                          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            <button 
+                              onClick={() => handleToggleReminders(u._id)}
+                              style={{ 
+                                background: u.subscribedToDuesReminders ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', 
+                                color: u.subscribedToDuesReminders ? '#22c55e' : '#ef4444',
+                                border: 'none',
+                                padding: '0.4rem 0.75rem',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.4rem'
+                              }}
+                            >
+                              {u.subscribedToDuesReminders ? <Bell size={14} /> : <BellOff size={14} />}
+                              {u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled')}
+                            </button>
+
+                            <button 
+                              onClick={() => handleRequestNameChange(u._id)}
+                              style={{ 
+                                background: u.nameChangeRequested ? 'rgba(245,158,11,0.15)' : 'var(--surface)', 
+                                color: u.nameChangeRequested ? '#f59e0b' : 'var(--text-main)',
+                                border: '1px solid var(--border-color)',
+                                padding: '0.4rem 0.75rem',
+                                borderRadius: '4px',
+                                fontSize: '0.75rem',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.4rem'
+                              }}
+                            >
+                              <UserCog size={14} />
+                              {u.nameChangeRequested ? 'Name Change Requested' : 'Request Name Change'}
+                            </button>
+                          </div>
                         )}
                       </td>
                       <td style={{ padding: '1rem' }}>
                         {u._id !== user._id && (
-                          <select 
-                            value={u.role} 
-                            onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                            style={{ padding: '0.4rem', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)', background: 'var(--surface)', color: 'var(--text-main)' }}
-                          >
-                            <option value="MEMBER">{t('role_member')}</option>
-                            <option value="COUNSELOR">{t('role_counselor')}</option>
-                            <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
-                            <option value="ADMIN">{t('role_admin')}</option>
-                          </select>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <select 
+                              value={u.role} 
+                              onChange={(e) => handleRoleChange(u._id, e.target.value)}
+                              style={{ padding: '0.4rem', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)', background: 'var(--surface)', color: 'var(--text-main)' }}
+                            >
+                              <option value="MEMBER">{t('role_member')}</option>
+                              <option value="COUNSELOR">{t('role_counselor')}</option>
+                              <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
+                              <option value="ADMIN">{t('role_admin')}</option>
+                            </select>
+                            <button 
+                              onClick={() => handleDeleteUser(u._id)}
+                              style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.4rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              title="Delete User"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -301,39 +361,70 @@ const AdminPanel = () => {
                   <div className="admin-card-row">
                     <span className="admin-card-label">{t('dues_reminders')}</span>
                     {u.isVerified && (
-                      <button 
-                        onClick={() => handleToggleReminders(u._id)}
-                        style={{ 
-                          background: u.subscribedToDuesReminders ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', 
-                          color: u.subscribedToDuesReminders ? '#22c55e' : '#ef4444',
-                          border: 'none',
-                          padding: '0.4rem 0.6rem',
-                          borderRadius: '4px',
-                          fontSize: '0.75rem',
-                          cursor: 'pointer',
-                          fontWeight: '600',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.4rem'
-                        }}
-                      >
-                        {u.subscribedToDuesReminders ? <Bell size={12} /> : <BellOff size={12} />}
-                        {u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled')}
-                      </button>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+                        <button 
+                          onClick={() => handleToggleReminders(u._id)}
+                          style={{ 
+                            background: u.subscribedToDuesReminders ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', 
+                            color: u.subscribedToDuesReminders ? '#22c55e' : '#ef4444',
+                            border: 'none',
+                            padding: '0.4rem 0.6rem',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem'
+                          }}
+                        >
+                          {u.subscribedToDuesReminders ? <Bell size={12} /> : <BellOff size={12} />}
+                          {u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled')}
+                        </button>
+
+                          <button 
+                            onClick={() => handleRequestNameChange(u._id)}
+                            style={{ 
+                              background: u.nameChangeRequested ? 'rgba(245,158,11,0.15)' : 'var(--surface)', 
+                              color: u.nameChangeRequested ? '#f59e0b' : 'var(--text-main)',
+                              border: '1px solid var(--border-color)',
+                              padding: '0.4rem 0.6rem',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.4rem'
+                            }}
+                          >
+                            <UserCog size={12} />
+                            {u.nameChangeRequested ? 'Name Change Requested' : 'Request Name Change'}
+                          </button>
+                      </div>
                     )}
                   </div>
                   <div className="admin-card-actions">
                     {u._id !== user._id && (
-                      <select 
-                        value={u.role} 
-                        onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                        style={{ padding: '0.6rem', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)', background: 'var(--surface)', color: 'var(--text-main)', width: '100%' }}
-                      >
-                        <option value="MEMBER">{t('role_member')}</option>
-                        <option value="COUNSELOR">{t('role_counselor')}</option>
-                        <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
-                        <option value="ADMIN">{t('role_admin')}</option>
-                      </select>
+                      <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+                        <select 
+                          value={u.role} 
+                          onChange={(e) => handleRoleChange(u._id, e.target.value)}
+                          style={{ padding: '0.6rem', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)', background: 'var(--surface)', color: 'var(--text-main)', flex: 1 }}
+                        >
+                          <option value="MEMBER">{t('role_member')}</option>
+                          <option value="COUNSELOR">{t('role_counselor')}</option>
+                          <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
+                          <option value="ADMIN">{t('role_admin')}</option>
+                        </select>
+                        <button 
+                          onClick={() => handleDeleteUser(u._id)}
+                          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', cursor: 'pointer', padding: '0.6rem', borderRadius: 'var(--radius)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          title="Delete User"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -639,6 +730,18 @@ const AdminPanel = () => {
           </>
         )}
       </div>
+
+      <PopupModal 
+        isOpen={popup.isOpen}
+        onClose={() => setPopup(p => ({ ...p, isOpen: false }))}
+        title={popup.title}
+        message={popup.message}
+        onConfirm={popup.onConfirm}
+        isAlert={popup.isAlert}
+        isPrompt={popup.isPrompt}
+        promptValue={popup.promptValue}
+        onPromptChange={(val) => setPopup(p => ({ ...p, promptValue: val }))}
+      />
     </div>
   );
 };
