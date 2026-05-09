@@ -7,12 +7,24 @@ import './index.css';
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'placeholder_client_id';
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <GoogleOAuthProvider clientId={googleClientId}>
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
-    </GoogleOAuthProvider>
-  </React.StrictMode>,
-)
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  try {
+    ReactDOM.createRoot(rootElement).render(
+      <React.StrictMode>
+        <GoogleOAuthProvider clientId={googleClientId}>
+          <ThemeProvider>
+            <App />
+          </ThemeProvider>
+        </GoogleOAuthProvider>
+      </React.StrictMode>,
+    );
+  } catch (err) {
+    console.error('Initial render failed:', err);
+    rootElement.innerHTML = `<div style="padding: 20px; color: white;">Something went wrong while loading the app. Please refresh.</div>`;
+  }
+}
+
+window.addEventListener('error', (event) => {
+  console.error('Caught global error:', event.error);
+});

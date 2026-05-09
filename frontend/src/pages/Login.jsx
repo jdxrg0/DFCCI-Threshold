@@ -139,7 +139,6 @@ const Login = () => {
                 key={lang}
                 onSuccess={handleGoogleSuccess}
                 onError={() => setError('Google login failed')}
-                useOneTap
                 locale={lang === 'fil' ? 'tl' : 'en_US'}
               />
             </div>
