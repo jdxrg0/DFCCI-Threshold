@@ -26,6 +26,7 @@ import AffirmationDashboard from './pages/AffirmationDashboard';
 import SendAffirmation from './pages/SendAffirmation';
 import AffirmationView from './pages/AffirmationView';
 import FundTrackerDashboard from './pages/FundTrackerDashboard';
+import ForceLogout from './pages/ForceLogout';
 
 const RootRedirect = () => {
   const { user, loading } = useAuth();
@@ -72,6 +73,7 @@ const App = () => {
               <Routes>
                 {/* Public / Landing logic */}
                 <Route path="/" element={<RootRedirect />} />
+                <Route path="/force-logout" element={<ForceLogout />} />
                 
                 {/* Auth Routes - Restricted to Guest */}
                 <Route path="/login" element={<ProtectedRoute restrictAuthenticated><Login /></ProtectedRoute>} />
