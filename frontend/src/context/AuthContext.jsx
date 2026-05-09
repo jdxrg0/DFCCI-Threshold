@@ -99,9 +99,8 @@ export const AuthProvider = ({ children }) => {
     return await api.post('/auth/verify-otp', { email, otp });
   };
 
-  if (loading) {
-    return <div className="app-container" style={{justifyContent: 'center', alignItems: 'center'}}>Loading...</div>;
-  }
+  // NOTE: Do NOT early-return here — that blocks the Router from mounting.
+  // ProtectedRoute handles the loading skeleton per-route.
 
   const updateDisplayName = async (newName) => {
     const res = await api.put('/users/me/update-name', { displayName: newName });

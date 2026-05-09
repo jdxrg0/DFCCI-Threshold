@@ -31,7 +31,9 @@ import ForceLogout from './pages/ForceLogout';
 const RootRedirect = () => {
   const { user, loading } = useAuth();
 
-  if (loading) return null; // Let the AuthProvider handle the initial loading flash
+  // While loading, optimistically send to /login. If the user IS authenticated,
+  // ProtectedRoute on /login (restrictAuthenticated) will redirect them to /dashboard once resolved.
+  if (loading) return <Navigate to="/login" replace />;
 
   if (!user) {
     // If the user was mid-signup (step 2) and the state is still valid, send them there
