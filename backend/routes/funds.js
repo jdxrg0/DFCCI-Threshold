@@ -67,38 +67,45 @@ router.get('/summary', requireAuth, requireVerified, async (req, res) => {
   }
 });
 
-// Get all transactions (with optional month/year filter)
+// Get transactions with pagination (10 per page by default)
 router.get('/', requireAuth, requireVerified, async (req, res) => {
   try {
-    const { month, year } = req.query;
+    const { month, year, page = 1, limit = 10 } = req.query;
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.max(1, Number(limit));
     let query = {};
 
     if (month && year) {
       const startDate = new Date(year, month - 1, 1);
       const endDate = new Date(year, month, 0, 23, 59, 59, 999);
-      query.date = {
-        $gte: startDate,
-        $lte: endDate
-      };
+      query.date = { $gte: startDate, $lte: endDate };
     } else if (year) {
       const startDate = new Date(year, 0, 1);
       const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
-      query.date = {
-        $gte: startDate,
-        $lte: endDate
-      };
+      query.date = { $gte: startDate, $lte: endDate };
     }
 
-    const transactions = await Transaction.find(query)
-      .sort({ date: -1, createdAt: -1 })
-      .populate('createdBy', 'displayName');
+    const [transactions, total] = await Promise.all([
+      Transaction.find(query)
+        .sort({ date: -1, createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .populate('createdBy', 'displayName'),
+      Transaction.countDocuments(query),
+    ]);
 
-    res.json(transactions);
+    res.json({
+      transactions,
+      total,
+      page: pageNum,
+      totalPages: Math.ceil(total / limitNum) || 1,
+    });
   } catch (error) {
     console.error('Error fetching transactions:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 // Get distinct categories
 router.get('/categories', requireAuth, requireVerified, async (req, res) => {
@@ -107,6 +114,25 @@ router.get('/categories', requireAuth, requireVerified, async (req, res) => {
     res.json(categories);
   } catch (error) {
     console.error('Error fetching categories:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Rename a category across all transactions (Admin/Treasurer only)
+router.patch('/categories/rename', adminOrTreasurerAuth, async (req, res) => {
+  try {
+    const { oldName, newName } = req.body;
+    if (!oldName || !newName || !newName.trim()) {
+      return res.status(400).json({ message: 'oldName and newName are required.' });
+    }
+    const trimmed = newName.trim();
+    const result = await Transaction.updateMany(
+      { category: oldName },
+      { $set: { category: trimmed } }
+    );
+    res.json({ message: `Renamed "${oldName}" to "${trimmed}" (${result.modifiedCount} transaction(s) updated).` });
+  } catch (error) {
+    console.error('Error renaming category:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

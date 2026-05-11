@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api';
 import { Link } from 'react-router-dom';
-import { BookOpen, Copy } from 'lucide-react';
+import { BookOpen, Copy, Pencil } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -50,8 +50,13 @@ export default function FundTrackerDashboard() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [customCategory, setCustomCategory] = useState(false);
+  const [editingCategory, setEditingCategory] = useState(null); // { original, draft }
+  const [showManageCategories, setShowManageCategories] = useState(false);
   const [formData, setFormData] = useState({ amount: '', type: 'INCOME', category: '', description: '', date: new Date().toISOString().slice(0, 10) });
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const pageCache = useRef({});
   const [showFellowshipForm, setShowFellowshipForm] = useState(false);
   const [fellowshipData, setFellowshipData] = useState({ eventName: '', fee: 30, date: new Date().toISOString().slice(0, 10), participants: [], customParticipants: '' });
 
@@ -83,23 +88,74 @@ export default function FundTrackerDashboard() {
   const fmt = (n) => `₱${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   // ── Fetchers ──
+  // Builds URLSearchParams for the current month/year filter + a given page
+  const buildTxParams = useCallback((page) => {
+    const p = new URLSearchParams();
+    if (month) p.append('month', month);
+    if (year) p.append('year', year);
+    p.append('page', page);
+    p.append('limit', 10);
+    return p.toString();
+  }, [month, year]);
+
   const fetchOverview = useCallback(async () => {
     try {
       setLoadingOverview(true);
-      const sumRes = await api.get('/funds/summary');
-      setSummary(sumRes.data);
-      const params = new URLSearchParams();
-      if (month) params.append('month', month);
-      if (year) params.append('year', year);
-      const [txRes, catRes] = await Promise.all([
-        api.get(`/funds?${params.toString()}`),
+      pageCache.current = {};   // Clear cache on fresh load / filter change
+      setCurrentPage(1);
+
+      const [sumRes, catRes, r1, r2, r3] = await Promise.all([
+        api.get('/funds/summary'),
         api.get('/funds/categories'),
+        api.get(`/funds?${buildTxParams(1)}`),
+        api.get(`/funds?${buildTxParams(2)}`).catch(() => null),
+        api.get(`/funds?${buildTxParams(3)}`).catch(() => null),
       ]);
-      setTransactions(txRes.data);
+
+      setSummary(sumRes.data);
       setCategories(catRes.data);
+
+      const tp = r1.data.totalPages;
+      setTotalPages(tp);
+      setTransactions(r1.data.transactions);
+
+      // Cache all 3 prefetched pages
+      const ck = (p) => `${month}-${year}-${p}`;
+      pageCache.current[ck(1)] = r1.data.transactions;
+      if (r2?.data?.transactions?.length) pageCache.current[ck(2)] = r2.data.transactions;
+      if (r3?.data?.transactions?.length) pageCache.current[ck(3)] = r3.data.transactions;
     } catch (err) { console.error(err); }
     finally { setLoadingOverview(false); }
-  }, [month, year, isPrivileged]);
+  }, [month, year, buildTxParams]);
+
+  const goToPage = useCallback(async (page) => {
+    const key = `${month}-${year}-${page}`;
+    if (pageCache.current[key]) {
+      setTransactions(pageCache.current[key]);
+      setCurrentPage(page);
+      return;
+    }
+    setLoadingOverview(true);
+    try {
+      const res = await api.get(`/funds?${buildTxParams(page)}`);
+      const { transactions: txs, totalPages: tp } = res.data;
+      pageCache.current[key] = txs;
+      setTotalPages(tp);
+      setTransactions(txs);
+      setCurrentPage(page);
+    } catch (err) { console.error(err); }
+    finally { setLoadingOverview(false); }
+  }, [month, year, buildTxParams]);
+
+  // Windowed pagination: always show first, last, current ± 1, fill gaps with ellipsis
+  const getPaginationPages = () => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const set = new Set([1, totalPages, currentPage]);
+    if (currentPage > 1) set.add(currentPage - 1);
+    if (currentPage < totalPages) set.add(currentPage + 1);
+    return [...set].sort((a, b) => a - b);
+  };
+
 
   const fetchLedger = useCallback(async () => {
     try {
@@ -123,12 +179,22 @@ export default function FundTrackerDashboard() {
   // ── Overview handlers ──
   const handleInput = (e) => {
     const { name, value } = e.target;
-    if (name === 'category' && value === '__CUSTOM__') {
-      setCustomCategory(true); setFormData(f => ({ ...f, category: '' }));
-    } else { setCustomCategory(false); setFormData(f => ({ ...f, [name]: value })); }
+    if (name === 'category') {
+      if (value === '__CUSTOM__') {
+        setCustomCategory(true);
+        setFormData(f => ({ ...f, category: '' }));
+      } else {
+        setCustomCategory(false);
+        setFormData(f => ({ ...f, category: value }));
+      }
+    } else {
+      setFormData(f => ({ ...f, [name]: value }));
+    }
   };
 
   const openForm = (tx = null) => {
+    setShowManageCategories(false);
+    setEditingCategory(null);
     if (tx) {
       setEditingId(tx._id);
       setFormData({ amount: tx.amount, type: tx.type, category: tx.category, description: tx.description || '', date: new Date(tx.date).toISOString().slice(0, 10) });
@@ -149,6 +215,29 @@ export default function FundTrackerDashboard() {
       setShowForm(false); fetchOverview();
     } catch (err) { showAlert('Error', 'Failed to save transaction.'); }
   };
+
+  const handleRenameCategory = async () => {
+    if (!editingCategory || !editingCategory.draft.trim()) return;
+    if (editingCategory.draft.trim() === editingCategory.original) {
+      setEditingCategory(null);
+      return;
+    }
+    try {
+      await api.patch('/funds/categories/rename', {
+        oldName: editingCategory.original,
+        newName: editingCategory.draft.trim(),
+      });
+      // If the form currently uses the renamed category, update it
+      if (formData.category === editingCategory.original) {
+        setFormData(f => ({ ...f, category: editingCategory.draft.trim() }));
+      }
+      setEditingCategory(null);
+      await fetchOverview();
+    } catch (err) {
+      showAlert('Error', err.response?.data?.message || 'Failed to rename category.');
+    }
+  };
+
 
   const handleDelete = (id) => {
     showConfirm(
@@ -588,8 +677,52 @@ ${formattedDesc}
                   </div>
                 ))}
               </div>
+
+              {/* Shared Pagination Controls */}
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.25rem', paddingTop: '0.75rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => goToPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    style={{ background: 'none', border: '1px solid var(--border-color)', color: currentPage === 1 ? 'var(--text-muted)' : 'var(--text-main)', borderRadius: '6px', padding: '0.3rem 0.65rem', cursor: currentPage === 1 ? 'default' : 'pointer', fontSize: '0.9rem', opacity: currentPage === 1 ? 0.4 : 1 }}
+                  >‹</button>
+
+                  {getPaginationPages().map((p, i, arr) => (
+                    <React.Fragment key={p}>
+                      {i > 0 && arr[i - 1] !== p - 1 && (
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '0 0.1rem' }}>…</span>
+                      )}
+                      <button
+                        onClick={() => goToPage(p)}
+                        style={{
+                          background: currentPage === p ? 'var(--primary)' : 'none',
+                          color: currentPage === p ? 'white' : 'var(--text-muted)',
+                          border: '1px solid ' + (currentPage === p ? 'var(--primary)' : 'var(--border-color)'),
+                          borderRadius: '6px',
+                          padding: '0.3rem 0.65rem',
+                          cursor: 'pointer',
+                          fontWeight: currentPage === p ? '700' : '400',
+                          fontSize: '0.85rem',
+                          minWidth: '2rem',
+                        }}
+                      >{p}</button>
+                    </React.Fragment>
+                  ))}
+
+                  <button
+                    onClick={() => goToPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    style={{ background: 'none', border: '1px solid var(--border-color)', color: currentPage === totalPages ? 'var(--text-muted)' : 'var(--text-main)', borderRadius: '6px', padding: '0.3rem 0.65rem', cursor: currentPage === totalPages ? 'default' : 'pointer', fontSize: '0.9rem', opacity: currentPage === totalPages ? 0.4 : 1 }}
+                  >›</button>
+
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginLeft: '0.25rem' }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                </div>
+              )}
             </div>
           )}
+
 
           {/* ── WEEKLY DUES LEDGER TAB ── */}
           {activeTab === 'dues' && (
@@ -790,58 +923,124 @@ ${formattedDesc}
           )}
 
       {/* Transaction Modal */}
-      {showForm && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '560px' }}>
-            <h3 style={{ fontSize: '1.35rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '1.25rem' }}>{editingId ? t('edit_transaction') : t('add_transaction')}</h3>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div>
-                <label style={labelStyle}>{t('type')}</label>
-                <div style={{ display: 'flex', gap: '1.5rem' }}>
-                  {['INCOME', 'EXPENSE'].map(tp => (
-                    <label key={tp} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      <input type="radio" name="type" value={tp} checked={formData.type === tp} onChange={handleInput} />
-                      {tp === 'INCOME' ? t('income') : t('expense')}
-                    </label>
-                  ))}
+      {showForm && (() => {
+        const isIncome = formData.type === 'INCOME';
+        const accentColor = isIncome ? '#22c55e' : '#ef4444';
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
+            <div style={{ width: '100%', maxWidth: '520px', background: 'var(--surface)', borderRadius: '0', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+
+              {/* Colored top accent bar */}
+              <div style={{ height: '4px', background: `linear-gradient(90deg, ${accentColor}, ${isIncome ? '#16a34a' : '#dc2626'})`, transition: 'background 0.3s' }} />
+
+              {/* Header */}
+              <div style={{ padding: '1.5rem 1.5rem 0' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
+                      {editingId ? t('edit_transaction') : t('add_transaction')}
+                    </h3>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>
+                      {editingId ? 'Update the transaction details below.' : 'Fill in the details to record a new transaction.'}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, padding: '0.1rem 0.3rem', marginTop: '-0.1rem' }}>✕</button>
+                </div>
+
+                {/* Type toggle pills */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                  {[{ val: 'INCOME', label: t('income'), icon: '↑', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' }, { val: 'EXPENSE', label: t('expense'), icon: '↓', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' }].map(({ val, label, icon, color, bg }) => {
+                    const active = formData.type === val;
+                    return (
+                      <button key={val} type="button" onClick={() => handleInput({ target: { name: 'type', value: val } })} style={{ padding: '0.65rem', borderRadius: '0', border: `1.5px solid ${active ? color : 'var(--border-color)'}`, background: active ? bg : 'transparent', color: active ? color : 'var(--text-muted)', fontWeight: active ? '700' : '500', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                        <span style={{ fontWeight: '700' }}>{icon}</span>{label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              <div>
-                <label style={labelStyle}>{t('amount')}</label>
-                <input type="number" name="amount" value={formData.amount} onChange={handleInput} required min="0.01" step="0.01" style={inputStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>{t('category')}</label>
-                {!customCategory && categories.length > 0 ? (
-                  <select name="category" value={formData.category} onChange={handleInput} required style={{ ...inputStyle }}>
-                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                    <option value="__CUSTOM__">+ Add Custom Category</option>
-                  </select>
-                ) : (
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input type="text" name="category" value={formData.category} onChange={e => setFormData(f => ({ ...f, category: e.target.value }))} placeholder="e.g. Donations, Food" required style={{ ...inputStyle, flex: 1 }} />
-                    {categories.length > 0 && <button type="button" onClick={() => setCustomCategory(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>}
+
+              <form onSubmit={handleSubmit}>
+                <div style={{ padding: '0 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+                  {/* Amount */}
+                  <div>
+                    <label style={labelStyle}>{t('amount')}</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: accentColor, fontWeight: '700', fontSize: '1rem', pointerEvents: 'none', transition: 'color 0.3s' }}>₱</span>
+                      <input type="number" name="amount" value={formData.amount} onChange={handleInput} required min="0.01" step="0.01" placeholder="0.00" style={{ ...inputStyle, paddingLeft: '2rem', fontWeight: '600', fontSize: '1.05rem' }} />
+                    </div>
                   </div>
-                )}
-              </div>
-              <div>
-                <label style={labelStyle}>{t('description')} (Optional)</label>
-                <textarea name="description" value={formData.description} onChange={handleInput} style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} placeholder="E.g. Registration fee&#10;- John&#10;- Jane" />
-              </div>
-              <div>
-                <label style={labelStyle}>{t('date')}</label>
-                <input type="date" name="date" value={formData.date} onChange={handleInput} required style={inputStyle} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '0.5rem' }}>
-                <button type="button" onClick={() => setShowForm(false)} className="btn btn-secondary">{t('cancel')}</button>
-                <button type="submit" className="btn btn-primary">{t('save')}</button>
-              </div>
-            </form>
+
+                  {/* Category */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                      <label style={labelStyle}>{t('category')}</label>
+                      {categories.length > 0 && !customCategory && (
+                        <button type="button" onClick={() => { setShowManageCategories(v => !v); setEditingCategory(null); }} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                          {showManageCategories ? 'Done' : <><Pencil size={11} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />Manage</>}
+                        </button>
+                      )}
+                    </div>
+                    {showManageCategories && !customCategory && (
+                      <div style={{ background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '0', padding: '0.5rem', marginBottom: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '160px', overflowY: 'auto' }}>
+                        {categories.map(cat => (
+                          <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {editingCategory?.original === cat ? (
+                              <>
+                                <input autoFocus type="text" value={editingCategory.draft} onChange={e => setEditingCategory(ec => ({ ...ec, draft: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleRenameCategory(); } if (e.key === 'Escape') setEditingCategory(null); }} style={{ ...inputStyle, flex: 1, padding: '0.3rem 0.5rem', fontSize: '0.85rem' }} />
+                                <button type="button" onClick={handleRenameCategory} style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '0', padding: '0.25rem 0.6rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Save</button>
+                                <button type="button" onClick={() => setEditingCategory(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.78rem' }}>✕</button>
+                              </>
+                            ) : (
+                              <>
+                                <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
+                                <button type="button" onClick={() => setEditingCategory({ original: cat, draft: cat })} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 0.2rem', flexShrink: 0 }} title={`Rename "${cat}"`}><Pencil size={13} /></button>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {!customCategory && categories.length > 0 ? (
+                      <select name="category" value={formData.category} onChange={handleInput} required style={{ ...inputStyle }}>
+                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                        <option value="__CUSTOM__">+ Add New Category</option>
+                      </select>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input type="text" name="category" value={formData.category} onChange={e => setFormData(f => ({ ...f, category: e.target.value }))} placeholder="e.g. Donations, Food" required style={{ ...inputStyle, flex: 1 }} />
+                        {categories.length > 0 && <button type="button" onClick={() => setCustomCategory(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label style={labelStyle}>{t('description')} <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
+                    <textarea name="description" value={formData.description} onChange={handleInput} style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} placeholder={`E.g. Registration fee\n- John\n- Jane`} />
+                  </div>
+
+                  {/* Date */}
+                  <div>
+                    <label style={labelStyle}>{t('date')}</label>
+                    <input type="date" name="date" value={formData.date} onChange={handleInput} required style={inputStyle} />
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.25rem 1.5rem', marginTop: '0.75rem', borderTop: '1px solid var(--border-color)', background: 'var(--bg-color)' }}>
+                  <button type="button" onClick={() => setShowForm(false)} style={{ padding: '0.6rem 1.25rem', borderRadius: '0', border: '1px solid var(--border-color)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem' }}>{t('cancel')}</button>
+                  <button type="submit" style={{ padding: '0.6rem 1.5rem', borderRadius: '0', border: 'none', background: accentColor, color: 'white', cursor: 'pointer', fontWeight: '700', fontSize: '0.9rem', transition: 'background 0.3s', boxShadow: `0 4px 14px ${accentColor}55` }}>{t('save')}</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Fellowship Modal */}
+
       {showFellowshipForm && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
           <div className="card" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
