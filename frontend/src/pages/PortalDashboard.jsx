@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet } from 'lucide-react';
+import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -39,6 +39,17 @@ const PortalDashboard = () => {
       docsPath: '/docs/fund-tracker',
       openPath: '/funds',
       OpenIcon: Wallet,
+      docsTitle: t('read_docs'),
+      openTitle: t('open_module')
+    },
+    {
+      id: 'resource_center',
+      title: t('resource_center'),
+      desc: t('resource_center_desc'),
+      Icon: Library,
+      docsPath: '/docs/resource-center',
+      openPath: '/resources',
+      OpenIcon: Library,
       docsTitle: t('read_docs'),
       openTitle: t('open_module')
     },

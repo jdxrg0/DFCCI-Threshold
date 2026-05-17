@@ -27,6 +27,11 @@ const transactionSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
+  },
+  designatedFund: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'DesignatedFund',
+    default: null,
   }
 }, { timestamps: true });
 

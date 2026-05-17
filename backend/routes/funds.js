@@ -3,8 +3,10 @@ const router = express.Router();
 const Transaction = require('../models/Transaction');
 const DuesMember = require('../models/DuesMember');
 const DuesPayment = require('../models/DuesPayment');
+const DesignatedFund = require('../models/DesignatedFund');
 const User = require('../models/User');
 const sendEmail = require('../utils/sendEmail');
+const { sendDuesReminders } = require('../utils/reminderScheduler');
 const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
 
 const adminOrTreasurerAuth = [requireAuth, requireVerified, requireRole(['ADMIN', 'YOUTH_TREASURER'])];
@@ -70,10 +72,16 @@ router.get('/summary', requireAuth, requireVerified, async (req, res) => {
 // Get transactions with pagination (10 per page by default)
 router.get('/', requireAuth, requireVerified, async (req, res) => {
   try {
-    const { month, year, page = 1, limit = 10 } = req.query;
+    const { month, year, page = 1, limit = 10, filterType } = req.query;
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.max(1, Number(limit));
     let query = {};
+
+    if (filterType === 'WEEKLY_DUES') {
+      query.category = 'Weekly Dues';
+    } else if (filterType === 'OTHERS') {
+      query.category = { $ne: 'Weekly Dues' };
+    }
 
     if (month && year) {
       const startDate = new Date(year, month - 1, 1);
@@ -90,7 +98,8 @@ router.get('/', requireAuth, requireVerified, async (req, res) => {
         .sort({ date: -1, createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
-        .populate('createdBy', 'displayName'),
+        .populate('createdBy', 'displayName')
+        .populate('designatedFund', 'name'),
       Transaction.countDocuments(query),
     ]);
 
@@ -140,7 +149,7 @@ router.patch('/categories/rename', adminOrTreasurerAuth, async (req, res) => {
 // Create a new transaction
 router.post('/', adminOrTreasurerAuth, async (req, res) => {
   try {
-    const { amount, type, category, description, date } = req.body;
+    const { amount, type, category, description, date, designatedFund } = req.body;
 
     if (!amount || !type || !category) {
       return res.status(400).json({ message: 'Amount, type, and category are required' });
@@ -156,6 +165,7 @@ router.post('/', adminOrTreasurerAuth, async (req, res) => {
       category,
       description,
       date: date || Date.now(),
+      designatedFund: designatedFund || null,
       createdBy: req.user._id
     });
 
@@ -174,7 +184,7 @@ router.post('/', adminOrTreasurerAuth, async (req, res) => {
 // Update a transaction
 router.put('/:id', adminOrTreasurerAuth, async (req, res) => {
   try {
-    const { amount, type, category, description, date } = req.body;
+    const { amount, type, category, description, date, designatedFund } = req.body;
 
     const transaction = await Transaction.findById(req.params.id);
 
@@ -187,6 +197,11 @@ router.put('/:id', adminOrTreasurerAuth, async (req, res) => {
     if (category) transaction.category = category;
     if (description !== undefined) transaction.description = description;
     if (date) transaction.date = date;
+    
+    // Allow explicitly setting to null or empty string to unset
+    if (designatedFund !== undefined) {
+      transaction.designatedFund = designatedFund || null;
+    }
 
     await transaction.save();
     await transaction.populate('createdBy', 'displayName');
@@ -389,7 +404,6 @@ router.post('/dues/members/:id/send-dues-email', adminOrTreasurerAuth, async (re
     const html = `
       <div style="font-family:sans-serif;max-width:520px;margin:20px auto;padding:30px;border-radius:20px;background:#ffffff;box-shadow:0 10px 30px rgba(0,0,0,0.07);border:1px solid #f0f0f0;">
         <div style="text-align:center;margin-bottom:25px;">
-          <div style="background:#0284c7;color:white;width:60px;height:60px;line-height:60px;border-radius:50%;font-size:30px;margin:0 auto 15px;">💰</div>
           <h2 style="color:#1e293b;margin:0;font-size:24px;font-weight:800;">Your Dues Statement</h2>
         </div>
         <p style="color:#475569;font-size:16px;line-height:1.6;text-align:center;">
@@ -411,6 +425,121 @@ router.post('/dues/members/:id/send-dues-email', adminOrTreasurerAuth, async (re
     res.json({ message: `Dues statement sent to ${user.email}` });
   } catch (err) {
     console.error('Error sending dues email:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Send batch dues reminders to all subscribed users (Admin/Treasurer only)
+router.post('/dues/send-batch-reminders', adminOrTreasurerAuth, async (req, res) => {
+  try {
+    const { timing = 'Manual' } = req.body;
+    await sendDuesReminders(timing);
+    res.json({ message: `Batch dues reminders triggered successfully (${timing} template).` });
+  } catch (err) {
+    console.error('Error triggering batch reminders:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── DESIGNATED FUNDS (BUDGETS) ─────────────────────────────────────────────
+
+// Get all designated funds with dynamically calculated balances
+router.get('/designated', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const funds = await DesignatedFund.find({}).sort({ createdAt: -1 });
+    
+    // For each fund, compute the current balance by aggregating transactions assigned to it
+    const fundsWithBalances = await Promise.all(funds.map(async (fund) => {
+      const [incomeResult, expenseResult] = await Promise.all([
+        Transaction.aggregate([
+          { $match: { type: 'INCOME', designatedFund: fund._id } },
+          { $group: { _id: null, total: { $sum: '$amount' } } }
+        ]),
+        Transaction.aggregate([
+          { $match: { type: 'EXPENSE', designatedFund: fund._id } },
+          { $group: { _id: null, total: { $sum: '$amount' } } }
+        ])
+      ]);
+
+      const totalIncome = incomeResult.length > 0 ? incomeResult[0].total : 0;
+      const totalExpense = expenseResult.length > 0 ? expenseResult[0].total : 0;
+      const currentBalance = totalIncome - totalExpense;
+
+      return {
+        ...fund.toObject(),
+        totalIncome,
+        totalExpense,
+        currentBalance
+      };
+    }));
+
+    res.json(fundsWithBalances);
+  } catch (error) {
+    console.error('Error fetching designated funds:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Create a new designated fund
+router.post('/designated', adminOrTreasurerAuth, async (req, res) => {
+  try {
+    const { name, description, targetAmount, color } = req.body;
+    
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Fund name is required' });
+    }
+
+    const newFund = new DesignatedFund({
+      name: name.trim(),
+      description,
+      targetAmount: Number(targetAmount) || 0,
+      color: color || '#3b82f6',
+      createdBy: req.user._id,
+    });
+
+    await newFund.save();
+    res.status(201).json(newFund);
+  } catch (error) {
+    console.error('Error creating designated fund:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update a designated fund
+router.put('/designated/:id', adminOrTreasurerAuth, async (req, res) => {
+  try {
+    const { name, description, targetAmount, color } = req.body;
+    
+    const fund = await DesignatedFund.findById(req.params.id);
+    if (!fund) {
+      return res.status(404).json({ message: 'Designated fund not found' });
+    }
+
+    if (name) fund.name = name.trim();
+    if (description !== undefined) fund.description = description;
+    if (targetAmount !== undefined) fund.targetAmount = Number(targetAmount) || 0;
+    if (color) fund.color = color;
+
+    await fund.save();
+    res.json(fund);
+  } catch (error) {
+    console.error('Error updating designated fund:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Delete a designated fund
+router.delete('/designated/:id', adminOrTreasurerAuth, async (req, res) => {
+  try {
+    const fund = await DesignatedFund.findById(req.params.id);
+    if (!fund) {
+      return res.status(404).json({ message: 'Designated fund not found' });
+    }
+
+    await fund.deleteOne();
+    res.json({ message: 'Designated fund removed' });
+  } catch (error) {
+    console.error('Error deleting designated fund:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -38,7 +38,13 @@ export default function FundTrackerDashboard() {
   const { t } = useLanguage();
   const isPrivileged = user?.role === 'ADMIN' || user?.role === 'YOUTH_TREASURER';
 
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('fundTrackerActiveTab') || 'overview';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('fundTrackerActiveTab', activeTab);
+  }, [activeTab]);
 
   // ── Overview state ──
   const [summary, setSummary] = useState({ totalIncome: 0, totalExpense: 0, currentBalance: 0 });
@@ -47,18 +53,26 @@ export default function FundTrackerDashboard() {
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [month, setMonth] = useState('');
   const [year, setYear] = useState('');
+  const [filterType, setFilterType] = useState('OTHERS');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [customCategory, setCustomCategory] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null); // { original, draft }
   const [showManageCategories, setShowManageCategories] = useState(false);
-  const [formData, setFormData] = useState({ amount: '', type: 'INCOME', category: '', description: '', date: new Date().toISOString().slice(0, 10) });
+  const [formData, setFormData] = useState({ amount: '', type: 'INCOME', category: '', description: '', date: new Date().toISOString().slice(0, 10), designatedFund: '' });
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const pageCache = useRef({});
   const [showFellowshipForm, setShowFellowshipForm] = useState(false);
   const [fellowshipData, setFellowshipData] = useState({ eventName: '', fee: 30, date: new Date().toISOString().slice(0, 10), participants: [], customParticipants: '' });
+
+  // ── Designated Funds state ──
+  const [designatedFunds, setDesignatedFunds] = useState([]);
+  const [loadingFunds, setLoadingFunds] = useState(false);
+  const [showFundForm, setShowFundForm] = useState(false);
+  const [editingFundId, setEditingFundId] = useState(null);
+  const [fundData, setFundData] = useState({ name: '', description: '', targetAmount: '', color: '#3b82f6' });
 
   // ── Dues Ledger state ──
   const [ledgerYear, setLedgerYear] = useState(new Date().getFullYear());
@@ -93,10 +107,11 @@ export default function FundTrackerDashboard() {
     const p = new URLSearchParams();
     if (month) p.append('month', month);
     if (year) p.append('year', year);
+    if (filterType !== 'ALL') p.append('filterType', filterType);
     p.append('page', page);
     p.append('limit', 10);
     return p.toString();
-  }, [month, year]);
+  }, [month, year, filterType]);
 
   const fetchOverview = useCallback(async () => {
     try {
@@ -120,16 +135,16 @@ export default function FundTrackerDashboard() {
       setTransactions(r1.data.transactions);
 
       // Cache all 3 prefetched pages
-      const ck = (p) => `${month}-${year}-${p}`;
+      const ck = (p) => `${month}-${year}-${filterType}-${p}`;
       pageCache.current[ck(1)] = r1.data.transactions;
       if (r2?.data?.transactions?.length) pageCache.current[ck(2)] = r2.data.transactions;
       if (r3?.data?.transactions?.length) pageCache.current[ck(3)] = r3.data.transactions;
     } catch (err) { console.error(err); }
     finally { setLoadingOverview(false); }
-  }, [month, year, buildTxParams]);
+  }, [month, year, filterType, buildTxParams]);
 
   const goToPage = useCallback(async (page) => {
-    const key = `${month}-${year}-${page}`;
+    const key = `${month}-${year}-${filterType}-${page}`;
     if (pageCache.current[key]) {
       setTransactions(pageCache.current[key]);
       setCurrentPage(page);
@@ -145,7 +160,7 @@ export default function FundTrackerDashboard() {
       setCurrentPage(page);
     } catch (err) { console.error(err); }
     finally { setLoadingOverview(false); }
-  }, [month, year, buildTxParams]);
+  }, [month, year, filterType, buildTxParams]);
 
   // Windowed pagination: always show first, last, current ± 1, fill gaps with ellipsis
   const getPaginationPages = () => {
@@ -166,15 +181,25 @@ export default function FundTrackerDashboard() {
     finally { setLoadingDues(false); }
   }, [isPrivileged]);
 
+  const fetchDesignatedFunds = useCallback(async () => {
+    try {
+      setLoadingFunds(true);
+      const res = await api.get('/funds/designated');
+      setDesignatedFunds(res.data);
+    } catch (err) { console.error(err); }
+    finally { setLoadingFunds(false); }
+  }, []);
+
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
   useEffect(() => { fetchLedger(); }, [fetchLedger]);
+  useEffect(() => { fetchDesignatedFunds(); }, [fetchDesignatedFunds]);
 
   // Lock body scroll when any modal is open
   useEffect(() => {
-    const anyOpen = showForm || showFellowshipForm || alertDialog.isOpen || confirmDialog.isOpen;
+    const anyOpen = showForm || showFellowshipForm || showFundForm || alertDialog.isOpen || confirmDialog.isOpen;
     document.body.style.overflow = anyOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
-  }, [showForm, showFellowshipForm, alertDialog.isOpen, confirmDialog.isOpen]);
+  }, [showForm, showFellowshipForm, showFundForm, alertDialog.isOpen, confirmDialog.isOpen]);
 
   // ── Overview handlers ──
   const handleInput = (e) => {
@@ -197,11 +222,11 @@ export default function FundTrackerDashboard() {
     setEditingCategory(null);
     if (tx) {
       setEditingId(tx._id);
-      setFormData({ amount: tx.amount, type: tx.type, category: tx.category, description: tx.description || '', date: new Date(tx.date).toISOString().slice(0, 10) });
+      setFormData({ amount: tx.amount, type: tx.type, category: tx.category, description: tx.description || '', date: new Date(tx.date).toISOString().slice(0, 10), designatedFund: tx.designatedFund?._id || tx.designatedFund || '' });
       setCustomCategory(!categories.includes(tx.category));
     } else {
       setEditingId(null);
-      setFormData({ amount: '', type: 'INCOME', category: categories[0] || '', description: '', date: new Date().toISOString().slice(0, 10) });
+      setFormData({ amount: '', type: 'INCOME', category: categories[0] || '', description: '', date: new Date().toISOString().slice(0, 10), designatedFund: '' });
       setCustomCategory(categories.length === 0);
     }
     setShowForm(true);
@@ -244,7 +269,44 @@ export default function FundTrackerDashboard() {
       'Delete Transaction',
       'Are you sure you want to delete this transaction?',
       async () => {
-        try { await api.delete(`/funds/${id}`); fetchOverview(); }
+        try { 
+          await api.delete(`/funds/${id}`); 
+          fetchOverview(); 
+          fetchDesignatedFunds(); // Update budget balances
+        }
+        catch (err) { console.error(err); }
+      }
+    );
+  };
+
+  // ── Designated Funds handlers ──
+  const openFundForm = (fund = null) => {
+    if (fund) {
+      setEditingFundId(fund._id);
+      setFundData({ name: fund.name, description: fund.description || '', targetAmount: fund.targetAmount || '', color: fund.color || '#3b82f6' });
+    } else {
+      setEditingFundId(null);
+      setFundData({ name: '', description: '', targetAmount: '', color: '#3b82f6' });
+    }
+    setShowFundForm(true);
+  };
+
+  const handleFundSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingFundId) { await api.put(`/funds/designated/${editingFundId}`, fundData); }
+      else { await api.post('/funds/designated', fundData); }
+      setShowFundForm(false); 
+      fetchDesignatedFunds();
+    } catch (err) { showAlert('Error', err.response?.data?.message || 'Failed to save designated fund.'); }
+  };
+
+  const handleDeleteFund = (id) => {
+    showConfirm(
+      'Delete Fund',
+      'Are you sure you want to delete this designated fund? This will not delete any transactions.',
+      async () => {
+        try { await api.delete(`/funds/designated/${id}`); fetchDesignatedFunds(); }
         catch (err) { console.error(err); }
       }
     );
@@ -268,6 +330,7 @@ export default function FundTrackerDashboard() {
       });
       fetchLedger();
       fetchOverview(); // Update main balance
+      fetchDesignatedFunds(); // Update budget balances
     } catch (err) {
       showAlert('Error', err.response?.data?.message || 'Failed to update payment');
       fetchLedger(); // Revert on failure
@@ -369,6 +432,7 @@ export default function FundTrackerDashboard() {
     }
   };
 
+
   const sundays = getSundays(ledgerYear, ledgerMonth);
   const totalCount = ledgerData.members.length;
 
@@ -448,6 +512,7 @@ export default function FundTrackerDashboard() {
       setShowFellowshipForm(false);
       fetchLedger();
       fetchOverview();
+      fetchDesignatedFunds();
       setFellowshipData({ eventName: '', fee: 30, date: new Date().toISOString().slice(0, 10), participants: [], customParticipants: '' });
       showAlert('Success', 'Youth Fellowship expense added!');
     } catch (error) {
@@ -562,10 +627,14 @@ ${formattedDesc}
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '2px solid var(--border-color)' }}>
-        {['overview', 'dues'].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: 'none', border: 'none', padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: activeTab === tab ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === tab ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-2px', transition: 'color 0.2s' }}>
-            {tab === 'overview' ? t('overview_tab') : t('weekly_dues_tab')}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '2px solid var(--border-color)', overflowX: 'auto' }}>
+        {[
+          { id: 'overview', label: t('overview_tab') }, 
+          { id: 'dues', label: t('weekly_dues_tab') },
+          { id: 'budgets', label: 'Designated Funds' }
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ background: 'none', border: 'none', padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: activeTab === tab.id ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-2px', transition: 'color 0.2s', whiteSpace: 'nowrap' }}>
+            {tab.label}
           </button>
         ))}
       </div>
@@ -583,6 +652,11 @@ ${formattedDesc}
                   <select value={year} onChange={e => setYear(e.target.value)} style={selectStyle}>
                     <option value="">{t('all_years')}</option>
                     {[new Date().getFullYear(), new Date().getFullYear()-1].map(y => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                  <select value={filterType} onChange={e => setFilterType(e.target.value)} style={selectStyle}>
+                    <option value="ALL">All Types</option>
+                    <option value="WEEKLY_DUES">Weekly Dues</option>
+                    <option value="OTHERS">Others</option>
                   </select>
                   {isPrivileged && (
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -922,6 +996,83 @@ ${formattedDesc}
             </div>
           )}
 
+          {/* ── BUDGETS / DESIGNATED FUNDS TAB ── */}
+          {activeTab === 'budgets' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0 }}>Designated Funds</h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0.2rem 0 0' }}>Track and manage budgets for specific use cases.</p>
+                </div>
+                {isPrivileged && (
+                  <button onClick={() => openFundForm()} className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>+ Create Budget</button>
+                )}
+              </div>
+
+              {loadingFunds ? (
+                <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>{t('loading')}</p>
+              ) : designatedFunds.length === 0 ? (
+                <div className="card" style={{ padding: '3rem 1rem', textAlign: 'center' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📊</div>
+                  <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.5rem' }}>No Budgets Yet</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem', maxWidth: '300px', margin: '0 auto 1.5rem' }}>Designated funds let you allocate income to specific causes and track their balances automatically.</p>
+                  {isPrivileged && <button onClick={() => openFundForm()} className="btn btn-secondary">Set up a budget</button>}
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+                  {designatedFunds.map(fund => {
+                    const progress = fund.targetAmount > 0 ? Math.min(100, Math.max(0, (fund.currentBalance / fund.targetAmount) * 100)) : 0;
+                    return (
+                      <div key={fund._id} style={{ background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                        <div style={{ height: '5px', background: fund.color || '#3b82f6' }} />
+                        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0, wordBreak: 'break-word' }}>{fund.name}</h3>
+                            {isPrivileged && (
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button onClick={() => openFundForm(fund)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }} title="Edit"><Pencil size={14} /></button>
+                              </div>
+                            )}
+                          </div>
+                          {fund.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1rem', lineHeight: '1.4' }}>{fund.description}</p>}
+                          
+                          <div style={{ marginTop: 'auto', paddingTop: '1rem' }}>
+                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Available Balance</p>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
+                              <span style={{ fontSize: '1.75rem', fontWeight: '800', color: fund.currentBalance >= 0 ? fund.color || '#3b82f6' : '#ef4444', lineHeight: 1 }}>
+                                {fmt(fund.currentBalance)}
+                              </span>
+                              {fund.targetAmount > 0 && <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>/ {fmt(fund.targetAmount)}</span>}
+                            </div>
+                            
+                            {fund.targetAmount > 0 && (
+                              <div style={{ marginBottom: '1rem' }}>
+                                <div style={{ height: '6px', background: 'var(--bg-color)', borderRadius: '99px', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${progress}%`, background: fund.color || '#3b82f6', transition: 'width 0.5s ease-out' }} />
+                                </div>
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+                              <div>
+                                <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Total In</p>
+                                <p style={{ fontSize: '0.85rem', fontWeight: '600', color: '#22c55e' }}>+{fmt(fund.totalIncome)}</p>
+                              </div>
+                              <div>
+                                <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Total Out</p>
+                                <p style={{ fontSize: '0.85rem', fontWeight: '600', color: '#ef4444' }}>-{fmt(fund.totalExpense)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
       {/* Transaction Modal */}
       {showForm && (() => {
         const isIncome = formData.type === 'INCOME';
@@ -1015,6 +1166,19 @@ ${formattedDesc}
                     )}
                   </div>
 
+                  {/* Designated Fund */}
+                  {designatedFunds.length > 0 && (
+                    <div>
+                      <label style={labelStyle}>Designated Fund <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
+                      <select name="designatedFund" value={formData.designatedFund} onChange={handleInput} style={{ ...inputStyle }}>
+                        <option value="">-- No Designated Fund --</option>
+                        {designatedFunds.map(fund => (
+                          <option key={fund._id} value={fund._id}>{fund.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   {/* Description */}
                   <div>
                     <label style={labelStyle}>{t('description')} <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
@@ -1079,6 +1243,58 @@ ${formattedDesc}
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
                   <button type="button" onClick={() => setShowFellowshipForm(false)} className="btn btn-secondary">{t('cancel')}</button>
                   <button type="submit" className="btn btn-primary">Submit</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Designated Fund Form Modal */}
+      {showFundForm && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
+          <div style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', background: 'var(--surface)', borderRadius: '0', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ height: '4px', background: fundData.color || '#3b82f6', transition: 'background 0.3s' }} />
+            <div style={{ padding: '1.5rem 1.5rem 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
+                  {editingFundId ? 'Edit Designated Fund' : 'Create Designated Fund'}
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>Configure a budget bucket based on transaction categories.</p>
+              </div>
+              <button type="button" onClick={() => setShowFundForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '0.1rem 0.3rem' }}>✕</button>
+            </div>
+            
+            <form onSubmit={handleFundSubmit} style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', flex: 1 }}>
+              <div style={{ padding: '0 1.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>Fund Name</label>
+                  <input type="text" value={fundData.name} onChange={e => setFundData(f => ({ ...f, name: e.target.value }))} required placeholder="e.g. Fellowship Fund" style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Description <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
+                  <textarea value={fundData.description} onChange={e => setFundData(f => ({ ...f, description: e.target.value }))} placeholder="What is this fund for?" style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>Target Amount / Budget Goal <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
+                    <input type="number" value={fundData.targetAmount} onChange={e => setFundData(f => ({ ...f, targetAmount: e.target.value }))} min="0" placeholder="0.00" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Accent Color</label>
+                    <input type="color" value={fundData.color} onChange={e => setFundData(f => ({ ...f, color: e.target.value }))} style={{ width: '50px', height: '38px', padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
+                  </div>
+                </div>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4, marginTop: '0.5rem' }}>Any transactions manually assigned to this budget will automatically update its balance.</p>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', padding: '1.25rem 1.5rem', borderTop: '1px solid var(--border-color)', background: 'var(--bg-color)', marginTop: 'auto' }}>
+                {editingFundId ? (
+                  <button type="button" onClick={() => handleDeleteFund(editingFundId)} style={{ padding: '0.6rem 1rem', border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>Delete Fund</button>
+                ) : <div />}
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button type="button" onClick={() => setShowFundForm(false)} style={{ padding: '0.6rem 1.25rem', borderRadius: '0', border: '1px solid var(--border-color)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem' }}>Cancel</button>
+                  <button type="submit" style={{ padding: '0.6rem 1.5rem', borderRadius: '0', border: 'none', background: fundData.color || 'var(--primary)', color: 'white', cursor: 'pointer', fontWeight: '700', fontSize: '0.9rem', boxShadow: `0 4px 14px ${fundData.color || 'var(--primary)'}55` }}>Save Budget</button>
                 </div>
               </div>
             </form>

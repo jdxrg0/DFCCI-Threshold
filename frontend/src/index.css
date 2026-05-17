@@ -229,6 +229,8 @@ body {
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
   min-height: -webkit-fill-available;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 h1, h2, h3 {
@@ -1924,7 +1926,8 @@ a.btn-primary:hover:not(:disabled) {
   margin: 0 0 0.25rem 0;
   font-size: 0.9rem;
   line-height: 1.45;
-  word-break: break-word;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .notification-time {
@@ -2132,4 +2135,585 @@ a.btn-primary:hover:not(:disabled) {
   .admin-tab-label-text {
     display: block;
   }
+}
+
+/* Custom Quill Editor Styles for Premium UI Integration */
+.quill-custom .ql-toolbar {
+  border: 1px solid var(--border-color) !important;
+  border-bottom: none !important;
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+  background-color: rgba(255, 255, 255, 0.4) !important;
+  backdrop-filter: blur(4px);
+}
+
+.quill-custom .ql-container {
+  border: 1px solid var(--border-color) !important;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  background-color: rgba(255, 255, 255, 0.4) !important;
+  backdrop-filter: blur(4px);
+  color: var(--text-main);
+  font-family: 'Outfit', sans-serif;
+  font-size: 1rem;
+}
+
+/* Prevent pasted inline colors from making text invisible in the editor during dark mode */
+.quill-custom .ql-editor * {
+  color: inherit !important;
+  background-color: transparent !important;
+}
+
+.quill-custom .ql-editor a {
+  color: var(--primary) !important;
+}
+
+/* Dark mode adjustments for Quill */
+:root.dark .quill-custom .ql-toolbar,
+:root.dark .quill-custom .ql-container,
+:root.aurora .quill-custom .ql-toolbar,
+:root.aurora .quill-custom .ql-container,
+:root.dusk .quill-custom .ql-toolbar,
+:root.dusk .quill-custom .ql-container,
+:root.ocean .quill-custom .ql-toolbar,
+:root.ocean .quill-custom .ql-container,
+:root.brat .quill-custom .ql-toolbar,
+:root.brat .quill-custom .ql-container,
+:root.vaporwave .quill-custom .ql-toolbar,
+:root.vaporwave .quill-custom .ql-container {
+  background-color: rgba(0, 0, 0, 0.35) !important;
+}
+
+/* Fix Quill toolbar icons in dark mode */
+:root.dark .quill-custom .ql-stroke,
+:root.aurora .quill-custom .ql-stroke,
+:root.dusk .quill-custom .ql-stroke,
+:root.ocean .quill-custom .ql-stroke,
+:root.brat .quill-custom .ql-stroke,
+:root.vaporwave .quill-custom .ql-stroke {
+  stroke: var(--text-main) !important;
+}
+
+:root.dark .quill-custom .ql-fill,
+:root.aurora .quill-custom .ql-fill,
+:root.dusk .quill-custom .ql-fill,
+:root.ocean .quill-custom .ql-fill,
+:root.brat .quill-custom .ql-fill,
+:root.vaporwave .quill-custom .ql-fill {
+  fill: var(--text-main) !important;
+}
+
+:root.dark .quill-custom .ql-picker,
+:root.aurora .quill-custom .ql-picker,
+:root.dusk .quill-custom .ql-picker,
+:root.ocean .quill-custom .ql-picker,
+:root.brat .quill-custom .ql-picker,
+:root.vaporwave .quill-custom .ql-picker {
+  color: var(--text-main) !important;
+}
+
+/* Quill editor internal padding */
+.quill-custom .ql-editor {
+  min-height: 120px;
+  padding: 0.6rem 0.8rem;
+}
+
+/* ── Resource Detail: Premium Reading Experience ── */
+
+/* Hero gradient banner */
+.resource-hero {
+  background: linear-gradient(135deg, var(--primary) 0%, color-mix(in srgb, var(--primary) 60%, var(--secondary)) 100%);
+  padding: clamp(3rem, 8vw, 5rem) 1rem clamp(2rem, 6vw, 4rem);
+  position: relative;
+  overflow: hidden;
+}
+
+.resource-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35) url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+.resource-hero::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: var(--bg-main);
+  clip-path: ellipse(55% 100% at 50% 100%);
+}
+
+.resource-hero-inner {
+  max-width: 800px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+/* Back button inside hero */
+.resource-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.9);
+  border-radius: 0;
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  margin-bottom: 2rem;
+  transition: background 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.resource-back-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Hero title */
+.resource-hero-title {
+  font-size: clamp(1.35rem, 5vw, 3.2rem);
+  color: #ffffff;
+  font-weight: 900;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  margin-bottom: 1.5rem;
+  text-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  overflow-wrap: break-word;
+  word-break: normal;
+  white-space: normal;
+}
+
+/* Hero meta row */
+.resource-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.resource-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.95rem;
+}
+
+/* Pill tags */
+.resource-tag {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.8rem;
+  border-radius: 0;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.resource-tag-primary {
+  background: rgba(255,255,255,0.2);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.3);
+}
+
+.resource-tag-muted {
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.75);
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+/* Reading body */
+.resource-body-container {
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: clamp(2rem, 6vw, 4rem) 1.25rem clamp(3rem, 8vw, 6rem);
+  box-sizing: border-box;
+}
+
+/* Premium reading typography */
+.resource-reading-content {
+  color: var(--text-main);
+  opacity: 0.9;
+  line-height: 1.9;
+  font-size: clamp(1rem, 2.5vw, 1.125rem);
+  word-break: normal;
+  overflow-wrap: break-word;
+  hyphens: none;
+  text-align: left !important;
+}
+
+/* Prevent pasted inline colors from breaking dark mode visibility */
+.resource-reading-content * {
+  color: inherit !important;
+  background-color: transparent !important;
+}
+
+.resource-reading-content a {
+  color: var(--primary) !important;
+}
+
+/* Force left alignment on all paragraphs to prevent Safari's justified text break-word bug */
+.resource-reading-content p,
+.resource-reading-content div,
+.resource-reading-content .ql-align-justify {
+  text-align: left !important;
+}
+
+/* Drop cap on the first paragraph */
+.resource-reading-content > p:first-of-type::first-letter {
+  font-size: 4.5em;
+  font-weight: 900;
+  float: left;
+  line-height: 0.8;
+  margin: 0.05em 0.12em 0 0;
+  color: var(--primary);
+  font-family: 'Georgia', serif;
+}
+
+/* Headings inside reading content */
+.resource-reading-content h1,
+.resource-reading-content h2,
+.resource-reading-content h3 {
+  color: var(--text-main);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+  line-height: 1.25;
+}
+
+.resource-reading-content h1 { font-size: 1.8rem; }
+.resource-reading-content h2 { font-size: 1.4rem; }
+.resource-reading-content h3 { font-size: 1.15rem; }
+
+/* Paragraphs */
+.resource-reading-content p {
+  margin-bottom: 1.5rem;
+}
+
+/* Blockquotes */
+.resource-reading-content blockquote {
+  border-left: 4px solid var(--primary);
+  margin: 2rem 0;
+  padding: 0.75rem 1.5rem;
+  background: rgba(var(--primary-rgb, 2,132,199), 0.06);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-style: italic;
+  color: var(--text-main);
+}
+
+/* Lists */
+.resource-reading-content ul,
+.resource-reading-content ol {
+  padding-left: 1.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.resource-reading-content li {
+  margin-bottom: 0.5rem;
+}
+
+/* Strong & emphasis */
+.resource-reading-content strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.resource-reading-content em {
+  color: var(--text-muted);
+}
+
+/* Highly Realistic 3D Book Cover Cards */
+.book-card {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  background-color: var(--surface);
+  border-radius: 4px 12px 12px 4px; /* Spine side flat, page side rounded */
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease;
+  aspect-ratio: 3/4;
+  box-shadow: 
+    inset 4px 0 10px rgba(0,0,0,0.1),
+    inset -2px 0 3px rgba(255,255,255,0.4), /* Page edges highlight */
+    -3px 0 4px rgba(0,0,0,0.05),
+    2px 4px 8px rgba(0,0,0,0.1),
+    10px 15px 25px rgba(0,0,0,0.1);
+  padding: 0;
+  border-right: 3px solid #e0e0e0; /* Edge of pages */
+  border-top: 1px solid rgba(255,255,255,0.2);
+}
+
+:root.dark .book-card {
+  border-right: 3px solid #444; /* Dark mode pages edge */
+  box-shadow: 
+    inset 4px 0 10px rgba(0,0,0,0.3),
+    inset -2px 0 3px rgba(255,255,255,0.1),
+    -3px 0 4px rgba(0,0,0,0.2),
+    2px 4px 8px rgba(0,0,0,0.3),
+    10px 15px 25px rgba(0,0,0,0.4);
+}
+
+.book-card:hover {
+  transform: translateY(-8px) scale(1.03) rotateY(-4deg);
+  box-shadow: 
+    inset 4px 0 10px rgba(0,0,0,0.1),
+    inset -2px 0 3px rgba(255,255,255,0.5),
+    -6px 0 8px rgba(0,0,0,0.05),
+    5px 15px 20px rgba(0,0,0,0.15),
+    15px 25px 35px rgba(0,0,0,0.2);
+}
+
+:root.dark .book-card:hover {
+  box-shadow: 
+    inset 4px 0 10px rgba(0,0,0,0.3),
+    inset -2px 0 3px rgba(255,255,255,0.15),
+    -6px 0 8px rgba(0,0,0,0.2),
+    5px 15px 20px rgba(0,0,0,0.4),
+    15px 25px 35px rgba(0,0,0,0.5);
+}
+
+/* The Spine Indent */
+.book-card-spine {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  background: linear-gradient(to right, 
+    rgba(255,255,255,0.4) 0%, 
+    rgba(0,0,0,0.25) 8%, 
+    rgba(0,0,0,0.1) 18%, 
+    transparent 35%,
+    rgba(255,255,255,0.15) 90%,
+    rgba(0,0,0,0.15) 100%
+  );
+  z-index: 5;
+  border-right: 1px solid rgba(0,0,0,0.15);
+  mix-blend-mode: overlay;
+}
+
+/* Image Cover */
+.book-card-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+}
+
+/* Dark overlay for readability on image covers */
+.book-card-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.3);
+  background-image: linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 35%, rgba(0,0,0,0.75) 75%, rgba(0,0,0,0.95) 100%);
+  z-index: 2;
+}
+
+/* Paper Texture Overlay (Procedural Covers) */
+.book-card-texture {
+  position: absolute;
+  inset: 0;
+  opacity: 0.15;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  z-index: 2;
+  mix-blend-mode: multiply;
+}
+
+/* Content Container */
+.book-card-content {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 1.5rem 1.25rem 1.5rem 2.25rem; /* Extra left padding for spine */
+  color: white; /* Always white on covers */
+  box-sizing: border-box;
+}
+
+.book-card-title {
+  font-size: 1.4rem;
+  color: white;
+  margin: 0;
+  font-weight: 800;
+  line-height: 1.25;
+  text-shadow: 0 2px 5px rgba(0,0,0,0.8);
+  font-family: 'Georgia', serif; /* Classic Book Font */
+}
+
+.book-card-author {
+  color: rgba(255,255,255,0.95);
+  font-size: 0.95rem;
+  margin-top: 0.75rem;
+  margin-bottom: auto; /* Pushes meta to bottom */
+  font-style: italic;
+  font-family: 'Georgia', serif;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+}
+
+.book-card-meta {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+
+.book-card-category {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background-color: var(--primary);
+  color: white;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  font-family: 'Outfit', sans-serif;
+}
+
+.book-card-tag {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background-color: rgba(255,255,255,0.25);
+  color: white;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255,255,255,0.2);
+  font-family: 'Outfit', sans-serif;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* Resource Center Responsive Classes */
+.resource-header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.resource-header-title {
+  font-size: 2.5rem;
+  color: var(--text-main);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: bold;
+}
+
+.resource-controls {
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.upload-file-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+/* Resource Grid */
+.resource-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .resource-header-title {
+    font-size: 1.8rem;
+  }
+  
+  .resource-header-container .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .resource-controls {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+  
+  .upload-file-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .resource-grid {
+    grid-template-columns: repeat(2, 1fr); /* Force 2 columns on mobile */
+    gap: 0.75rem; /* Tighter gap for compact cards */
+  }
+
+  /* Make cards extremely compact to fit side-by-side */
+  .book-card-content {
+    padding: 1.25rem 0.75rem 1.25rem 1.75rem; /* Preserve left padding for spine */
+  }
+  
+  .book-card-title {
+    font-size: 1.05rem;
+    line-height: 1.2;
+  }
+
+  .book-card-author {
+    font-size: 0.75rem;
+    margin-top: 0.35rem;
+  }
+
+  .book-card-meta {
+    margin-top: 1rem;
+    gap: 0.25rem;
+  }
+
+  .book-card-category {
+    font-size: 0.6rem;
+    padding: 0.15rem 0.4rem;
+  }
+
+  .book-card-tag {
+    font-size: 0.6rem;
+    padding: 0.15rem 0.4rem;
+  }
+}
+
+/* ── ReactQuill Theme Overrides for Dark Mode ── */
+.quill-custom .ql-toolbar.ql-snow {
+  background: var(--bg-color) !important;
+  border: none !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.quill-custom .ql-container.ql-snow {
+  border: none !important;
+}
+
+.quill-custom .ql-snow .ql-stroke {
+  stroke: var(--text-main) !important;
+}
+
+.quill-custom .ql-snow .ql-fill, 
+.quill-custom .ql-snow .ql-stroke.ql-fill {
+  fill: var(--text-main) !important;
+}
+
+.quill-custom .ql-snow .ql-picker {
+  color: var(--text-main) !important;
+}
+
+.quill-custom .ql-snow .ql-picker-options {
+  background-color: var(--surface) !important;
+  border-color: var(--border-color) !important;
 }

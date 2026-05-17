@@ -414,5 +414,61 @@ export const moduleDocs = {
         'Weekly dues are pegged at ₱10 per Sunday, starting exactly on May 1, 2026.'
       ]
     }
+  },
+  'resource-center': {
+    en: {
+      title: 'Resource Center',
+      description: 'A premium digital library and reading experience for sharing research papers, documents, and essential materials.',
+      whatIsIt: 'The Resource Center is more than a file repository; it features a magazine-style reading interface with rich-text abstracts. It allows administrators to upload documents (PDF, DOCX) which members can browse, search, and download with proper filenames based on their title.',
+      howToUse: [
+        'Open the Resource Center from the Main Dashboard.',
+        'Use the search bar or category dropdown to find resources by title, author, or tags.',
+        'Click on a resource card to open its dedicated reading page.',
+        'If a resource has a long abstract or description, the app automatically bookmarks your scroll position so you can resume exactly where you left off.',
+        'Click the "Download File" button in the top right of the reading page to download the original document.',
+        'If you are an Administrator, click the "Upload Resource" button to add new documents using the rich text editor.'
+      ],
+      rules: [
+        'Only Administrators can upload, edit, and delete resources.',
+        'Ensure uploaded documents are relevant and correctly categorized.',
+        'Respect the intellectual property and copyright of the authors.'
+      ]
+    },
+    fil: {
+      title: 'Resource Center',
+      description: 'Isang premium na digital library para sa pagbabahagi at pag-access ng mga research paper, dokumento, at mahahalagang materyales nang may maayos na reading interface.',
+      whatIsIt: 'Ang Resource Center ay hindi lamang imbakan ng file; mayroon itong magazine-style na reading interface. Nagbibigay-daan ito sa mga administrator na mag-upload ng mga dokumento (PDF, DOCX) na madaling mahanap, mabasa, at ma-download ng mga miyembro na may tamang pangalan (filename).',
+      howToUse: [
+        'Buksan ang Resource Center mula sa Main Dashboard.',
+        'Gamitin ang search bar o category dropdown upang maghanap ng resources gamit ang pamagat, may-akda, o tags.',
+        'I-click ang resource card upang buksan ang dedicated na pahina para dito.',
+        'Kung mahaba ang babasahin, awtomatikong isine-save ng app ang iyong pwesto (scroll position) para makabalik ka kung saan ka huminto.',
+        'I-click ang "Download File" button sa kanang itaas ng pahina para i-download ang orihinal na dokumento.',
+        'Kung ikaw ay isang Administrator, i-click ang "Upload Resource" upang magdagdag ng bagong dokumento gamit ang rich text editor.'
+      ],
+      rules: [
+        'Tanging mga Administrator lamang ang maaaring mag-upload, mag-edit, at magbura ng resources.',
+        'Tiyaking ang mga dokumento ay may kaugnayan at nasa tamang kategorya.',
+        'Igalang ang intellectual property at copyright ng mga may-akda.'
+      ]
+    },
+    conyo: {
+      title: 'Resource Center',
+      description: 'A premium digital library for all your research papers and must-read materials, complete with a super aesthetic reading experience.',
+      whatIsIt: 'Basically, the Resource Center isn\'t just a file dump; it\'s a magazine-style reading platform. Admins can drop PDF and DOCX files, and you can browse, read the rich-text abstracts, and download the actual files with properly slugified filenames.',
+      howToUse: [
+        'Open the Resource Center from the dashboard, bes.',
+        'Just type in the search bar or use the category dropdown to find what you need.',
+        'Click on a resource card to open its own aesthetic reading page.',
+        'The app literally auto-bookmarks your scroll position. If you leave the page and come back, it drops you right where you stopped reading!',
+        'Hit the "Download File" button at the top right to download the actual document.',
+        'If you\'re an Admin, you get the exclusive "Upload Resource" button to drop new files using the rich text editor.'
+      ],
+      rules: [
+        'Strictly Admins only for uploading, editing, and deleting stuff.',
+        'Make sure the docs you drop are actually relevant and categorized properly.',
+        'Respect the copyright, literally.'
+      ]
+    }
   }
 };

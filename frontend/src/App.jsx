@@ -26,6 +26,8 @@ import AffirmationDashboard from './pages/AffirmationDashboard';
 import SendAffirmation from './pages/SendAffirmation';
 import AffirmationView from './pages/AffirmationView';
 import FundTrackerDashboard from './pages/FundTrackerDashboard';
+import ResourceCenter from './pages/ResourceCenter';
+import ResourceDetail from './pages/ResourceDetail';
 import ForceLogout from './pages/ForceLogout';
 
 const RootRedirect = () => {
@@ -110,6 +112,8 @@ const App = () => {
                 <Route path="/affirm/:id" element={<ProtectedRoute><AffirmationView /></ProtectedRoute>} />
                 
                 <Route path="/funds" element={<ProtectedRoute><FundTrackerDashboard /></ProtectedRoute>} />
+                <Route path="/resources" element={<ProtectedRoute><ResourceCenter /></ProtectedRoute>} />
+                <Route path="/resources/:id" element={<ProtectedRoute><ResourceDetail /></ProtectedRoute>} />
               </Routes>
             </main>
           </div>

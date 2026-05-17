@@ -15,6 +15,7 @@ const ticketRoutes = require('./routes/tickets');
 const affirmationRoutes = require('./routes/affirmations');
 const fruitRoutes = require('./routes/fruitEndorsements');
 const fundRoutes = require('./routes/funds');
+const resourceRoutes = require('./routes/resources');
 const { initReminderScheduler } = require('./utils/reminderScheduler');
 
 const app = express();
@@ -62,6 +63,7 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/affirmations', affirmationRoutes);
 app.use('/api/fruits', fruitRoutes);
 app.use('/api/funds', fundRoutes);
+app.use('/api/resources', resourceRoutes);
 
 // Ping route for uptime monitoring
 app.get('/api/ping', (req, res) => {

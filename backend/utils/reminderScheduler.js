@@ -6,12 +6,15 @@ const sendEmail = require('./sendEmail');
 const START_DATE = new Date('2026-05-01');
 
 /**
- * Calculates current arrears for a user by matching their display name to the roster.
+ * Calculates current arrears for a user.
  */
-const calculateArrears = async (displayName) => {
+const calculateArrears = async (user) => {
   try {
     const member = await DuesMember.findOne({ 
-      name: new RegExp('^' + displayName + '$', 'i'), 
+      $or: [
+        { linkedUser: user._id },
+        { name: new RegExp('^' + user.displayName + '$', 'i') }
+      ],
       isActive: true 
     });
     
@@ -93,16 +96,15 @@ const sendDuesReminders = async (timing) => {
     const now = new Date();
     const weekNum = Math.floor((now - START_DATE) / (7 * 24 * 60 * 60 * 1000));
     
-    const templates = timing === 'Saturday Night' ? SATURDAY_TEMPLATES : SUNDAY_TEMPLATES;
+    const templates = (timing === 'Saturday Night' || timing === 'Manual') ? SATURDAY_TEMPLATES : SUNDAY_TEMPLATES;
     const template = templates[weekNum % templates.length];
 
     for (const user of users) {
-      const arrears = await calculateArrears(user.displayName);
+      const arrears = await calculateArrears(user);
 
       const html = `
         <div style="font-family:sans-serif;max-width:520px;margin:20px auto;padding:30px;border-radius:20px;background:#ffffff;box-shadow:0 10px 30px rgba(0,0,0,0.07);border:1px solid #f0f0f0;">
           <div style="text-align:center;margin-bottom:25px;">
-            <div style="background:#0284c7;color:white;width:60px;height:60px;line-height:60px;border-radius:50%;font-size:30px;margin:0 auto 15px;">💰</div>
             <h2 style="color:#1e293b;margin:0;font-size:24px;font-weight:800;">Your Dues Statement</h2>
           </div>
           <p style="color:#475569;font-size:16px;line-height:1.6;text-align:center;">
@@ -141,8 +143,8 @@ const initReminderScheduler = () => {
     const minutes = now.getMinutes();
     const dateStr = now.toDateString();
 
-    // Saturday 10 PM
-    if (day === 6 && hours === 22 && minutes === 0 && lastSentDateStr !== `${dateStr}-Sat`) {
+    // Saturday 9 PM
+    if (day === 6 && hours === 21 && minutes === 0 && lastSentDateStr !== `${dateStr}-Sat`) {
       lastSentDateStr = `${dateStr}-Sat`;
       await sendDuesReminders('Saturday Night');
     }
@@ -155,4 +157,4 @@ const initReminderScheduler = () => {
   }, 60000);
 };
 
-module.exports = { initReminderScheduler };
+module.exports = { initReminderScheduler, sendDuesReminders };
