@@ -237,7 +237,9 @@ export default function FundTrackerDashboard() {
     try {
       if (editingId) { await api.put(`/funds/${editingId}`, formData); }
       else { await api.post('/funds', formData); }
-      setShowForm(false); fetchOverview();
+      setShowForm(false); 
+      fetchOverview();
+      fetchDesignatedFunds();
     } catch (err) { showAlert('Error', 'Failed to save transaction.'); }
   };
 

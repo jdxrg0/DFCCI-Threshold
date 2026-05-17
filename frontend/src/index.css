@@ -2418,6 +2418,53 @@ a.btn-primary:hover:not(:disabled) {
   margin-bottom: 0.5rem;
 }
 
+/* Responsive Tables */
+.resource-reading-content table {
+  width: 100%;
+  max-width: 100%;
+  margin: 2rem 0;
+  border-collapse: collapse;
+  display: block; /* Enables horizontal scrolling for the table itself */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border-color);
+  font-size: 0.95rem;
+}
+
+.resource-reading-content th,
+.resource-reading-content td {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border-color);
+  text-align: left;
+  vertical-align: top;
+}
+
+.resource-reading-content th {
+  background: rgba(0, 0, 0, 0.05);
+  font-weight: 700;
+  color: var(--text-main);
+  border-bottom: 2px solid var(--primary);
+  white-space: nowrap; /* Keep headers on single line */
+}
+
+:root.dark .resource-reading-content th,
+:root.aurora .resource-reading-content th,
+:root.dusk .resource-reading-content th,
+:root.ocean .resource-reading-content th {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.resource-reading-content tbody tr:nth-child(even) {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+:root.dark .resource-reading-content tbody tr:nth-child(even),
+:root.aurora .resource-reading-content tbody tr:nth-child(even),
+:root.dusk .resource-reading-content tbody tr:nth-child(even),
+:root.ocean .resource-reading-content tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
 /* Strong & emphasis */
 .resource-reading-content strong {
   color: var(--text-main);
@@ -2676,8 +2723,7 @@ a.btn-primary:hover:not(:disabled) {
   }
 
   .book-card-meta {
-    margin-top: 1rem;
-    gap: 0.25rem;
+    display: none !important; /* Hide tags and categories on mobile for a cleaner look */
   }
 
   .book-card-category {
