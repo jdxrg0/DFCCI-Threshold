@@ -2540,7 +2540,7 @@ a.btn-primary:hover:not(:disabled) {
 }
 
 .book-card-title {
-  font-size: 1.25rem; /* Reduced from 1.4rem to prevent long words breaking */
+  font-size: 1.5rem; /* Big and beautiful font size */
   color: white;
   margin: 0;
   font-weight: 800;
@@ -2656,19 +2656,19 @@ a.btn-primary:hover:not(:disabled) {
   }
 
   .resource-grid {
-    grid-template-columns: repeat(2, 1fr); /* Force 2 columns on mobile */
+    grid-template-columns: repeat(2, minmax(0, 1fr)); /* Prevent grid blowout from long words */
     gap: 0.75rem; /* Tighter gap for compact cards */
   }
 
-  /* Make cards extremely compact to fit side-by-side */
   .book-card-content {
     padding: 1.25rem 0.75rem 1.25rem 1.75rem; /* Preserve left padding for spine */
   }
   
   .book-card-title {
-    font-size: 0.85rem; /* Final scale down magic */
+    font-size: 1.05rem; /* Rescaled for 2-column mobile view */
     line-height: 1.25;
   }
+
 
   .book-card-author {
     font-size: 0.75rem;

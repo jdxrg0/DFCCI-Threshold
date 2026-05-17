@@ -17,6 +17,13 @@ const getCategoryGradient = (category) => {
   return gradients[category] || 'linear-gradient(135deg, #374151 0%, #111827 100%)';
 };
 
+// Helper to limit string length
+const truncateText = (text, maxLength) => {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength).trim() + '...';
+};
+
 const ResourceCenter = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
@@ -128,13 +135,13 @@ const ResourceCenter = () => {
       ) : (
         <div className="resource-grid">
           {filteredResources.map(resource => (
-            <div 
-              key={resource._id} 
-              className="book-card" 
-              onClick={() => navigate(`/resources/${resource._id}`)}
-              style={{ background: getCategoryGradient(resource.category) }}
-            >
-              {/* Optional uploaded cover image */}
+            <div key={resource._id} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div 
+                className="book-card" 
+                onClick={() => navigate(`/resources/${resource._id}`)}
+                style={{ background: getCategoryGradient(resource.category) }}
+              >
+                {/* Optional uploaded cover image */}
               {resource.coverImageUrl ? (
                 <>
                   <img src={resource.coverImageUrl} alt={resource.title} className="book-card-image" />
@@ -150,7 +157,9 @@ const ResourceCenter = () => {
               {/* Content overlay */}
               <div className="book-card-content">
                 <div style={{ marginBottom: '0.5rem', zIndex: 10 }}>
-                  <h3 className="book-card-title">{resource.title}</h3>
+                  <h3 className="book-card-title" title={resource.title}>
+                    {truncateText(resource.title, 100)}
+                  </h3>
                 </div>
                 
                 {resource.author && (
@@ -172,17 +181,20 @@ const ResourceCenter = () => {
                     <span className="book-card-tag">+{resource.tags.length - 2}</span>
                   )}
                 </div>
-                {user?.role === 'ADMIN' && (
-                  <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.75rem', zIndex: 20 }}>
-                    <button onClick={(e) => { e.stopPropagation(); setEditingResource(resource); setIsModalOpen(true); }} style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)', border: 'none', color: 'white', cursor: 'pointer', padding: '0.4rem 0.75rem', borderRadius: '0', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', flex: 1, justifyContent: 'center' }}>
-                      <Pencil size={12} /> Edit
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); setResourceToDelete(resource); }} style={{ background: 'rgba(239, 68, 68, 0.4)', backdropFilter: 'blur(4px)', border: 'none', color: 'white', cursor: 'pointer', padding: '0.4rem 0.75rem', borderRadius: '0', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', flex: 1, justifyContent: 'center' }}>
-                      <Trash2 size={12} /> Delete
-                    </button>
-                  </div>
-                )}
               </div>
+              </div>
+              
+              {/* Admin Controls External to Card */}
+              {user?.role === 'ADMIN' && (
+                <div style={{ display: 'flex', gap: '0.5rem', width: '100%' }}>
+                  <button onClick={(e) => { e.stopPropagation(); setEditingResource(resource); setIsModalOpen(true); }} className="btn btn-secondary" style={{ flex: 1, padding: '0.4rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderRadius: '0' }}>
+                    <Pencil size={14} /> Edit
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); setResourceToDelete(resource); }} className="btn btn-primary" style={{ flex: 1, padding: '0.4rem', fontSize: '0.8rem', background: 'var(--danger)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderRadius: '0' }}>
+                    <Trash2 size={14} /> Delete
+                  </button>
+                </div>
+              )}
             </div>
           ))}
           {filteredResources.length === 0 && (
