@@ -149,18 +149,8 @@ const ResourceCenter = () => {
 
               {/* Content overlay */}
               <div className="book-card-content">
-                {user?.role === 'ADMIN' && (
-                  <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', display: 'flex', gap: '0.4rem', zIndex: 20 }}>
-                    <button onClick={(e) => { e.stopPropagation(); setEditingResource(resource); setIsModalOpen(true); }} style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)', border: 'none', color: 'white', cursor: 'pointer', padding: '0.4rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Pencil size={14} />
-                    </button>
-                    <button onClick={(e) => { e.stopPropagation(); setResourceToDelete(resource); }} style={{ background: 'rgba(239, 68, 68, 0.4)', backdropFilter: 'blur(4px)', border: 'none', color: 'white', cursor: 'pointer', padding: '0.4rem', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                )}
                 <div style={{ marginBottom: '0.5rem', zIndex: 10 }}>
-                  <h3 className="book-card-title" style={{ paddingRight: user?.role === 'ADMIN' ? '2.5rem' : '0' }}>{resource.title}</h3>
+                  <h3 className="book-card-title">{resource.title}</h3>
                 </div>
                 
                 {resource.author && (
@@ -182,6 +172,16 @@ const ResourceCenter = () => {
                     <span className="book-card-tag">+{resource.tags.length - 2}</span>
                   )}
                 </div>
+                {user?.role === 'ADMIN' && (
+                  <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.75rem', zIndex: 20 }}>
+                    <button onClick={(e) => { e.stopPropagation(); setEditingResource(resource); setIsModalOpen(true); }} style={{ background: 'rgba(255,255,255,0.2)', backdropFilter: 'blur(4px)', border: 'none', color: 'white', cursor: 'pointer', padding: '0.4rem 0.75rem', borderRadius: '0', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', flex: 1, justifyContent: 'center' }}>
+                      <Pencil size={12} /> Edit
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); setResourceToDelete(resource); }} style={{ background: 'rgba(239, 68, 68, 0.4)', backdropFilter: 'blur(4px)', border: 'none', color: 'white', cursor: 'pointer', padding: '0.4rem 0.75rem', borderRadius: '0', display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', flex: 1, justifyContent: 'center' }}>
+                      <Trash2 size={12} /> Delete
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))}
