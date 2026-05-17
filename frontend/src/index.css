@@ -2666,8 +2666,8 @@ a.btn-primary:hover:not(:disabled) {
   }
   
   .book-card-title {
-    font-size: 1.05rem;
-    line-height: 1.2;
+    font-size: 0.85rem; /* Final scale down magic */
+    line-height: 1.25;
   }
 
   .book-card-author {
