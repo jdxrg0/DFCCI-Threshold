@@ -190,7 +190,7 @@ const ResourceCenter = () => {
                   <button onClick={(e) => { e.stopPropagation(); setEditingResource(resource); setIsModalOpen(true); }} className="btn btn-secondary" style={{ flex: 1, padding: '0.4rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderRadius: '0' }}>
                     <Pencil size={14} /> Edit
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); setResourceToDelete(resource); }} className="btn btn-primary" style={{ flex: 1, padding: '0.4rem', fontSize: '0.8rem', background: 'var(--danger)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderRadius: '0' }}>
+                  <button onClick={(e) => { e.stopPropagation(); setResourceToDelete(resource); }} className="btn btn-primary" style={{ flex: 1, padding: '0.4rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderRadius: '0' }}>
                     <Trash2 size={14} /> Delete
                   </button>
                 </div>
@@ -230,10 +230,10 @@ const ResourceCenter = () => {
           <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '400px', background: 'var(--surface)', borderRadius: '0', overflow: 'hidden', border: '1px solid var(--border-color)', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
             
             {/* Colored top accent bar */}
-            <div style={{ height: '4px', background: `linear-gradient(90deg, var(--danger), var(--primary))`, transition: 'background 0.3s' }} />
+            <div style={{ height: '4px', background: `linear-gradient(90deg, var(--secondary), var(--primary))`, transition: 'background 0.3s' }} />
 
             <div style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
-              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+              <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--surface-border)', color: 'var(--primary)', border: '1px solid var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
                 <Trash2 size={24} />
               </div>
               <h3 style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--text-main)', margin: '0 0 0.5rem' }}>
@@ -255,7 +255,7 @@ const ResourceCenter = () => {
               <button 
                 onClick={confirmDelete} 
                 className="btn btn-primary" 
-                style={{ padding: '0.6rem 1.5rem', fontWeight: '700', borderRadius: '0', background: 'var(--danger)', border: 'none', boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)' }}
+                style={{ padding: '0.6rem 1.5rem', fontWeight: '700', borderRadius: '0' }}
               >
                 {t('delete') || 'Delete'}
               </button>
