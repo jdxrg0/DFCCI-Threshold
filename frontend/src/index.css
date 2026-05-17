@@ -2540,7 +2540,7 @@ a.btn-primary:hover:not(:disabled) {
 }
 
 .book-card-title {
-  font-size: 1.5rem; /* Big and beautiful font size */
+  font-size: 1.2rem; /* Scaled down to accommodate up to 100 characters beautifully */
   color: white;
   margin: 0;
   font-weight: 800;
@@ -2665,7 +2665,7 @@ a.btn-primary:hover:not(:disabled) {
   }
   
   .book-card-title {
-    font-size: 1.05rem; /* Rescaled for 2-column mobile view */
+    font-size: 0.95rem; /* Rescaled for 2-column mobile view with longer text */
     line-height: 1.25;
   }
 
