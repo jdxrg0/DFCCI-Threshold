@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../api';
 import { Search, Download, Trash2, Library, Plus, Pencil } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -48,7 +48,7 @@ const ResourceCenter = () => {
 
   const fetchResources = async () => {
     try {
-      const { data } = await axios.get('/api/resources');
+      const { data } = await api.get('/resources');
       setResources(data);
     } catch (error) {
       console.error('Failed to fetch resources:', error);
@@ -60,7 +60,7 @@ const ResourceCenter = () => {
   const confirmDelete = async () => {
     if (!resourceToDelete) return;
     try {
-      await axios.delete(`/api/resources/${resourceToDelete._id}`);
+      await api.delete(`/resources/${resourceToDelete._id}`);
       setResources(resources.filter(r => r._id !== resourceToDelete._id));
       setResourceToDelete(null);
     } catch (error) {

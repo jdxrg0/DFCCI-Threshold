@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../api';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { useLanguage } from '../context/LanguageContext';
@@ -68,11 +68,11 @@ const ResourceUploadModal = ({ onClose, onSuccess, resourceToEdit }) => {
 
       let response;
       if (resourceToEdit) {
-        response = await axios.put(`/api/resources/${resourceToEdit._id}`, data, {
+        response = await api.put(`/resources/${resourceToEdit._id}`, data, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
       } else {
-        response = await axios.post('/api/resources', data, {
+        response = await api.post('/resources', data, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
       }
