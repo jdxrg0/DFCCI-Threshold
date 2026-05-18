@@ -113,8 +113,54 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   };
 
+  const updateProfile = async (formData) => {
+    const res = await api.put('/users/me/update-profile', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    const freshUser = res.data.user;
+    setUser(freshUser);
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser));
+    return res.data;
+  };
+
+  const updateEmail = async (email) => {
+    const res = await api.put('/users/me/update-email', { email });
+    const freshUser = res.data.user;
+    setUser(freshUser);
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser));
+    return res.data;
+  };
+
+  const updatePassword = async (currentPassword, newPassword) => {
+    const res = await api.put('/users/me/update-password', { currentPassword, newPassword });
+    return res.data;
+  };
+
+  const removeProfilePicture = async () => {
+    const res = await api.delete('/users/me/remove-profile-picture');
+    const freshUser = res.data.user;
+    setUser(freshUser);
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser));
+    return res.data;
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, signup, verifyOtp, googleAuth, updateDisplayName }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      login, 
+      logout, 
+      signup, 
+      verifyOtp, 
+      googleAuth, 
+      updateDisplayName,
+      updateProfile,
+      updateEmail,
+      updatePassword,
+      removeProfilePicture
+    }}>
       {children}
     </AuthContext.Provider>
   );

@@ -9,6 +9,7 @@ import ThemePanel, { ThemePanelContent } from './ThemePanel';
 import LanguageSwitcher from './LanguageSwitcher';
 import api from '../api';
 import logo from '../assets/logo.svg';
+import { renderAvatarHelper } from '../utils/avatarHelper';
 
 // ── Module map: route prefix → { icon, dashboardPath, label } ──────────────
 // Add a new entry here whenever a new module is introduced to the platform.
@@ -82,6 +83,8 @@ const MobileThemeSection = ({ onClose }) => {
     </div>
   );
 };
+
+const renderAvatar = (user, size = 32) => renderAvatarHelper(user, size);
 
 const Navbar = () => {
   const { user, logout } = useAuth();
@@ -188,9 +191,26 @@ const Navbar = () => {
         <div className="desktop-nav">
           {user ? (
             <>
-              <span style={{ fontWeight: '500', marginRight: '0.5rem', color: 'var(--text-main)', fontSize: '0.9rem' }}>
-                {t('hello')}, <span style={{ color: 'var(--primary)' }}>{user.displayName || user.email}</span>
-              </span>
+              <Link 
+                to="/settings" 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '0.5rem', 
+                  textDecoration: 'none',
+                  marginRight: '0.75rem',
+                  padding: '0.25rem',
+                  borderRadius: 'var(--radius)',
+                  transition: 'background-color 0.2s'
+                }}
+                className="nav-profile-link"
+                title={t('profile_settings')}
+              >
+                {renderAvatar(user, 36)}
+                <span style={{ fontWeight: '500', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                  {t('hello')}, <span style={{ color: 'var(--primary)' }} className="nav-profile-name">{user.displayName || user.email}</span>
+                </span>
+              </Link>
 
               {user.role === 'ADMIN' && (
                 <Link to="/admin" className="btn btn-secondary" style={{ padding: '0.5rem', position: 'relative' }} title={t('admin')}>
@@ -339,9 +359,26 @@ const Navbar = () => {
           <div className="mobile-nav-menu">
             {user ? (
               <>
-                <div style={{ padding: '0.5rem', fontWeight: '500', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)', marginBottom: '0.5rem', textAlign: 'center', width: '100%' }}>
-                  {t('hello')}, <span style={{ color: 'var(--primary)' }}>{user.displayName || user.email}</span>
-                </div>
+                <Link 
+                  to="/settings" 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  style={{ 
+                    display: 'flex', 
+                    flexDirection: 'column',
+                    alignItems: 'center', 
+                    gap: '0.5rem', 
+                    textDecoration: 'none',
+                    padding: '1rem',
+                    borderBottom: '1px solid var(--border-color)',
+                    width: '100%',
+                    marginBottom: '0.5rem'
+                  }}
+                >
+                  {renderAvatar(user, 64)}
+                  <span style={{ fontWeight: '500', color: 'var(--text-main)', fontSize: '1.05rem', marginTop: '0.25rem' }}>
+                    {t('hello')}, <span style={{ color: 'var(--primary)' }}>{user.displayName || user.email}</span>
+                  </span>
+                </Link>
 
                 {location.pathname !== '/dashboard' && (
                   <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)} className="btn btn-secondary">

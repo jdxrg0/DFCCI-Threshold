@@ -1,7 +1,29 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcrypt');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const multer = require('multer');
 const User = require('../models/User');
 const { requireAuth, requireRole, requireVerified } = require('../middleware/authMiddleware');
+const { cloudinary } = require('../utils/cloudinary');
+
+const profileStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    return {
+      folder: 'profile_pictures',
+      allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
+      transformation: [{ width: 250, height: 250, crop: 'fill', gravity: 'face' }],
+      public_id: `profile-${req.user._id}-${uniqueSuffix}`,
+    };
+  },
+});
+
+const uploadProfile = multer({
+  storage: profileStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 // Get all users (Admin only)
 router.get('/', requireAuth, requireRole(['ADMIN']), async (req, res) => {
@@ -109,12 +131,185 @@ router.put('/me/update-name', requireAuth, async (req, res) => {
         displayName: user.displayName,
         role: user.role,
         email: user.email,
-        nameChangeRequested: user.nameChangeRequested
+        nameChangeRequested: user.nameChangeRequested,
+        profilePicture: user.profilePicture
       }
     });
   } catch (error) {
     console.error('Error updating name:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update profile name & profile picture (Authenticated user)
+router.put('/me/update-profile', requireAuth, uploadProfile.single('profilePicture'), async (req, res) => {
+  try {
+    const { displayName, presetAvatar } = req.body;
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (displayName !== undefined) {
+      if (displayName.trim() === '') {
+        return res.status(400).json({ message: 'Display name cannot be empty' });
+      }
+      user.displayName = displayName.trim();
+      user.nameChangeRequested = false;
+    }
+
+    if (req.file) {
+      if (user.profilePictureCloudinaryId) {
+        try {
+          await cloudinary.uploader.destroy(user.profilePictureCloudinaryId);
+        } catch (err) {
+          console.error('Failed to delete old profile picture:', err);
+        }
+      }
+      user.profilePicture = req.file.path;
+      user.profilePictureCloudinaryId = req.file.filename;
+    } else if (presetAvatar !== undefined) {
+      if (user.profilePictureCloudinaryId) {
+        try {
+          await cloudinary.uploader.destroy(user.profilePictureCloudinaryId);
+        } catch (err) {
+          console.error('Failed to delete old profile picture:', err);
+        }
+      }
+      user.profilePicture = presetAvatar;
+      user.profilePictureCloudinaryId = '';
+    }
+
+    await user.save();
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        _id: user._id,
+        displayName: user.displayName,
+        role: user.role,
+        email: user.email,
+        nameChangeRequested: user.nameChangeRequested,
+        profilePicture: user.profilePicture
+      }
+    });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ message: 'Server error while updating profile' });
+  }
+});
+
+// Update email (Authenticated user)
+router.put('/me/update-email', requireAuth, async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || email.trim() === '') {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser && existingUser._id.toString() !== req.user._id.toString()) {
+      return res.status(400).json({ message: 'This email is already taken by another user.' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.email = normalizedEmail;
+    await user.save();
+
+    res.json({
+      message: 'Email updated successfully',
+      user: {
+        _id: user._id,
+        displayName: user.displayName,
+        role: user.role,
+        email: user.email,
+        nameChangeRequested: user.nameChangeRequested,
+        profilePicture: user.profilePicture
+      }
+    });
+  } catch (error) {
+    console.error('Error updating email:', error);
+    res.status(500).json({ message: 'Server error while updating email' });
+  }
+});
+
+// Update password (Authenticated user)
+router.put('/me/update-password', requireAuth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!newPassword || newPassword.trim() === '') {
+      return res.status(400).json({ message: 'New password is required' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.password) {
+      if (!currentPassword) {
+        return res.status(400).json({ message: 'Current password is required to change password' });
+      }
+
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ message: 'Incorrect current password' });
+      }
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error updating password:', error);
+    res.status(500).json({ message: 'Server error while updating password' });
+  }
+});
+
+// Remove profile picture (Authenticated user)
+router.delete('/me/remove-profile-picture', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.profilePictureCloudinaryId) {
+      try {
+        await cloudinary.uploader.destroy(user.profilePictureCloudinaryId);
+      } catch (err) {
+        console.error('Failed to delete profile picture from Cloudinary:', err);
+      }
+    }
+
+    user.profilePicture = '';
+    user.profilePictureCloudinaryId = '';
+    await user.save();
+
+    res.json({
+      message: 'Profile picture removed successfully',
+      user: {
+        _id: user._id,
+        displayName: user.displayName,
+        role: user.role,
+        email: user.email,
+        nameChangeRequested: user.nameChangeRequested,
+        profilePicture: user.profilePicture
+      }
+    });
+  } catch (error) {
+    console.error('Error removing profile picture:', error);
+    res.status(500).json({ message: 'Server error while removing profile picture' });
   }
 });
 

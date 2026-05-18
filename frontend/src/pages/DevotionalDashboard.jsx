@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import ThreadSkeleton from '../components/ThreadSkeleton';
 import BibleTracker from '../components/BibleTracker';
+import { renderAvatarHelper } from '../utils/avatarHelper';
 
 // ── Stat Pill ────────────────────────────────────────────────────────────────
 const StatPill = ({ icon, value, label, accent }) => (
@@ -279,13 +280,7 @@ const FolderCard = ({ folder, onClick }) => (
     }}
   >
     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-      {folder.avatar ? (
-        <img src={folder.avatar} alt="Avatar" style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
-      ) : (
-        <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'color-mix(in srgb, var(--primary) 15%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-          <User size={20} />
-        </div>
-      )}
+      {renderAvatarHelper(folder, 40)}
       <div>
         <div style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--text-main)' }}>{folder.displayName}</div>
         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>
@@ -541,15 +536,16 @@ const DevotionalDashboard = () => {
             </div>
           ) : (
             <div style={{ opacity: leaderLoading ? 0.5 : 1, transition: 'opacity 0.2s', pointerEvents: leaderLoading ? 'none' : 'auto' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <button 
                   onClick={() => { setLeaderDevos([]); setSelectedFolder(null); fetchLeaderFolders(); fetchLeaderStats(); }}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', border: 'none', background: 'none', color: 'var(--primary)', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer', padding: 0 }}
                 >
                   <ChevronLeft size={16} /> Back to Members
                 </button>
-                <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                  {selectedFolder.displayName}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.9rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                  {renderAvatarHelper(selectedFolder, 26)}
+                  <span>{selectedFolder.displayName}</span>
                 </div>
               </div>
 

@@ -165,7 +165,9 @@ router.post('/login', async (req, res) => {
         displayName: user.displayName,
         role: user.role,
         email: user.email,
-        nameChangeRequested: user.nameChangeRequested
+        nameChangeRequested: user.nameChangeRequested,
+        profilePicture: user.profilePicture,
+        hasPassword: true
       }
     });
   } catch (error) {
@@ -228,7 +230,9 @@ router.post('/google', async (req, res) => {
         displayName: user.displayName,
         role: user.role,
         email: user.email,
-        nameChangeRequested: user.nameChangeRequested
+        nameChangeRequested: user.nameChangeRequested,
+        profilePicture: user.profilePicture,
+        hasPassword: !!user.password
       }
     });
   } catch (error) {
@@ -299,16 +303,26 @@ router.post('/logout', (req, res) => {
   res.json({ message: 'Logged out successfully' });
 });
 
-router.get('/me', requireAuth, (req, res) => {
-  res.json({
-    user: {
-      _id: req.user._id,
-      displayName: req.user.displayName,
-      role: req.user.role,
-      email: req.user.email,
-      nameChangeRequested: req.user.nameChangeRequested
-    }
-  });
+router.get('/me', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('password');
+    const hasPassword = !!(user && user.password);
+
+    res.json({
+      user: {
+        _id: req.user._id,
+        displayName: req.user.displayName,
+        role: req.user.role,
+        email: req.user.email,
+        nameChangeRequested: req.user.nameChangeRequested,
+        profilePicture: req.user.profilePicture,
+        hasPassword: hasPassword
+      }
+    });
+  } catch (error) {
+    console.error('Error in /me:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
 });
 
 module.exports = router;

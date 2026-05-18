@@ -35,6 +35,7 @@ import QuizCreate from './pages/QuizCreate';
 import DevotionalDashboard from './pages/DevotionalDashboard';
 import SubmitDevotional from './pages/SubmitDevotional';
 import DevotionalView from './pages/DevotionalView';
+import ProfileSettings from './pages/ProfileSettings';
 
 const RootRedirect = () => {
   const { user, loading } = useAuth();
@@ -99,6 +100,7 @@ const App = () => {
 
                 {/* Private Routes - Required Auth */}
                 <Route path="/dashboard" element={<ProtectedRoute><PortalDashboard /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><ProfileSettings /></ProtectedRoute>} />
                 <Route path="/mirror/dashboard" element={<ProtectedRoute><MirrorDashboard /></ProtectedRoute>} />
                 <Route path="/mirror/send" element={<ProtectedRoute><SendMirror /></ProtectedRoute>} />
                 <Route path="/mirror/thread/:id" element={<ProtectedRoute><ThreadView /></ProtectedRoute>} />

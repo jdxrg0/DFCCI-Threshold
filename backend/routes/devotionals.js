@@ -338,7 +338,7 @@ router.get('/leader/folders', requireAuth, requireVerified, requireRole(['ADMIN'
   try {
     // Fetch all verified users
     const users = await User.find({ isVerified: true })
-      .select('displayName avatar role')
+      .select('displayName profilePicture role')
       .lean();
 
     // Fetch counts from Devotionals
@@ -363,7 +363,7 @@ router.get('/leader/folders', requireAuth, requireVerified, requireRole(['ADMIN'
     const folders = users.map(u => ({
       _id: u._id,
       displayName: u.displayName,
-      avatar: u.avatar,
+      profilePicture: u.profilePicture,
       role: u.role,
       total: statsMap[u._id.toString()]?.total || 0,
       pending: statsMap[u._id.toString()]?.pending || 0
