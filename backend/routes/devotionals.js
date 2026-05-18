@@ -1,0 +1,494 @@
+const express = require('express');
+const router = express.Router();
+const Devotional = require('../models/Devotional');
+const Notification = require('../models/Notification');
+const User = require('../models/User');
+
+const { parsePassage } = require('../utils/passageParser');
+const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
+const { sendDevotionalStreakReminders } = require('../utils/reminderScheduler');
+
+// ─── Helper: normalise a Date to midnight UTC ──────────────────────────────
+const toDateOnly = (d) => {
+  const dt = new Date(d);
+  dt.setUTCHours(0, 0, 0, 0);
+  return dt;
+};
+
+// ─── GET own devotionals (paginated, filterable) ────────────────────────────
+router.get('/', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { month, year, page = 1, limit = 10 } = req.query;
+    const filter = { member: req.user._id };
+
+    if (year) {
+      const y = parseInt(year, 10);
+      const m = month ? parseInt(month, 10) - 1 : 0;
+      const start = month
+        ? new Date(Date.UTC(y, m, 1))
+        : new Date(Date.UTC(y, 0, 1));
+      const end = month
+        ? new Date(Date.UTC(y, m + 1, 1))
+        : new Date(Date.UTC(y + 1, 0, 1));
+      filter.date = { $gte: start, $lt: end };
+    }
+
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const [devotionals, total] = await Promise.all([
+      Devotional.find(filter)
+        .populate('acknowledgedBy', 'displayName')
+        .sort({ date: -1 })
+        .skip(skip)
+        .limit(parseInt(limit, 10)),
+      Devotional.countDocuments(filter),
+    ]);
+
+    res.json({ devotionals, total, page: parseInt(page, 10), pages: Math.ceil(total / parseInt(limit, 10)) });
+  } catch (error) {
+    console.error('Error fetching devotionals:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── GET personal stats & streak ────────────────────────────────────────────
+router.get('/stats', requireAuth, requireVerified, async (req, res) => {
+  try {
+    // All distinct dates the member submitted a devotional, sorted descending
+    const entries = await Devotional.find({ member: req.user._id })
+      .select('date')
+      .sort({ date: -1 })
+      .lean();
+
+    const totalEntries = entries.length;
+    if (totalEntries === 0) {
+      return res.json({ totalEntries: 0, currentStreak: 0, longestStreak: 0, thisMonth: 0, acknowledged: 0 });
+    }
+
+    // Build a set of date strings for streak calculation
+    const dateSet = new Set(entries.map(e => toDateOnly(e.date).toISOString().slice(0, 10)));
+    const sortedDates = [...dateSet].sort().reverse(); // most recent first
+
+    // Current streak: count consecutive days from today backwards
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    let currentStreak = 0;
+    let checkDate = new Date(today);
+
+    // Allow today or yesterday as start
+    if (!dateSet.has(checkDate.toISOString().slice(0, 10))) {
+      checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+    }
+
+    while (dateSet.has(checkDate.toISOString().slice(0, 10))) {
+      currentStreak++;
+      checkDate.setUTCDate(checkDate.getUTCDate() - 1);
+    }
+
+    // Longest streak ever
+    let longestStreak = 0;
+    let tempStreak = 1;
+    const allDatesAsc = [...dateSet].sort();
+    for (let i = 1; i < allDatesAsc.length; i++) {
+      const prev = new Date(allDatesAsc[i - 1]);
+      const curr = new Date(allDatesAsc[i]);
+      const diff = (curr - prev) / (1000 * 60 * 60 * 24);
+      if (diff === 1) {
+        tempStreak++;
+      } else {
+        longestStreak = Math.max(longestStreak, tempStreak);
+        tempStreak = 1;
+      }
+    }
+    longestStreak = Math.max(longestStreak, tempStreak);
+
+    // This month count
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const thisMonth = await Devotional.countDocuments({
+      member: req.user._id,
+      date: { $gte: monthStart, $lt: monthEnd },
+    });
+
+    // Acknowledged count
+    const acknowledged = await Devotional.countDocuments({
+      member: req.user._id,
+      status: 'Acknowledged',
+    });
+
+    res.json({ totalEntries, currentStreak, longestStreak, thisMonth, acknowledged });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── GET calendar data (dates with entries for a given month) ────────────────
+router.get('/calendar', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { year, month } = req.query;
+    if (!year || !month) return res.status(400).json({ message: 'year and month are required' });
+
+    const y = parseInt(year, 10);
+    const m = parseInt(month, 10) - 1;
+    const start = new Date(Date.UTC(y, m, 1));
+    const end = new Date(Date.UTC(y, m + 1, 1));
+
+    const entries = await Devotional.find({
+      member: req.user._id,
+      date: { $gte: start, $lt: end },
+    }).select('date status').lean();
+
+    const days = entries.map(e => ({
+      date: toDateOnly(e.date).toISOString().slice(0, 10),
+      status: e.status,
+    }));
+
+    res.json(days);
+  } catch (error) {
+    console.error('Error fetching calendar:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── GET a single devotional ────────────────────────────────────────────────
+router.get('/:id', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const devotional = await Devotional.findById(req.params.id)
+      .populate('member', 'displayName email')
+      .populate('acknowledgedBy', 'displayName');
+
+    if (!devotional) return res.status(404).json({ message: 'Devotional not found' });
+
+    // Access: owner or leader
+    const isOwner = devotional.member._id.toString() === req.user._id.toString();
+    const isLeader = ['ADMIN', 'COUNSELOR'].includes(req.user.role);
+
+    if (!isOwner && !isLeader) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    res.json(devotional);
+  } catch (error) {
+    console.error('Error fetching devotional:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── POST submit a new devotional ──────────────────────────────────────────
+router.post('/', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { date, book, passageStr, summary, application, prayerFocus } = req.body;
+
+    if (!book?.trim()) return res.status(400).json({ message: 'Book is required.' });
+    if (!passageStr?.trim()) return res.status(400).json({ message: 'Chapters/Verses are required.' });
+    if (!summary?.trim()) return res.status(400).json({ message: 'Summary is required.' });
+    if (!application?.trim()) return res.status(400).json({ message: 'Application is required.' });
+
+    let parsedPassages;
+    try {
+      parsedPassages = parsePassage(book.trim(), passageStr.trim());
+    } catch (err) {
+      return res.status(400).json({ message: err.message });
+    }
+
+    const passage = `${book.trim()} ${passageStr.trim()}`;
+
+    const devotionDate = toDateOnly(date || new Date());
+
+    // Restrict to 2 days ago / yesterday / today only
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    
+    const twoDaysAgo = new Date(today);
+    twoDaysAgo.setUTCDate(twoDaysAgo.getUTCDate() - 2);
+
+    const tomorrow = new Date(today);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+
+    if (devotionDate < twoDaysAgo || devotionDate >= tomorrow) {
+      return res.status(400).json({ message: 'You can only submit devotionals for today, yesterday, or 2 days ago.' });
+    }
+
+    // Prevent duplicate entry for the same date
+    const existing = await Devotional.findOne({ member: req.user._id, date: devotionDate });
+    if (existing) {
+      return res.status(400).json({ message: 'You already submitted a devotional for this date.' });
+    }
+
+    const devotional = await Devotional.create({
+      member: req.user._id,
+      date: devotionDate,
+      book: book.trim(),
+      passage: passage,
+      parsedPassages: parsedPassages,
+      summary: summary.trim(),
+      application: application.trim(),
+      prayerFocus: prayerFocus?.trim() || '',
+    });
+
+    // Notify all counselors and admins
+    const leaders = await User.find({ role: { $in: ['ADMIN', 'COUNSELOR'] }, isVerified: true }).select('_id');
+    const notifications = leaders.map(leader => ({
+      user: leader._id,
+      type: 'NewDevotional',
+      message: `${req.user.displayName} submitted a devotional entry.`,
+      thread: devotional._id,
+    }));
+    if (notifications.length > 0) {
+      await Notification.insertMany(notifications);
+    }
+
+    res.status(201).json({ message: 'Devotional submitted successfully', devotional });
+  } catch (error) {
+    console.error('Error submitting devotional:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── PUT edit own devotional (only if not yet acknowledged) ─────────────────
+router.put('/:id', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const devotional = await Devotional.findById(req.params.id);
+    if (!devotional) return res.status(404).json({ message: 'Devotional not found' });
+
+    if (devotional.member.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'You can only edit your own devotionals.' });
+    }
+
+    if (devotional.status === 'Acknowledged') {
+      return res.status(400).json({ message: 'Cannot edit an acknowledged devotional.' });
+    }
+
+    const { book, passageStr, summary, application, prayerFocus } = req.body;
+    if (book !== undefined && passageStr !== undefined) {
+      let parsedPassages;
+      try {
+        parsedPassages = parsePassage(book.trim(), passageStr.trim());
+      } catch (err) {
+        return res.status(400).json({ message: err.message });
+      }
+      devotional.book = book.trim();
+      devotional.passage = `${book.trim()} ${passageStr.trim()}`;
+      devotional.parsedPassages = parsedPassages;
+    }
+    if (summary !== undefined) devotional.summary = summary.trim();
+    if (application !== undefined) devotional.application = application.trim();
+    if (prayerFocus !== undefined) devotional.prayerFocus = prayerFocus?.trim() || '';
+
+    await devotional.save();
+    res.json({ message: 'Devotional updated', devotional });
+  } catch (error) {
+    console.error('Error updating devotional:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── DELETE own devotional ──────────────────────────────────────────────────
+router.delete('/:id', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const devotional = await Devotional.findById(req.params.id);
+    if (!devotional) return res.status(404).json({ message: 'Devotional not found' });
+
+    if (devotional.member.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'You can only delete your own devotionals.' });
+    }
+
+    await Devotional.findByIdAndDelete(req.params.id);
+    res.json({ message: 'Devotional deleted' });
+  } catch (error) {
+    console.error('Error deleting devotional:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ─── LEADER ENDPOINTS (Counselor / Admin only) ─────────────────────────────
+// ──────────────────────────────────────────────────────────────────────────────
+
+// ─── GET all member devotionals (leader view) ───────────────────────────────
+router.get('/leader/all', requireAuth, requireVerified, requireRole(['ADMIN', 'COUNSELOR']), async (req, res) => {
+  try {
+    const { memberId, status, page = 1, limit = 15 } = req.query;
+    const filter = {};
+
+    if (memberId) filter.member = memberId;
+    if (status) filter.status = status;
+
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const [devotionals, total] = await Promise.all([
+      Devotional.find(filter)
+        .populate('member', 'displayName email')
+        .populate('acknowledgedBy', 'displayName')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(parseInt(limit, 10)),
+      Devotional.countDocuments(filter),
+    ]);
+
+    res.json({ devotionals, total, page: parseInt(page, 10), pages: Math.ceil(total / parseInt(limit, 10)) });
+  } catch (error) {
+    console.error('Error fetching leader devotionals:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── GET leader folders (all members with counts) ─────────────────────────
+router.get('/leader/folders', requireAuth, requireVerified, requireRole(['ADMIN', 'COUNSELOR']), async (req, res) => {
+  try {
+    // Fetch all verified users
+    const users = await User.find({ isVerified: true })
+      .select('displayName avatar role')
+      .lean();
+
+    // Fetch counts from Devotionals
+    const stats = await Devotional.aggregate([
+      {
+        $group: {
+          _id: '$member',
+          total: { $sum: 1 },
+          pending: {
+            $sum: { $cond: [{ $eq: ['$status', 'Submitted'] }, 1, 0] }
+          }
+        }
+      }
+    ]);
+
+    // Map stats to users
+    const statsMap = {};
+    stats.forEach(s => {
+      statsMap[s._id.toString()] = { total: s.total, pending: s.pending };
+    });
+
+    const folders = users.map(u => ({
+      _id: u._id,
+      displayName: u.displayName,
+      avatar: u.avatar,
+      role: u.role,
+      total: statsMap[u._id.toString()]?.total || 0,
+      pending: statsMap[u._id.toString()]?.pending || 0
+    }));
+
+    // Sort by pending count (desc), then total count (desc), then name
+    folders.sort((a, b) => {
+      if (b.pending !== a.pending) return b.pending - a.pending;
+      if (b.total !== a.total) return b.total - a.total;
+      return a.displayName.localeCompare(b.displayName);
+    });
+
+    res.json(folders);
+  } catch (error) {
+    console.error('Error fetching leader folders:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── GET leader-level stats overview ────────────────────────────────────────
+router.get('/leader/stats', requireAuth, requireVerified, requireRole(['ADMIN', 'COUNSELOR']), async (req, res) => {
+  try {
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+
+    const [totalThisMonth, pending, acknowledged] = await Promise.all([
+      Devotional.countDocuments({ date: { $gte: monthStart, $lt: monthEnd } }),
+      Devotional.countDocuments({ status: 'Submitted' }),
+      Devotional.countDocuments({ status: 'Acknowledged', date: { $gte: monthStart, $lt: monthEnd } }),
+    ]);
+
+    res.json({ totalThisMonth, pending, acknowledged });
+  } catch (error) {
+    console.error('Error fetching leader stats:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── PUT acknowledge a devotional ───────────────────────────────────────────
+router.put('/:id/acknowledge', requireAuth, requireVerified, requireRole(['ADMIN', 'COUNSELOR']), async (req, res) => {
+  try {
+    const devotional = await Devotional.findById(req.params.id)
+      .populate('member', 'displayName email');
+    if (!devotional) return res.status(404).json({ message: 'Devotional not found' });
+
+    if (devotional.status === 'Acknowledged') {
+      return res.status(400).json({ message: 'Already acknowledged.' });
+    }
+
+    const { note } = req.body;
+
+    devotional.status = 'Acknowledged';
+    devotional.acknowledgedBy = req.user._id;
+    devotional.acknowledgedAt = new Date();
+    devotional.leaderNote = note?.trim() || '';
+    await devotional.save();
+
+    // Notify the member
+    await Notification.create({
+      user: devotional.member._id,
+      type: 'DevotionalAcknowledged',
+      message: `${req.user.displayName} acknowledged your devotional entry.`,
+      thread: devotional._id,
+    });
+
+    res.json({ message: 'Devotional acknowledged', devotional });
+  } catch (error) {
+    console.error('Error acknowledging devotional:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// ─── POST trigger devotional streak reminders manually (Admin/Counselor only) ─────────────────
+router.post('/leader/test-streak-reminders', requireAuth, requireVerified, requireRole(['ADMIN', 'COUNSELOR']), async (req, res) => {
+  try {
+    const { hoursLeft = 3, memberId = null } = req.body;
+    const count = await sendDevotionalStreakReminders(hoursLeft, memberId);
+    res.json({ message: `Sent streak reminders to ${count} users.`, count });
+  } catch (error) {
+    console.error('Error testing streak reminders:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+module.exports = router;
+
+// ─── GET bible reading progress ──────────────────────────────────────────────
+router.get('/bible-progress/all', requireAuth, requireVerified, async (req, res) => {
+  try {
+    let targetUserId = req.user._id;
+    
+    // Allow leaders to view other members' progress
+    if (req.query.memberId && ['ADMIN', 'COUNSELOR'].includes(req.user.role)) {
+      targetUserId = req.query.memberId;
+    }
+
+    const entries = await Devotional.find({ member: targetUserId })
+      .select('book parsedPassages')
+      .lean();
+    
+    // Create an object grouping verses by chapter by book: { "Genesis": { "1": 31, "2": 10 } }
+    const progress = {};
+    for (const entry of entries) {
+      if (!entry.book || !entry.parsedPassages) continue;
+      if (!progress[entry.book]) progress[entry.book] = {};
+      
+      for (const [ch, verses] of Object.entries(entry.parsedPassages)) {
+        if (!progress[entry.book][ch]) progress[entry.book][ch] = new Set();
+        verses.forEach(v => progress[entry.book][ch].add(v));
+      }
+    }
+
+    // Convert Sets to lengths for JSON serialization
+    const result = {};
+    for (const book in progress) {
+      result[book] = {};
+      for (const ch in progress[book]) {
+        result[book][ch] = progress[book][ch].size;
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching bible progress:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});

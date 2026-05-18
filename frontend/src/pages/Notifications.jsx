@@ -53,6 +53,8 @@ const Notifications = () => {
       } else {
         navigate(`/mirror/thread/${notif.thread._id || notif.thread}`);
       }
+    } else if (notif.type === 'DevotionalStreakReminder') {
+      navigate('/devotionals/submit');
     } else {
       fetchNotifications();
     }

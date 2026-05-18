@@ -13,7 +13,10 @@ import {
   MessageSquare,
   Bell,
   BellOff,
-  UserCog
+  UserCog,
+  Mail,
+  Eye,
+  RefreshCw
 } from 'lucide-react';
 
 const AdminPanel = () => {
@@ -22,12 +25,23 @@ const AdminPanel = () => {
   const [error, setError] = useState('');
   const { user } = useAuth();
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState('users'); // 'users', 'deletion-requests', 'restore-requests', 'recently-deleted', 'tickets'
+  const [activeTab, setActiveTab] = useState('users'); // 'users', 'deletion-requests', 'restore-requests', 'recently-deleted', 'tickets', 'emails'
   const [deletionRequests, setDeletionRequests] = useState([]);
   const [restoreRequests, setRestoreRequests] = useState([]);
   const [recentlyDeleted, setRecentlyDeleted] = useState([]);
   const [tickets, setTickets] = useState([]);
   const navigate = useNavigate();
+
+  // Outgoing Emails State
+  const [emails, setEmails] = useState([]);
+  const [emailsSearch, setEmailsSearch] = useState('');
+  const [emailsStatus, setEmailsStatus] = useState('');
+  const [emailsPage, setEmailsPage] = useState(1);
+  const [emailsTotalPages, setEmailsTotalPages] = useState(1);
+  const [emailsTotalCount, setEmailsTotalCount] = useState(0);
+  const [emailsLoading, setEmailsLoading] = useState(false);
+  const [emailPreview, setEmailPreview] = useState(null);
+  const [resendingId, setResendingId] = useState(null);
 
   const [popup, setPopup] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false, isPrompt: false, promptValue: '' });
 
@@ -40,7 +54,8 @@ const AdminPanel = () => {
     { id: 'deletion-requests', label: 'Deletion', icon: Trash2 },
     { id: 'restore-requests', label: 'Restore', icon: RotateCcw },
     { id: 'recently-deleted', label: 'History', icon: History },
-    { id: 'tickets', label: 'Requests', icon: MessageSquare }
+    { id: 'tickets', label: 'Requests', icon: MessageSquare },
+    { id: 'emails', label: t('admin_emails_tab') || 'Emails', icon: Mail }
   ];
 
   useEffect(() => {
@@ -53,7 +68,43 @@ const AdminPanel = () => {
     if (activeTab === 'restore-requests') fetchRestoreRequests();
     if (activeTab === 'recently-deleted') fetchRecentlyDeleted();
     if (activeTab === 'tickets') fetchTickets();
-  }, [user, navigate, activeTab]);
+    if (activeTab === 'emails') fetchEmails();
+  }, [user, navigate, activeTab, emailsSearch, emailsStatus, emailsPage]);
+
+  const fetchEmails = async () => {
+    try {
+      setEmailsLoading(true);
+      const res = await api.get('/emails', {
+        params: {
+          page: emailsPage,
+          limit: 10,
+          search: emailsSearch,
+          status: emailsStatus
+        }
+      });
+      setEmails(res.data.emails);
+      setEmailsTotalPages(res.data.totalPages);
+      setEmailsTotalCount(res.data.totalCount);
+    } catch (err) {
+      setError('Failed to fetch email logs');
+    } finally {
+      setEmailsLoading(false);
+      setLoading(false);
+    }
+  };
+
+  const handleResendEmail = async (id) => {
+    try {
+      setResendingId(id);
+      await api.post(`/emails/${id}/resend`);
+      showAlert('Success', t('email_resend_success'));
+      fetchEmails();
+    } catch (err) {
+      showAlert('Error', err.response?.data?.message || t('email_resend_error'));
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const fetchRestoreRequests = async () => {
     try {
@@ -109,6 +160,7 @@ const AdminPanel = () => {
       setLoading(false);
     }
   };
+
 
   const handleRoleChange = async (userId, newRole) => {
     if (userId === user._id) {
@@ -729,6 +781,201 @@ const AdminPanel = () => {
             </div>
           </>
         )}
+
+        {activeTab === 'emails' && (
+          <>
+            {/* Filters panel */}
+            <div className="card" style={{ padding: '1rem', marginBottom: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={emailsSearch}
+                onChange={(e) => {
+                  setEmailsSearch(e.target.value);
+                  setEmailsPage(1);
+                }}
+                placeholder={t('email_search_placeholder')}
+                style={{
+                  flex: 1,
+                  minWidth: '200px',
+                  padding: '0.6rem 1rem',
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--surface)',
+                  color: 'var(--text-main)'
+                }}
+              />
+              <select
+                value={emailsStatus}
+                onChange={(e) => {
+                  setEmailsStatus(e.target.value);
+                  setEmailsPage(1);
+                }}
+                style={{
+                  padding: '0.6rem 1rem',
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--border-color)',
+                  background: 'var(--surface)',
+                  color: 'var(--text-main)',
+                  minWidth: '150px'
+                }}
+              >
+                <option value="">{t('email_all_statuses')}</option>
+                <option value="sent">{t('email_status_sent')}</option>
+                <option value="failed">{t('email_status_failed')}</option>
+              </select>
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="admin-table-container desktop-admin-table card">
+              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                    <th style={{ padding: '1rem' }}>{t('email_to')}</th>
+                    <th style={{ padding: '1rem' }}>{t('email_subject')}</th>
+                    <th style={{ padding: '1rem' }}>{t('email_sent_at')}</th>
+                    <th style={{ padding: '1rem' }}>{t('email_status')}</th>
+                    <th style={{ padding: '1rem' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emails.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        {emailsLoading ? t('loading') : t('email_no_logs')}
+                      </td>
+                    </tr>
+                  ) : (
+                    emails.map(email => (
+                      <tr key={email._id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '1rem', fontWeight: '500' }}>{email.to}</td>
+                        <td style={{ padding: '1rem', maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {email.subject}
+                        </td>
+                        <td style={{ padding: '1rem' }}>{new Date(email.sentAt).toLocaleString()}</td>
+                        <td style={{ padding: '1rem' }}>
+                          <span style={{
+                            background: email.status === 'sent' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                            color: email.status === 'sent' ? '#22c55e' : '#ef4444',
+                            padding: '0.25rem 0.5rem',
+                            borderRadius: '4px',
+                            fontSize: '0.75rem',
+                            fontWeight: '600'
+                          }}>
+                            {email.status === 'sent' ? t('email_status_sent') : t('email_status_failed')}
+                          </span>
+                        </td>
+                        <td style={{ padding: '1rem' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button
+                              onClick={() => setEmailPreview(email)}
+                              className="btn btn-secondary"
+                              style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                            >
+                              <Eye size={14} /> {t('email_view')}
+                            </button>
+                            <button
+                              onClick={() => handleResendEmail(email._id)}
+                              disabled={resendingId === email._id}
+                              className="btn btn-primary"
+                              style={{ padding: '0.4rem 0.75rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                            >
+                              <RefreshCw size={14} className={resendingId === email._id ? 'spin' : ''} />
+                              {resendingId === email._id ? 'Sending...' : t('email_resend')}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="mobile-admin-cards">
+              {emails.length === 0 ? (
+                <div className="card text-center" style={{ padding: '2rem', color: 'var(--text-muted)' }}>
+                  {emailsLoading ? t('loading') : t('email_no_logs')}
+                </div>
+              ) : (
+                emails.map(email => (
+                  <div key={email._id} className="admin-card">
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">{t('email_to')}</span>
+                      <span className="admin-card-value" style={{ fontWeight: '600' }}>{email.to}</span>
+                    </div>
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">{t('email_subject')}</span>
+                      <span className="admin-card-value" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {email.subject}
+                      </span>
+                    </div>
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">{t('email_sent_at')}</span>
+                      <span className="admin-card-value">{new Date(email.sentAt).toLocaleString()}</span>
+                    </div>
+                    <div className="admin-card-row">
+                      <span className="admin-card-label">{t('email_status')}</span>
+                      <span style={{
+                        background: email.status === 'sent' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                        color: email.status === 'sent' ? '#22c55e' : '#ef4444',
+                        padding: '0.25rem 0.5rem',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: '600'
+                      }}>
+                        {email.status === 'sent' ? t('email_status_sent') : t('email_status_failed')}
+                      </span>
+                    </div>
+                    <div className="admin-card-actions" style={{ marginTop: '0.5rem' }}>
+                      <button
+                        onClick={() => setEmailPreview(email)}
+                        className="btn btn-secondary"
+                        style={{ flex: 1, padding: '0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}
+                      >
+                        <Eye size={16} /> {t('email_view')}
+                      </button>
+                      <button
+                        onClick={() => handleResendEmail(email._id)}
+                        disabled={resendingId === email._id}
+                        className="btn btn-primary"
+                        style={{ flex: 1, padding: '0.6rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}
+                      >
+                        <RefreshCw size={16} className={resendingId === email._id ? 'spin' : ''} />
+                        {resendingId === email._id ? 'Sending...' : t('email_resend')}
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Pagination Controls */}
+            {emailsTotalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1.5rem', marginBottom: '1.5rem' }}>
+                <button
+                  disabled={emailsPage === 1}
+                  onClick={() => setEmailsPage(prev => Math.max(prev - 1, 1))}
+                  className="btn btn-secondary"
+                  style={{ padding: '0.5rem 1rem' }}
+                >
+                  {t('previous')}
+                </button>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                  {t('page_of')(emailsPage, emailsTotalPages)}
+                </span>
+                <button
+                  disabled={emailsPage === emailsTotalPages}
+                  onClick={() => setEmailsPage(prev => Math.min(prev + 1, emailsTotalPages))}
+                  className="btn btn-secondary"
+                  style={{ padding: '0.5rem 1rem' }}
+                >
+                  {t('next')}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <PopupModal 
@@ -742,8 +989,117 @@ const AdminPanel = () => {
         promptValue={popup.promptValue}
         onPromptChange={(val) => setPopup(p => ({ ...p, promptValue: val }))}
       />
+
+      {/* Outgoing Email HTML Preview Modal */}
+      {emailPreview && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.65)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000,
+          padding: '1.5rem'
+        }}>
+          <div className="card" style={{
+            width: '100%',
+            maxWidth: '800px',
+            maxHeight: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem',
+            padding: '1.5rem',
+            background: 'var(--surface)',
+            border: '1px solid var(--border-color)',
+            boxShadow: 'var(--shadow-lg)',
+            borderRadius: '16px',
+            overflow: 'hidden'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
+              <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.25rem', fontWeight: '700' }}>
+                {t('email_preview_title')}
+              </h3>
+              <button 
+                onClick={() => setEmailPreview(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '1.5rem',
+                  lineHeight: '1',
+                  padding: '0.25rem'
+                }}
+              >
+                &times;
+              </button>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem', color: 'var(--text-main)', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+              <div><strong>{t('email_to')}:</strong> {emailPreview.to}</div>
+              <div><strong>{t('email_subject')}:</strong> {emailPreview.subject}</div>
+              <div><strong>{t('email_sent_at')}:</strong> {new Date(emailPreview.sentAt).toLocaleString()}</div>
+              <div>
+                <strong>{t('email_status')}:</strong>{' '}
+                <span style={{
+                  color: emailPreview.status === 'sent' ? '#22c55e' : '#ef4444',
+                  fontWeight: '600'
+                }}>
+                  {emailPreview.status === 'sent' ? t('email_status_sent') : t('email_status_failed')}
+                </span>
+                {emailPreview.error && (
+                  <div style={{ color: '#ef4444', marginTop: '0.25rem', fontSize: '0.85rem' }}>
+                    Error: {emailPreview.error}
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <iframe
+                srcDoc={emailPreview.html}
+                title="Email Preview Body"
+                style={{
+                  width: '100%',
+                  height: '400px',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '8px',
+                  background: '#ffffff'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+              <button 
+                onClick={() => {
+                  handleResendEmail(emailPreview._id);
+                  setEmailPreview(null);
+                }}
+                className="btn btn-primary"
+                style={{ padding: '0.5rem 1rem' }}
+              >
+                {t('email_resend')}
+              </button>
+              <button 
+                onClick={() => setEmailPreview(null)}
+                className="btn btn-secondary"
+                style={{ padding: '0.5rem 1rem' }}
+              >
+                {t('cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default AdminPanel;
+
+

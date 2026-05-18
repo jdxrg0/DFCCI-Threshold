@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Send, X, BookOpen } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
-import { MIRROR_MESSAGES, AFFIRMATION_MESSAGES } from '../data/reflectionMessages';
+import { MIRROR_MESSAGES, AFFIRMATION_MESSAGES, DEVOTIONAL_MESSAGES } from '../data/reflectionMessages';
 
 // ─── Change this single number to update the countdown duration everywhere ────
 export const COUNTDOWN_SECONDS = 60;
@@ -75,6 +75,8 @@ const TimerButton = ({
     if (disabled || loading) return;
     const pool = module === 'affirmation'
       ? (AFFIRMATION_MESSAGES[lang] || AFFIRMATION_MESSAGES['en'])
+      : module === 'devotional'
+      ? (DEVOTIONAL_MESSAGES[lang] || DEVOTIONAL_MESSAGES['en'])
       : (MIRROR_MESSAGES[lang] || MIRROR_MESSAGES['en']);
     const random = pool[Math.floor(Math.random() * pool.length)];
     setMessage(random);

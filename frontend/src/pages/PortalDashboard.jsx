@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library } from 'lucide-react';
+import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library, Gamepad2, BookHeart } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -50,6 +50,28 @@ const PortalDashboard = () => {
       docsPath: '/docs/resource-center',
       openPath: '/resources',
       OpenIcon: Library,
+      docsTitle: t('read_docs'),
+      openTitle: t('open_module')
+    },
+    {
+      id: 'games',
+      title: t('games'),
+      desc: t('games_desc'),
+      Icon: Gamepad2,
+      docsPath: '/docs/games',
+      openPath: '/games',
+      OpenIcon: Gamepad2,
+      docsTitle: t('read_docs'),
+      openTitle: t('open_module')
+    },
+    {
+      id: 'devotional_tracker',
+      title: t('devo_title'),
+      desc: t('devo_desc'),
+      Icon: BookHeart,
+      docsPath: '/docs/devotional-tracker',
+      openPath: '/devotionals',
+      OpenIcon: BookHeart,
       docsTitle: t('read_docs'),
       openTitle: t('open_module')
     },

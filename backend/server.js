@@ -16,7 +16,11 @@ const affirmationRoutes = require('./routes/affirmations');
 const fruitRoutes = require('./routes/fruitEndorsements');
 const fundRoutes = require('./routes/funds');
 const resourceRoutes = require('./routes/resources');
+const gameRoutes = require('./routes/games');
+const devotionalRoutes = require('./routes/devotionals');
+const emailRoutes = require('./routes/emails');
 const { initReminderScheduler } = require('./utils/reminderScheduler');
+
 
 const app = express();
 
@@ -64,6 +68,10 @@ app.use('/api/affirmations', affirmationRoutes);
 app.use('/api/fruits', fruitRoutes);
 app.use('/api/funds', fundRoutes);
 app.use('/api/resources', resourceRoutes);
+app.use('/api/games', gameRoutes);
+app.use('/api/devotionals', devotionalRoutes);
+app.use('/api/emails', emailRoutes);
+
 
 // Ping route for uptime monitoring
 app.get('/api/ping', (req, res) => {

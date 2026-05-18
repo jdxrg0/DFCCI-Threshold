@@ -470,5 +470,76 @@ export const moduleDocs = {
         'Respect the copyright, literally.'
       ]
     }
+  },
+  'games': {
+    en: {
+      title: 'Threshold Games',
+      description: 'A Bible quiz platform where you can test your knowledge, compete on leaderboards, and build daily streaks with your community.',
+      whatIsIt: 'Threshold Games is a quiz hub designed for the youth group. Administrators create quiz sets with curated Bible questions (multiple choice or true/false), and all verified members can play them at any time. Each quiz is timed per question, and your answers are scored server-side to keep things fair. Your scores feed into a global leaderboard, and consecutive days of play build your streak.',
+      howToUse: [
+        'Open Threshold Games from the Main Dashboard to see all available quizzes.',
+        'Click on any quiz card to see its preview — including the number of questions and estimated time.',
+        'Hit "Start Quiz" to begin. Each question has its own countdown timer displayed as an animated ring.',
+        'Select your answer before time runs out. If the timer expires, it counts as unanswered.',
+        'After the final question, the server scores your answers and presents your results with a detailed review of each question.',
+        'Switch to the "Leaderboard" tab to see how you rank against other members by total score and average percentage.',
+        'Check "My Stats" to view your quiz history, average performance, best score, and current day streak.',
+        'Administrators can create new quizzes using the "+" button, choosing between Multiple Choice and True/False question types with configurable time limits per question.'
+      ],
+      rules: [
+        'All verified members can play any published quiz.',
+        'Answers are scored server-side — the correct answers are never sent to your device until after you submit.',
+        'Each question has an individual timer (default 15 seconds). Unanswered questions count as incorrect.',
+        'You can replay any quiz as many times as you want. All attempts are recorded.',
+        'Only Administrators can create, edit, publish/unpublish, or delete quizzes.',
+        'Streaks are counted by consecutive calendar days with at least one quiz played.'
+      ]
+    },
+    fil: {
+      title: 'Threshold Games',
+      description: 'Isang Bible quiz platform kung saan maaari mong subukin ang iyong kaalaman, makipagkumpitensya sa leaderboard, at bumuo ng daily streak kasama ang iyong komunidad.',
+      whatIsIt: 'Ang Threshold Games ay isang quiz hub na dinisenyo para sa youth group. Gumagawa ang mga Administrator ng mga quiz set na may mga tanong mula sa Bibliya (multiple choice o true/false), at lahat ng mga verified na miyembro ay maaaring maglaro anumang oras. Ang bawat quiz ay may timer sa bawat tanong, at ang iyong mga sagot ay ni-score sa server para sa patas na resulta. Ang mga score mo ay nakapasok sa global leaderboard, at ang sunod-sunod na araw ng paglalaro ay bumubuo ng iyong streak.',
+      howToUse: [
+        'Buksan ang Threshold Games mula sa Main Dashboard para makita ang lahat ng available na quiz.',
+        'I-click ang anumang quiz card para makita ang preview — kasama ang bilang ng mga tanong at estimated na oras.',
+        'Pindutin ang "Simulan ang Quiz" para magsimula. Ang bawat tanong ay may sariling countdown timer na ipinapakita bilang animated ring.',
+        'Piliin ang iyong sagot bago maubusan ng oras. Kung mag-expire ang timer, ituturing itong hindi nasagot.',
+        'Pagkatapos ng huling tanong, isi-score ng server ang iyong mga sagot at ipapakita ang mga resulta kasama ang detalyadong review ng bawat tanong.',
+        'Pumunta sa "Leaderboard" tab para makita kung paano ka naka-rank kumpara sa ibang miyembro.',
+        'Tingnan ang "Aking Stats" para sa iyong quiz history, average performance, pinakamataas na score, at kasalukuyang day streak.',
+        'Ang mga Administrator ay maaaring gumawa ng bagong quiz gamit ang "+" button, pumipili sa pagitan ng Multiple Choice at True/False na uri ng tanong.'
+      ],
+      rules: [
+        'Lahat ng verified na miyembro ay maaaring maglaro ng anumang published na quiz.',
+        'Ang mga sagot ay ini-score sa server — ang mga tamang sagot ay hindi ipinapadala sa iyong device hangga\'t hindi ka pa nag-submit.',
+        'Ang bawat tanong ay may sariling timer (default 15 segundo). Ang hindi nasagot na tanong ay ituturing na mali.',
+        'Maaari mong i-replay ang anumang quiz nang maraming beses. Lahat ng mga attempt ay naitala.',
+        'Ang mga Administrator lamang ang maaaring gumawa, mag-edit, mag-publish/unpublish, o magbura ng mga quiz.',
+        'Ang mga streak ay binibilang batay sa sunod-sunod na araw na may kahit isang quiz na nilaro.'
+      ]
+    },
+    conyo: {
+      title: 'Threshold Games',
+      description: 'A Bible quiz platform where you can literally test your knowledge, compete on the leaderboard, and build your daily streak with the community.',
+      whatIsIt: 'So basically, Threshold Games is a quiz hub made for the youth group. Admins create quiz sets with Bible questions (multiple choice or true/false), and all verified members can play them anytime. Each question has its own timer, and your answers get scored server-side so it\'s literally cheat-proof. Your scores show up on the global leaderboard, and playing every day builds your streak.',
+      howToUse: [
+        'Open Threshold Games from the Dashboard to see all the quizzes available.',
+        'Click any quiz card to preview it — you\'ll see the question count and estimated time.',
+        'Hit "Start na!" to begin. Each question has its own animated countdown timer, so don\'t zone out.',
+        'Pick your answer before the time runs out. If you don\'t, it literally counts as wrong.',
+        'After the last question, the server scores everything and shows you a full review of what you got right and wrong.',
+        'Go to the "Leaderboard" tab to flex your rank against everyone else by total score and average percentage.',
+        'Check "My Stats" to see your quiz history, average performance, best score, and current day streak. The fire emoji is everything.',
+        'If you\'re an Admin, hit the "+" button to create new quizzes with Multiple Choice or True/False questions and custom time limits.'
+      ],
+      rules: [
+        'All verified members can play any published quiz, literally.',
+        'Answers are scored server-side — the correct answers literally never touch your device until after you submit.',
+        'Each question has its own timer (default 15 seconds). If you don\'t answer, it\'s marked wrong.',
+        'You can replay any quiz as many times as you want. All attempts get tracked.',
+        'Only Admins can create, edit, publish/unpublish, or delete quizzes.',
+        'Streaks are based on consecutive calendar days with at least one quiz played. Don\'t break the streak, bes!'
+      ]
+    }
   }
 };

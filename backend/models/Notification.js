@@ -11,7 +11,8 @@ const notificationSchema = new mongoose.Schema({
     enum: [
       'NewMirror', 'NewReply', 'CounselorConsent', 'EscalationConsent', 'Resolved', 'Accepted', 
       'DeletionApproved', 'DeletionRejected', 'ThreadDeleted', 'RestoreApproved', 'RestoreRejected', 'ThreadRestored',
-      'NewAffirmation', 'AffirmationReply', 'AffirmationReceived'
+      'NewAffirmation', 'AffirmationReply', 'AffirmationReceived',
+      'NewDevotional', 'DevotionalAcknowledged', 'DevotionalStreakReminder'
     ],
     required: true,
   },

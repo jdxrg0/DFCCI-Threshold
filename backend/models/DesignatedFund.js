@@ -18,6 +18,10 @@ const designatedFundSchema = new mongoose.Schema({
     type: String,
     default: '#3b82f6', // Default blue color for the UI
   },
+  autoAssignWeeklyDues: {
+    type: Boolean,
+    default: false,
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

@@ -72,7 +72,7 @@ router.get('/summary', requireAuth, requireVerified, async (req, res) => {
 // Get transactions with pagination (10 per page by default)
 router.get('/', requireAuth, requireVerified, async (req, res) => {
   try {
-    const { month, year, page = 1, limit = 10, filterType } = req.query;
+    const { month, year, page = 1, limit = 10, filterType, designatedFund } = req.query;
     const pageNum = Math.max(1, Number(page));
     const limitNum = Math.max(1, Number(limit));
     let query = {};
@@ -81,6 +81,10 @@ router.get('/', requireAuth, requireVerified, async (req, res) => {
       query.category = 'Weekly Dues';
     } else if (filterType === 'OTHERS') {
       query.category = { $ne: 'Weekly Dues' };
+    }
+
+    if (designatedFund) {
+      query.designatedFund = designatedFund;
     }
 
     if (month && year) {
@@ -331,12 +335,16 @@ router.post('/dues/ledger', adminOrTreasurerAuth, async (req, res) => {
     }
 
     // Create new payment
+    // Check if a designated fund is set to auto-assign weekly dues
+    const autoFund = await DesignatedFund.findOne({ autoAssignWeeklyDues: true });
+
     const transaction = new Transaction({
       amount: numAmount,
       type: 'INCOME',
       category: 'Weekly Dues',
       description: `Weekly dues — ${member.name} (${dDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
       date: new Date(),
+      designatedFund: autoFund ? autoFund._id : null,
       createdBy: req.user._id,
     });
     await transaction.save();
@@ -394,34 +402,54 @@ router.post('/dues/members/:id/send-dues-email', adminOrTreasurerAuth, async (re
 
     let arrearsHtml;
     if (arrears > 0) {
-      arrearsHtml = `Your current dues balance is <span style="color:#ef4444;font-weight:bold;">₱${arrears} in arrears</span>. Please settle it at your earliest convenience. 🙏`;
+      arrearsHtml = `Your current dues balance is <span style="color:#ef4444;font-weight:bold;">₱${arrears} in arrears</span>. Please settle it at your earliest convenience.`;
     } else if (arrears < 0) {
-      arrearsHtml = `You're advanced by <span style="color:#f59e0b;font-weight:bold;">₱${Math.abs(arrears)}</span>! You're all caught up and then some — great job! 🎉`;
+      arrearsHtml = `You're advanced by <span style="color:#f59e0b;font-weight:bold;">₱${Math.abs(arrears)}</span>! You're all caught up and then some — great job!`;
     } else {
-      arrearsHtml = `You're <span style="color:#22c55e;font-weight:bold;">Fully Updated</span>! No arrears at all — keep it up! ✨`;
+      arrearsHtml = `You're <span style="color:#22c55e;font-weight:bold;">Fully Updated</span>! No arrears at all — keep it up!`;
     }
 
     const html = `
-      <div style="font-family:sans-serif;max-width:520px;margin:20px auto;padding:30px;border-radius:20px;background:#ffffff;box-shadow:0 10px 30px rgba(0,0,0,0.07);border:1px solid #f0f0f0;">
-        <div style="text-align:center;margin-bottom:25px;">
-          <h2 style="color:#1e293b;margin:0;font-size:24px;font-weight:800;">Your Dues Statement</h2>
-        </div>
-        <p style="color:#475569;font-size:16px;line-height:1.6;text-align:center;">
-          Hi <strong>${user.displayName}</strong>! Here's your current dues status as of today.
-        </p>
-        <div style="background:#f8fafc;padding:20px;border-radius:15px;margin:20px 0;border:1px dashed #cbd5e1;">
-          <span style="display:block;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;text-align:center;">Weekly Dues Balance</span>
-          <p style="color:#475569;font-size:15px;line-height:1.7;text-align:center;margin:0;">
-            ${arrearsHtml}
-          </p>
-        </div>
-        <p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:30px;">
-          This is an official statement from <strong>DFCCI Threshold</strong>. Keep shining! ✨
-        </p>
-      </div>
+      <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout:fixed;background-color:#f8fafc;padding:20px 0;font-family:sans-serif;">
+        <tr>
+          <td align="center">
+            <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px;background-color:#ffffff;border:1px solid #f0f0f0;border-radius:20px;padding:30px;box-shadow:0 10px 30px rgba(0,0,0,0.07);">
+              <tr>
+                <td align="center" style="padding-bottom:25px;">
+                  <h2 style="color:#1e293b;margin:0;font-size:24px;font-weight:800;font-family:sans-serif;">Your Dues Statement</h2>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="color:#475569;font-size:16px;line-height:1.6;padding-bottom:20px;font-family:sans-serif;">
+                  Hi <strong>${user.displayName}</strong>! Here's your current dues status as of today.
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="padding-bottom:20px;">
+                  <table border="0" cellpadding="20" cellspacing="0" width="100%" style="background-color:#f8fafc;border:1px dashed #cbd5e1;border-radius:15px;">
+                    <tr>
+                      <td align="center">
+                        <span style="display:block;font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;font-family:sans-serif;">Weekly Dues Balance</span>
+                        <p style="color:#475569;font-size:15px;line-height:1.7;margin:0;font-family:sans-serif;">
+                          ${arrearsHtml}
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td align="center" style="color:#94a3b8;font-size:12px;padding-top:20px;font-family:sans-serif;">
+                  This is an official statement from <strong>DFCCI Threshold</strong>. Keep shining!
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     `;
 
-    await sendEmail(user.email, 'Your DFCCI Threshold Weekly Dues Statement 💰', html);
+    await sendEmail(user.email, 'Your DFCCI Threshold Weekly Dues Statement', html);
     res.json({ message: `Dues statement sent to ${user.email}` });
   } catch (err) {
     console.error('Error sending dues email:', err);
@@ -483,10 +511,15 @@ router.get('/designated', requireAuth, requireVerified, async (req, res) => {
 // Create a new designated fund
 router.post('/designated', adminOrTreasurerAuth, async (req, res) => {
   try {
-    const { name, description, targetAmount, color } = req.body;
+    const { name, description, targetAmount, color, autoAssignWeeklyDues } = req.body;
     
     if (!name || !name.trim()) {
       return res.status(400).json({ message: 'Fund name is required' });
+    }
+
+    // Ensure only one fund has autoAssignWeeklyDues at a time
+    if (autoAssignWeeklyDues) {
+      await DesignatedFund.updateMany({}, { autoAssignWeeklyDues: false });
     }
 
     const newFund = new DesignatedFund({
@@ -494,6 +527,7 @@ router.post('/designated', adminOrTreasurerAuth, async (req, res) => {
       description,
       targetAmount: Number(targetAmount) || 0,
       color: color || '#3b82f6',
+      autoAssignWeeklyDues: !!autoAssignWeeklyDues,
       createdBy: req.user._id,
     });
 
@@ -508,7 +542,7 @@ router.post('/designated', adminOrTreasurerAuth, async (req, res) => {
 // Update a designated fund
 router.put('/designated/:id', adminOrTreasurerAuth, async (req, res) => {
   try {
-    const { name, description, targetAmount, color } = req.body;
+    const { name, description, targetAmount, color, autoAssignWeeklyDues } = req.body;
     
     const fund = await DesignatedFund.findById(req.params.id);
     if (!fund) {
@@ -519,6 +553,13 @@ router.put('/designated/:id', adminOrTreasurerAuth, async (req, res) => {
     if (description !== undefined) fund.description = description;
     if (targetAmount !== undefined) fund.targetAmount = Number(targetAmount) || 0;
     if (color) fund.color = color;
+    if (autoAssignWeeklyDues !== undefined) {
+      // Ensure only one fund has the flag
+      if (autoAssignWeeklyDues) {
+        await DesignatedFund.updateMany({ _id: { $ne: fund._id } }, { autoAssignWeeklyDues: false });
+      }
+      fund.autoAssignWeeklyDues = !!autoAssignWeeklyDues;
+    }
 
     await fund.save();
     res.json(fund);

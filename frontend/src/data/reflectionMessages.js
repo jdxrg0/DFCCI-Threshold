@@ -101,3 +101,35 @@ export const AFFIRMATION_MESSAGES = {
     { title: "Be generous with it!", text: "A generous word refreshes others. Is your affirmation generous, specific, and full of genuine praise?", verse: "Whoever brings blessing will be enriched, and one who waters will himself be watered.", reference: "Proverbs 11:25" },
   ]
 };
+
+// ─── Devotional Tracker: daily time in God's Word ───────────────────────────
+export const DEVOTIONAL_MESSAGES = {
+  en: [
+    { title: "Time Well Spent", text: "Your devotion today is an investment in eternity. Every moment in God's Word shapes who you become.", verse: "Your word is a lamp to my feet and a light to my path.", reference: "Psalm 119:105" },
+    { title: "Abide in His Word", text: "Consistency in devotion is not about perfection — it's about hunger for God. Keep showing up.", verse: "If you abide in me, and my words abide in you, ask whatever you wish, and it will be done for you.", reference: "John 15:7" },
+    { title: "A Moment of Reflection", text: "Before you submit, ask yourself: did I truly meet with God today, or just read words on a page?", verse: "Draw near to God, and he will draw near to you.", reference: "James 4:8" },
+    { title: "Planted by the Waters", text: "Daily devotion is like roots growing deeper. You may not see the fruit yet, but it's coming.", verse: "He is like a tree planted by streams of water that yields its fruit in its season.", reference: "Psalm 1:3" },
+    { title: "Treasure in Your Heart", text: "What you read today, let it dwell richly in your heart. God's Word never returns void.", verse: "I have stored up your word in my heart, that I might not sin against you.", reference: "Psalm 119:11" },
+    { title: "Daily Bread", text: "Just as your body needs food, your spirit needs the Word. This devotion is nourishment for your soul.", verse: "Man shall not live by bread alone, but by every word that comes from the mouth of God.", reference: "Matthew 4:4" },
+    { title: "Renewed Every Morning", text: "God's mercies are new every morning — and so is His Word for you today. What did He reveal?", verse: "The steadfast love of the Lord never ceases; his mercies never come to an end; they are new every morning.", reference: "Lamentations 3:22-23" },
+    { title: "Be Transformed", text: "Reading is step one. Transformation happens when you apply what God is teaching you.", verse: "Do not be conformed to this world, but be transformed by the renewal of your mind.", reference: "Romans 12:2" },
+  ],
+  fil: [
+    { title: "Oras na Mahalaga", text: "Ang iyong debosyon ngayon ay isang pamumuhunan sa walang hanggan. Bawat sandali sa Salita ng Diyos ay humuhubog sa iyo.", verse: "Ang salita mo ay ilawan sa aking mga paa at liwanag sa aking landas.", reference: "Awit 119:105" },
+    { title: "Manatili sa Kanyang Salita", text: "Ang pagiging consistent sa debosyon ay hindi tungkol sa pagiging perpekto — kundi sa pagkagutom sa Diyos.", verse: "Kung kayo ay mananatili sa akin, at ang aking mga salita ay mananatili sa inyo, hingin ninyo ang anumang nais ninyo.", reference: "Juan 15:7" },
+    { title: "Sandali ng Pagninilay", text: "Bago mo i-submit, tanungin ang sarili: tunay bang nakatagpo ko ang Diyos ngayon?", verse: "Lumapit kayo sa Diyos, at lalapit siya sa inyo.", reference: "Santiago 4:8" },
+    { title: "Nakatanim sa Tubig", text: "Ang araw-araw na debosyon ay parang ugat na lumalalim. Hindi mo pa nakikita ang bunga, pero darating ito.", verse: "Siya ay tulad ng punong nakatanim sa tabi ng mga agos ng tubig na namumunga sa kapanahunan nito.", reference: "Awit 1:3" },
+    { title: "Kayamanan sa Iyong Puso", text: "Ang binasa mo ngayon, hayaang manahan nang sagana sa iyong puso.", verse: "Iniingatan ko ang iyong salita sa aking puso, upang hindi ako magkasala laban sa iyo.", reference: "Awit 119:11" },
+    { title: "Tinapay sa Araw-araw", text: "Kung paanong kailangan ng katawan ang pagkain, kailangan ng espiritu ang Salita.", verse: "Hindi sa tinapay lamang nabubuhay ang tao, kundi sa bawat salitang lumalabas sa bibig ng Diyos.", reference: "Mateo 4:4" },
+    { title: "Binabago sa Tuwina", text: "Ang pagbabasa ay unang hakbang. Ang pagbabago ay nangyayari kapag isinasabuhay mo ang itinuturo ng Diyos.", verse: "Huwag kayong mag-ayon sa mundong ito, kundi magbago kayo sa pamamagitan ng pagbabago ng inyong pag-iisip.", reference: "Roma 12:2" },
+  ],
+  conyo: [
+    { title: "Time well spent!", text: "Your devotion today is literally an investment in eternity. Every moment with God shapes who you become, bes.", verse: "Your word is a lamp to my feet and a light to my path.", reference: "Psalm 119:105" },
+    { title: "Stay consistent!", text: "Consistency isn't about being perfect — it's about being hungry for God. Keep showing up, ha?", verse: "If you abide in me, and my words abide in you, ask whatever you wish.", reference: "John 15:7" },
+    { title: "Reflect muna...", text: "Before you submit, ask yourself: did you truly meet with God today, or just read words lang?", verse: "Draw near to God, and he will draw near to you.", reference: "James 4:8" },
+    { title: "Planted deep!", text: "Daily devotion is like roots growing deeper. You may not see the fruit yet, but it's coming!", verse: "He is like a tree planted by streams of water that yields its fruit in its season.", reference: "Psalm 1:3" },
+    { title: "Store it in your heart!", text: "What you read today, let it dwell richly in your heart. God's Word never returns void!", verse: "I have stored up your word in my heart, that I might not sin against you.", reference: "Psalm 119:11" },
+    { title: "Daily bread!", text: "Just as your body needs food, your spirit needs the Word. This is literally soul food, bes.", verse: "Man shall not live by bread alone, but by every word that comes from the mouth of God.", reference: "Matthew 4:4" },
+    { title: "Be transformed!", text: "Reading is step one lang. Real change happens when you apply it. What's God teaching you?", verse: "Do not be conformed to this world, but be transformed by the renewal of your mind.", reference: "Romans 12:2" },
+  ]
+};

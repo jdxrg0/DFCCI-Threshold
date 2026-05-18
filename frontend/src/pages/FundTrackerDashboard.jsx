@@ -46,6 +46,15 @@ export default function FundTrackerDashboard() {
     localStorage.setItem('fundTrackerActiveTab', activeTab);
   }, [activeTab]);
 
+  const fmtCompact = (num) => {
+    return new Intl.NumberFormat('en-PH', { 
+      style: 'currency', 
+      currency: 'PHP',
+      notation: 'compact',
+      maximumFractionDigits: 1
+    }).format(num);
+  };
+
   // ── Overview state ──
   const [summary, setSummary] = useState({ totalIncome: 0, totalExpense: 0, currentBalance: 0 });
   const [transactions, setTransactions] = useState([]);
@@ -72,7 +81,7 @@ export default function FundTrackerDashboard() {
   const [loadingFunds, setLoadingFunds] = useState(false);
   const [showFundForm, setShowFundForm] = useState(false);
   const [editingFundId, setEditingFundId] = useState(null);
-  const [fundData, setFundData] = useState({ name: '', description: '', targetAmount: '', color: '#3b82f6' });
+  const [fundData, setFundData] = useState({ name: '', description: '', targetAmount: '', color: '#3b82f6', autoAssignWeeklyDues: false });
 
   // ── Dues Ledger state ──
   const [ledgerYear, setLedgerYear] = useState(new Date().getFullYear());
@@ -83,6 +92,9 @@ export default function FundTrackerDashboard() {
   const [showRoster, setShowRoster] = useState(false);
   const [addError, setAddError] = useState('');
   const [editingCell, setEditingCell] = useState(null); // { memberId, dateStr, value }
+
+  // ── Designated Fund Transactions Modal State ──
+  const [fundTxModal, setFundTxModal] = useState({ isOpen: false, fund: null, transactions: [], loading: false, page: 1, totalPages: 1 });
 
   // ── Link User Modal state ──
   const [linkModal, setLinkModal] = useState({ isOpen: false, member: null });
@@ -196,10 +208,10 @@ export default function FundTrackerDashboard() {
 
   // Lock body scroll when any modal is open
   useEffect(() => {
-    const anyOpen = showForm || showFellowshipForm || showFundForm || alertDialog.isOpen || confirmDialog.isOpen;
+    const anyOpen = showForm || showFellowshipForm || showFundForm || fundTxModal.isOpen || alertDialog.isOpen || confirmDialog.isOpen;
     document.body.style.overflow = anyOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
-  }, [showForm, showFellowshipForm, showFundForm, alertDialog.isOpen, confirmDialog.isOpen]);
+  }, [showForm, showFellowshipForm, showFundForm, fundTxModal.isOpen, alertDialog.isOpen, confirmDialog.isOpen]);
 
   // ── Overview handlers ──
   const handleInput = (e) => {
@@ -285,10 +297,10 @@ export default function FundTrackerDashboard() {
   const openFundForm = (fund = null) => {
     if (fund) {
       setEditingFundId(fund._id);
-      setFundData({ name: fund.name, description: fund.description || '', targetAmount: fund.targetAmount || '', color: fund.color || '#3b82f6' });
+      setFundData({ name: fund.name, description: fund.description || '', targetAmount: fund.targetAmount || '', color: fund.color || '#3b82f6', autoAssignWeeklyDues: fund.autoAssignWeeklyDues || false });
     } else {
       setEditingFundId(null);
-      setFundData({ name: '', description: '', targetAmount: '', color: '#3b82f6' });
+      setFundData({ name: '', description: '', targetAmount: '', color: '#3b82f6', autoAssignWeeklyDues: false });
     }
     setShowFundForm(true);
   };
@@ -312,6 +324,23 @@ export default function FundTrackerDashboard() {
         catch (err) { console.error(err); }
       }
     );
+  };
+
+  const openFundTxModal = async (fund) => {
+    setFundTxModal({ isOpen: true, fund, transactions: [], loading: true, page: 1, totalPages: 1 });
+    try {
+      const res = await api.get(`/funds?designatedFund=${fund._id}&page=1&limit=10`);
+      setFundTxModal(prev => ({ ...prev, transactions: res.data.transactions, totalPages: res.data.totalPages, loading: false }));
+    } catch (err) { console.error(err); setFundTxModal(prev => ({ ...prev, loading: false })); }
+  };
+
+  const loadFundTxPage = async (page) => {
+    if (!fundTxModal.fund) return;
+    setFundTxModal(prev => ({ ...prev, loading: true }));
+    try {
+      const res = await api.get(`/funds?designatedFund=${fundTxModal.fund._id}&page=${page}&limit=10`);
+      setFundTxModal(prev => ({ ...prev, transactions: res.data.transactions, totalPages: res.data.totalPages, page, loading: false }));
+    } catch (err) { console.error(err); setFundTxModal(prev => ({ ...prev, loading: false })); }
   };
 
   // ── Dues Ledger handlers ──
@@ -612,30 +641,35 @@ ${formattedDesc}
         </Link>
       </div>
 
-      {/* Summary Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '1rem' }}>
-        <div className="card" style={{ textAlign: 'center', padding: '0.75rem' }}>
-          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('current_balance')}</p>
-          <p style={{ fontSize: '1.25rem', fontWeight: 'bold', color: summary.currentBalance >= 0 ? '#22c55e' : '#ef4444' }}>{fmt(summary.currentBalance)}</p>
+      {/* Summary Unified Card */}
+      <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 0.5rem', marginBottom: '1.5rem' }}>
+        <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('current_balance')}</p>
+          <p style={{ fontSize: '1.3rem', fontWeight: '800', color: summary.currentBalance >= 0 ? '#22c55e' : '#ef4444', lineHeight: 1 }}>{fmtCompact(summary.currentBalance)}</p>
+          <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>{fmt(summary.currentBalance)}</p>
         </div>
-        <div className="card" style={{ textAlign: 'center', padding: '0.75rem' }}>
-          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_income')}</p>
-          <p style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#22c55e' }}>+{fmt(summary.totalIncome)}</p>
+        <div style={{ width: '1px', height: '50px', background: 'var(--border-color)' }} />
+        <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_income')}</p>
+          <p style={{ fontSize: '1.3rem', fontWeight: '700', color: '#22c55e', lineHeight: 1 }}>+{fmtCompact(summary.totalIncome)}</p>
+          <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>{fmt(summary.totalIncome)}</p>
         </div>
-        <div className="card" style={{ textAlign: 'center', padding: '0.75rem' }}>
-          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_expense')}</p>
-          <p style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#ef4444' }}>-{fmt(summary.totalExpense)}</p>
+        <div style={{ width: '1px', height: '50px', background: 'var(--border-color)' }} />
+        <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_expense')}</p>
+          <p style={{ fontSize: '1.3rem', fontWeight: '700', color: '#ef4444', lineHeight: 1 }}>-{fmtCompact(summary.totalExpense)}</p>
+          <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>{fmt(summary.totalExpense)}</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '2px solid var(--border-color)', overflowX: 'auto' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
         {[
           { id: 'overview', label: t('overview_tab') }, 
           { id: 'dues', label: t('weekly_dues_tab') },
           { id: 'budgets', label: 'Designated Funds' }
         ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ background: 'none', border: 'none', padding: '0.4rem 1rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: activeTab === tab.id ? 'var(--primary)' : 'var(--text-muted)', borderBottom: activeTab === tab.id ? '2px solid var(--primary)' : '2px solid transparent', marginBottom: '-2px', transition: 'color 0.2s', whiteSpace: 'nowrap' }}>
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ background: activeTab === tab.id ? 'var(--primary)' : 'var(--bg-color)', border: '1px solid', borderColor: activeTab === tab.id ? 'var(--primary)' : 'var(--border-color)', borderRadius: '99px', padding: '0.5rem 1.25rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: activeTab === tab.id ? '#ffffff' : 'var(--text-main)', transition: 'all 0.2s', whiteSpace: 'nowrap', boxShadow: activeTab === tab.id ? '0 4px 12px rgba(59, 130, 246, 0.25)' : 'none' }}>
             {tab.label}
           </button>
         ))}
@@ -1056,15 +1090,18 @@ ${formattedDesc}
                             )}
 
                             <div style={{ display: 'flex', gap: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
-                              <div>
+                              <div style={{ flex: 1 }}>
                                 <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Total In</p>
                                 <p style={{ fontSize: '0.85rem', fontWeight: '600', color: '#22c55e' }}>+{fmt(fund.totalIncome)}</p>
                               </div>
-                              <div>
+                              <div style={{ flex: 1 }}>
                                 <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Total Out</p>
                                 <p style={{ fontSize: '0.85rem', fontWeight: '600', color: '#ef4444' }}>-{fmt(fund.totalExpense)}</p>
                               </div>
                             </div>
+                            <button onClick={() => openFundTxModal(fund)} style={{ width: '100%', marginTop: '1rem', padding: '0.5rem', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600', transition: 'background 0.2s' }} onMouseOver={e => e.currentTarget.style.background='var(--surface)'} onMouseOut={e => e.currentTarget.style.background='var(--bg-color)'}>
+                              View Transactions
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1287,7 +1324,22 @@ ${formattedDesc}
                     <input type="color" value={fundData.color} onChange={e => setFundData(f => ({ ...f, color: e.target.value }))} style={{ width: '50px', height: '38px', padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
                   </div>
                 </div>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4, marginTop: '0.5rem' }}>Any transactions manually assigned to this budget will automatically update its balance.</p>
+
+                {/* Auto-assign toggle */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '4px', marginTop: '0.25rem' }}>
+                  <label style={{ position: 'relative', display: 'inline-block', width: '42px', height: '22px', flexShrink: 0, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={fundData.autoAssignWeeklyDues} onChange={e => setFundData(f => ({ ...f, autoAssignWeeklyDues: e.target.checked }))} style={{ opacity: 0, width: 0, height: 0 }} />
+                    <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: fundData.autoAssignWeeklyDues ? (fundData.color || '#3b82f6') : '#94a3b8', borderRadius: '99px', transition: '0.3s' }}>
+                      <span style={{ position: 'absolute', content: '""', height: '16px', width: '16px', left: fundData.autoAssignWeeklyDues ? '22px' : '3px', bottom: '3px', background: 'white', borderRadius: '50%', transition: '0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                    </span>
+                  </label>
+                  <div>
+                    <p style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-main)', margin: 0 }}>Auto-assign Weekly Dues</p>
+                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0.15rem 0 0', lineHeight: 1.3 }}>Automatically link all new weekly dues payments to this budget.</p>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4, marginTop: '0.5rem' }}>Any transactions manually assigned to this budget will also update its balance.</p>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', padding: '1.25rem 1.5rem', borderTop: '1px solid var(--border-color)', background: 'var(--bg-color)', marginTop: 'auto' }}>
@@ -1300,6 +1352,55 @@ ${formattedDesc}
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Designated Fund Transactions Modal */}
+      {fundTxModal.isOpen && fundTxModal.fund && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
+          <div className="card" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+            <div style={{ height: '4px', background: fundTxModal.fund.color || '#3b82f6' }} />
+            <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0 }}>{fundTxModal.fund.name}</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.2rem 0 0' }}>Associated Transactions</p>
+              </div>
+              <button onClick={() => setFundTxModal({ ...fundTxModal, isOpen: false })} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '0.1rem 0.3rem' }}>✕</button>
+            </div>
+            
+            <div style={{ padding: '1rem', overflowY: 'auto', flex: 1, background: 'var(--bg-color)' }}>
+              {fundTxModal.loading ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>Loading...</p>
+              ) : fundTxModal.transactions.length === 0 ? (
+                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>No transactions found for this budget.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {fundTxModal.transactions.map(tx => (
+                    <div key={tx._id} style={{ padding: '0.75rem', background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <p style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.9rem', margin: '0 0 0.25rem' }}>{tx.category}</p>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>{new Date(tx.date).toLocaleDateString()}</p>
+                        </div>
+                        <span style={{ fontWeight: 'bold', fontSize: '1rem', color: tx.type === 'INCOME' ? '#22c55e' : '#ef4444' }}>
+                          {tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}
+                        </span>
+                      </div>
+                      {tx.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.4, background: 'var(--bg-color)', padding: '0.4rem 0.5rem', borderRadius: '4px' }}>{tx.description}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            {fundTxModal.totalPages > 1 && (
+              <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', flexShrink: 0, background: 'var(--surface)' }}>
+                <button disabled={fundTxModal.page === 1} onClick={() => loadFundTxPage(fundTxModal.page - 1)} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', opacity: fundTxModal.page === 1 ? 0.4 : 1 }}>‹</button>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Page {fundTxModal.page} of {fundTxModal.totalPages}</span>
+                <button disabled={fundTxModal.page === fundTxModal.totalPages} onClick={() => loadFundTxPage(fundTxModal.page + 1)} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', opacity: fundTxModal.page === fundTxModal.totalPages ? 0.4 : 1 }}>›</button>
+              </div>
+            )}
           </div>
         </div>
       )}

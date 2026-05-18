@@ -29,6 +29,12 @@ import FundTrackerDashboard from './pages/FundTrackerDashboard';
 import ResourceCenter from './pages/ResourceCenter';
 import ResourceDetail from './pages/ResourceDetail';
 import ForceLogout from './pages/ForceLogout';
+import GamesDashboard from './pages/GamesDashboard';
+import QuizPlay from './pages/QuizPlay';
+import QuizCreate from './pages/QuizCreate';
+import DevotionalDashboard from './pages/DevotionalDashboard';
+import SubmitDevotional from './pages/SubmitDevotional';
+import DevotionalView from './pages/DevotionalView';
 
 const RootRedirect = () => {
   const { user, loading } = useAuth();
@@ -114,6 +120,15 @@ const App = () => {
                 <Route path="/funds" element={<ProtectedRoute><FundTrackerDashboard /></ProtectedRoute>} />
                 <Route path="/resources" element={<ProtectedRoute><ResourceCenter /></ProtectedRoute>} />
                 <Route path="/resources/:id" element={<ProtectedRoute><ResourceDetail /></ProtectedRoute>} />
+                
+                <Route path="/games" element={<ProtectedRoute><GamesDashboard /></ProtectedRoute>} />
+                <Route path="/games/play/:id" element={<ProtectedRoute><QuizPlay /></ProtectedRoute>} />
+                <Route path="/games/create" element={<ProtectedRoute><QuizCreate /></ProtectedRoute>} />
+                <Route path="/games/edit/:id" element={<ProtectedRoute><QuizCreate /></ProtectedRoute>} />
+                
+                <Route path="/devotionals" element={<ProtectedRoute><DevotionalDashboard /></ProtectedRoute>} />
+                <Route path="/devotionals/submit" element={<ProtectedRoute><SubmitDevotional /></ProtectedRoute>} />
+                <Route path="/devotionals/:id" element={<ProtectedRoute><DevotionalView /></ProtectedRoute>} />
               </Routes>
             </main>
           </div>
