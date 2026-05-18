@@ -18,13 +18,21 @@ import {
 import { PRESETS, renderPresetSvg, renderAvatarHelper } from '../utils/avatarHelper';
 
 const ProfileSettings = () => {
-  const { user, updateProfile, updateEmail, updatePassword, removeProfilePicture } = useAuth();
+  const { user, updateProfile, updateEmail, verifyEmailOtp, resendEmailOtp, cancelEmailUpdate, updatePassword, removeProfilePicture } = useAuth();
   const { t } = useLanguage();
   const navigate = useNavigate();
 
   // ── States ──
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [email, setEmail] = useState(user?.email || '');
+  
+  // Verification states
+  const [showEmailVerifyModal, setShowEmailVerifyModal] = useState(false);
+  const [emailOtp, setEmailOtp] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
   
   // Password States
   const [currentPassword, setCurrentPassword] = useState('');
@@ -44,6 +52,14 @@ const ProfileSettings = () => {
 
   // Drag and Drop State
   const [dragActive, setDragActive] = useState(false);
+
+  // Synchronize pending verification state on load/update
+  useEffect(() => {
+    if (user?.pendingEmail) {
+      setPendingEmail(user.pendingEmail);
+      setShowEmailVerifyModal(true);
+    }
+  }, [user]);
 
   // Refs
   const fileInputRef = useRef(null);
@@ -205,12 +221,79 @@ const ProfileSettings = () => {
     setSuccessMsg('');
 
     try {
-      await updateEmail(email);
-      setSuccessMsg('Email updated successfully!');
+      const data = await updateEmail(email);
+      if (data?.requiresVerification) {
+        setPendingEmail(data.pendingEmail);
+        setShowEmailVerifyModal(true);
+        setEmailOtp('');
+        setSuccessMsg(data.message || 'A verification code has been sent to your new email.');
+      } else {
+        setSuccessMsg('Email updated successfully!');
+      }
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Failed to update email.');
     } finally {
       setEmailLoading(false);
+    }
+  };
+
+  const handleVerifyEmailOtp = async (e) => {
+    e.preventDefault();
+    if (!emailOtp || emailOtp.trim() === '') {
+      return setErrorMsg('Verification code is required.');
+    }
+
+    setVerifyLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      await verifyEmailOtp(emailOtp.trim());
+      setShowEmailVerifyModal(false);
+      setEmail(pendingEmail);
+      setPendingEmail('');
+      setEmailOtp('');
+      setSuccessMsg('Email verified and updated successfully!');
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Invalid or expired verification code.');
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const handleResendEmailOtp = async () => {
+    setResendLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const data = await resendEmailOtp();
+      setSuccessMsg(data.message || 'A new verification code has been sent.');
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to resend verification code.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
+
+  const handleCancelEmailUpdate = async () => {
+    if (!window.confirm('Are you sure you want to cancel your pending email update?')) return;
+
+    setCancelLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      await cancelEmailUpdate();
+      setShowEmailVerifyModal(false);
+      setPendingEmail('');
+      setEmailOtp('');
+      setEmail(user?.email || '');
+      setSuccessMsg('Email update request cancelled successfully.');
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || 'Failed to cancel email update.');
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -380,6 +463,171 @@ const ProfileSettings = () => {
             >
               OK
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Secure Email OTP Verification Modal ── */}
+      {showEmailVerifyModal && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 11000,
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <div 
+            style={{
+              backgroundColor: 'var(--card-bg, #1a1a24)',
+              border: '1px solid rgba(59, 130, 246, 0.35)',
+              borderRadius: '16px',
+              padding: '2.5rem 2rem',
+              width: '100%',
+              maxWidth: '400px',
+              textAlign: 'center',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+              animation: 'scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              margin: '1.5rem',
+            }}
+          >
+            {/* Shield / Mail Verification Icon */}
+            <div 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '60px',
+                height: '60px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                color: '#3B82F6',
+                margin: '0 auto 1.25rem auto',
+                boxShadow: '0 0 20px rgba(59, 130, 246, 0.2)',
+              }}
+            >
+              <Mail size={30} strokeWidth={2.5} />
+            </div>
+
+            {/* Modal Title */}
+            <h3 
+              className="text-gradient"
+              style={{
+                fontSize: '1.45rem',
+                fontWeight: 'bold',
+                marginBottom: '0.75rem',
+                marginTop: 0,
+              }}
+            >
+              Verify Your New Email
+            </h3>
+
+            {/* Description text */}
+            <p 
+              style={{
+                fontSize: '0.9rem',
+                color: 'var(--text-main)',
+                opacity: 0.9,
+                lineHeight: '1.5',
+                marginBottom: '1.85rem',
+                marginTop: 0,
+              }}
+            >
+              Enter the 6-digit verification code sent to your new email address: <br />
+              <strong style={{ color: 'var(--primary)', wordBreak: 'break-all' }}>{pendingEmail}</strong>
+            </p>
+
+            {/* Form */}
+            <form onSubmit={handleVerifyEmailOtp}>
+              <div style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <label style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05rem', marginBottom: '0.65rem' }}>
+                  Verification Code
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={emailOtp}
+                  onChange={(e) => setEmailOtp(e.target.value.replace(/\D/g, ''))} // Numeric only
+                  required
+                  placeholder="000000"
+                  style={{
+                    width: '100%',
+                    maxWidth: '240px',
+                    height: '52px',
+                    borderRadius: '12px',
+                    border: '2px solid rgba(59, 130, 246, 0.3)',
+                    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                    color: '#ffffff',
+                    caretColor: 'var(--primary)',
+                    fontSize: '1.6rem',
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    letterSpacing: '0.45rem',
+                    outline: 'none',
+                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                    paddingLeft: '0.45rem' // offsets letter-spacing of the last character
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = 'var(--primary)';
+                    e.target.style.boxShadow = '0 0 15px rgba(59, 130, 246, 0.25)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'rgba(59, 130, 246, 0.3)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={() => { setShowEmailVerifyModal(false); setPendingEmail(''); setErrorMsg(''); }}
+                  className="ff-btn ff-btn-secondary"
+                  style={{ flex: 1, padding: '0.75rem 1.5rem', borderRadius: '10px', fontSize: '0.95rem', fontWeight: 'bold' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="ff-btn ff-btn-primary"
+                  style={{ flex: 1, padding: '0.75rem 1.5rem', borderRadius: '10px', fontSize: '0.95rem', fontWeight: 'bold' }}
+                  disabled={verifyLoading}
+                >
+                  {verifyLoading ? 'Verifying...' : 'Verify'}
+                </button>
+              </div>
+            </form>
+
+            {/* Resend Code Option */}
+            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={handleResendEmailOtp}
+                disabled={resendLoading}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--primary)',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  opacity: resendLoading ? 0.6 : 1,
+                }}
+              >
+                {resendLoading ? 'Resending Code...' : 'Resend Code'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -566,6 +814,54 @@ const ProfileSettings = () => {
             <h2 style={{ fontSize: '1.3rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
               <Mail size={18} color="var(--primary)" /> {t('update_email_btn')}
             </h2>
+
+            {user?.pendingEmail && (
+              <div 
+                style={{
+                  backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                  border: '1px solid rgba(59, 130, 246, 0.25)',
+                  borderRadius: '12px',
+                  padding: '1.25rem',
+                  marginBottom: '1.5rem',
+                  color: 'var(--text-main)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.85rem',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                  <ShieldAlert size={18} color="#3B82F6" style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div style={{ fontSize: '0.88rem', lineHeight: '1.45' }}>
+                    You have a pending request to update your email to:<br />
+                    <strong style={{ color: 'var(--primary)', wordBreak: 'break-all' }}>{user.pendingEmail}</strong>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.25rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPendingEmail(user.pendingEmail);
+                      setShowEmailVerifyModal(true);
+                      setEmailOtp('');
+                    }}
+                    className="ff-btn ff-btn-primary"
+                    style={{ flex: 1, padding: '0.5rem 1rem', fontSize: '0.82rem', borderRadius: '8px', minHeight: 'auto' }}
+                  >
+                    Verify Now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelEmailUpdate}
+                    disabled={cancelLoading}
+                    className="ff-btn ff-btn-secondary"
+                    style={{ flex: 1, padding: '0.5rem 1rem', fontSize: '0.82rem', borderRadius: '8px', minHeight: 'auto' }}
+                  >
+                    {cancelLoading ? 'Cancelling...' : 'Cancel Request'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <form onSubmit={handleUpdateEmail}>
               {user?.googleId && (

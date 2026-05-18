@@ -42,6 +42,11 @@ const userSchema = new mongoose.Schema({
   otpExpires: {
     type: Date,
   },
+  pendingEmail: {
+    type: String,
+    lowercase: true,
+    trim: true,
+  },
   subscribedToDuesReminders: {
     type: Boolean,
     default: false,

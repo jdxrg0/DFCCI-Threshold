@@ -127,9 +127,36 @@ export const AuthProvider = ({ children }) => {
 
   const updateEmail = async (email) => {
     const res = await api.put('/users/me/update-email', { email });
-    const freshUser = res.data.user;
-    setUser(freshUser);
-    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser));
+    if (res.data.user) {
+      const freshUser = res.data.user;
+      setUser(freshUser);
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser));
+    }
+    return res.data;
+  };
+
+  const verifyEmailOtp = async (otp) => {
+    const res = await api.post('/users/me/verify-email-otp', { otp });
+    if (res.data.user) {
+      const freshUser = res.data.user;
+      setUser(freshUser);
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser));
+    }
+    return res.data;
+  };
+
+  const resendEmailOtp = async () => {
+    const res = await api.post('/users/me/resend-email-otp');
+    return res.data;
+  };
+
+  const cancelEmailUpdate = async () => {
+    const res = await api.post('/users/me/cancel-email-update');
+    if (res.data.user) {
+      const freshUser = res.data.user;
+      setUser(freshUser);
+      localStorage.setItem(USER_CACHE_KEY, JSON.stringify(freshUser));
+    }
     return res.data;
   };
 
@@ -158,6 +185,9 @@ export const AuthProvider = ({ children }) => {
       updateDisplayName,
       updateProfile,
       updateEmail,
+      verifyEmailOtp,
+      resendEmailOtp,
+      cancelEmailUpdate,
       updatePassword,
       removeProfilePicture
     }}>

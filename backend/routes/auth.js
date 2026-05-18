@@ -316,7 +316,8 @@ router.get('/me', requireAuth, async (req, res) => {
         email: req.user.email,
         nameChangeRequested: req.user.nameChangeRequested,
         profilePicture: req.user.profilePicture,
-        hasPassword: hasPassword
+        hasPassword: hasPassword,
+        pendingEmail: req.user.pendingEmail
       }
     });
   } catch (error) {

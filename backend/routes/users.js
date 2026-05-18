@@ -6,6 +6,9 @@ const multer = require('multer');
 const User = require('../models/User');
 const { requireAuth, requireRole, requireVerified } = require('../middleware/authMiddleware');
 const { cloudinary } = require('../utils/cloudinary');
+const sendEmail = require('../utils/sendEmail');
+
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 const profileStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
@@ -200,7 +203,7 @@ router.put('/me/update-profile', requireAuth, uploadProfile.single('profilePictu
   }
 });
 
-// Update email (Authenticated user)
+// Update email (Authenticated user - triggers verification code to new email)
 router.put('/me/update-email', requireAuth, async (req, res) => {
   try {
     const { email } = req.body;
@@ -220,11 +223,88 @@ router.put('/me/update-email', requireAuth, async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    user.email = normalizedEmail;
+    if (user.email === normalizedEmail) {
+      return res.status(400).json({ message: 'This is already your current email address.' });
+    }
+
+    // Generate 6-digit verification code and save it
+    const otp = generateOTP();
+    user.pendingEmail = normalizedEmail;
+    user.otp = otp;
+    user.otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    await user.save();
+
+    // Send code to the NEW email address
+    await sendEmail(
+      normalizedEmail,
+      'Verify Your New Email Address - DFCCI Threshold',
+      `<h3>Email Verification Code</h3>
+       <p>You requested to change your email to this address on your DFCCI Threshold account.</p>
+       <p>Your 6-digit verification code is: <strong>${otp}</strong></p>
+       <p>This code will expire in 15 minutes.</p>
+       <p>If you did not request this change, please ignore this email.</p>`
+    );
+
+    res.json({
+      requiresVerification: true,
+      pendingEmail: normalizedEmail,
+      message: 'A verification code has been sent to your new email. Please verify to complete the update.',
+      user: {
+        _id: user._id,
+        displayName: user.displayName,
+        role: user.role,
+        email: user.email,
+        nameChangeRequested: user.nameChangeRequested,
+        profilePicture: user.profilePicture,
+        pendingEmail: user.pendingEmail
+      }
+    });
+  } catch (error) {
+    console.error('Error initiating email update:', error);
+    res.status(500).json({ message: 'Server error while initiating email update' });
+  }
+});
+
+// Verify Email Verification Code (Authenticated user)
+router.post('/me/verify-email-otp', requireAuth, async (req, res) => {
+  try {
+    const { otp } = req.body;
+    if (!otp) {
+      return res.status(400).json({ message: 'Verification code is required.' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.pendingEmail) {
+      return res.status(400).json({ message: 'No pending email update found.' });
+    }
+
+    if (!user.otp || user.otp !== otp) {
+      return res.status(400).json({ message: 'Invalid verification code.' });
+    }
+
+    if (user.otpExpires < Date.now()) {
+      return res.status(400).json({ message: 'Verification code has expired. Please request a new one.' });
+    }
+
+    // Double check unique constraint one last time
+    const existingUser = await User.findOne({ email: user.pendingEmail });
+    if (existingUser && existingUser._id.toString() !== user._id.toString()) {
+      return res.status(400).json({ message: 'This email is already taken by another user.' });
+    }
+
+    // Finalize update
+    user.email = user.pendingEmail;
+    user.pendingEmail = undefined;
+    user.otp = undefined;
+    user.otpExpires = undefined;
     await user.save();
 
     res.json({
-      message: 'Email updated successfully',
+      message: 'Email updated successfully!',
       user: {
         _id: user._id,
         displayName: user.displayName,
@@ -235,8 +315,73 @@ router.put('/me/update-email', requireAuth, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error updating email:', error);
-    res.status(500).json({ message: 'Server error while updating email' });
+    console.error('Error verifying email OTP:', error);
+    res.status(500).json({ message: 'Server error while verifying email verification code' });
+  }
+});
+
+// Resend Email Verification Code (Authenticated user)
+router.post('/me/resend-email-otp', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.pendingEmail) {
+      return res.status(400).json({ message: 'No pending email update found.' });
+    }
+
+    const otp = generateOTP();
+    user.otp = otp;
+    user.otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    await user.save();
+
+    await sendEmail(
+      user.pendingEmail,
+      'Verify Your New Email Address - DFCCI Threshold',
+      `<h3>New Email Verification Code</h3>
+       <p>You requested to change your email to this address on your DFCCI Threshold account.</p>
+       <p>Your new 6-digit verification code is: <strong>${otp}</strong></p>
+       <p>This code will expire in 15 minutes.</p>
+       <p>If you did not request this change, please ignore this email.</p>`
+    );
+
+    res.json({ message: 'A new verification code has been sent to your pending email address.' });
+  } catch (error) {
+    console.error('Error resending email OTP:', error);
+    res.status(500).json({ message: 'Server error while resending verification code' });
+  }
+});
+
+// Cancel Pending Email Update (Authenticated user)
+router.post('/me/cancel-email-update', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.pendingEmail = undefined;
+    user.otp = undefined;
+    user.otpExpires = undefined;
+    await user.save();
+
+    res.json({
+      message: 'Email update request cancelled successfully.',
+      user: {
+        _id: user._id,
+        displayName: user.displayName,
+        role: user.role,
+        email: user.email,
+        nameChangeRequested: user.nameChangeRequested,
+        profilePicture: user.profilePicture,
+        pendingEmail: undefined
+      }
+    });
+  } catch (error) {
+    console.error('Error cancelling email update:', error);
+    res.status(500).json({ message: 'Server error while cancelling email update' });
   }
 });
 
