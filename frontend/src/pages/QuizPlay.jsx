@@ -253,39 +253,41 @@ const QuizPlay = () => {
     const totalTime = quiz.questions.reduce((sum, q) => sum + (q.timeLimit || 15), 0);
     return (
       <div className="container" style={{ maxWidth: '600px', padding: '2rem 1rem' }}>
-        <button onClick={() => navigate('/games')} className="back-btn">
-          <ChevronLeft size={18} /> {t('back')}
-        </button>
-        <div className="card" style={{ textAlign: 'center', padding: '2.5rem 1.5rem' }}>
-          <div style={{ display: 'inline-flex', padding: '1rem', backgroundColor: 'color-mix(in srgb, var(--primary) 10%, transparent)', borderRadius: '50%', marginBottom: '1.5rem' }}>
-            <Gamepad2 size={40} style={{ color: 'var(--primary)' }} />
+        <div className="btn-back-wrapper">
+          <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/games')} className="btn-back-pill">
+            <ChevronLeft size={16} /> {t('back')}
+          </button>
+        </div>
+        <div className="games-card-glass" style={{ textAlign: 'center', padding: '3rem 2rem', borderLeft: 'none' }}>
+          <div style={{ display: 'inline-flex', padding: '1.25rem', backgroundColor: 'color-mix(in srgb, var(--primary) 12%, transparent)', borderRadius: '50%', marginBottom: '1.5rem', boxShadow: '0 4px 20px color-mix(in srgb, var(--primary) 15%, transparent)' }}>
+            <Gamepad2 size={42} style={{ color: 'var(--primary)' }} />
           </div>
-          <h1 style={{ fontSize: '1.8rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: '850', color: 'var(--text-main)', marginBottom: '0.75rem', letterSpacing: '-0.02em' }}>
             {quiz.title}
           </h1>
           {quiz.description && (
-            <p style={{ color: 'var(--text-muted)', fontSize: '1rem', marginBottom: '1.5rem', lineHeight: '1.5' }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '2rem', lineHeight: '1.5', fontWeight: '500' }}>
               {quiz.description}
             </p>
           )}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '2.5rem', marginBottom: '2.5rem', flexWrap: 'wrap' }}>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                <Target size={16} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', color: 'var(--primary)', marginBottom: '0.35rem' }}>
+                <Target size={18} />
               </div>
-              <span style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-main)' }}>{quiz.questions.length}</span>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('games_questions')}</div>
+              <span style={{ fontSize: '1.6rem', fontWeight: '850', color: 'var(--text-main)', letterSpacing: '-0.01em', lineHeight: '1' }}>{quiz.questions.length}</span>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', marginTop: '0.2rem' }}>{t('games_questions')}</div>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>
-                <Clock size={16} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'center', color: 'var(--primary)', marginBottom: '0.35rem' }}>
+                <Clock size={18} />
               </div>
-              <span style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-main)' }}>~{Math.ceil(totalTime / 60)}</span>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>min</div>
+              <span style={{ fontSize: '1.6rem', fontWeight: '850', color: 'var(--text-main)', letterSpacing: '-0.01em', lineHeight: '1' }}>~{Math.ceil(totalTime / 60)}</span>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', marginTop: '0.2rem' }}>min</div>
             </div>
           </div>
-          <button onClick={startQuiz} className="btn btn-primary" style={{ padding: '0.75rem 2.5rem', fontSize: '1.1rem', gap: '0.5rem' }}>
-            <Play size={20} /> {t('games_start_quiz')}
+          <button onClick={startQuiz} className="btn btn-primary" style={{ padding: '0.85rem 3rem', fontSize: '1.05rem', gap: '0.5rem', borderRadius: '9999px', fontWeight: '800' }}>
+            <Play size={18} /> {t('games_start_quiz')}
           </button>
         </div>
       </div>
@@ -297,7 +299,7 @@ const QuizPlay = () => {
     return (
       <div className="container" style={{ maxWidth: '600px', padding: '4rem 1rem', textAlign: 'center' }}>
         <div className="quiz-loading-spinner" />
-        <p style={{ color: 'var(--text-muted)', marginTop: '1rem', fontSize: '1.1rem' }}>Scoring your quiz...</p>
+        <p style={{ color: 'var(--text-muted)', marginTop: '1.5rem', fontSize: '1.1rem', fontWeight: '600' }}>Scoring your quiz...</p>
       </div>
     );
   }
@@ -308,27 +310,27 @@ const QuizPlay = () => {
     const progress = ((currentIndex) / quiz.questions.length) * 100;
 
     return (
-      <div className="container" style={{ maxWidth: '650px', padding: '1rem' }}>
+      <div className="container" style={{ maxWidth: '650px', padding: '2rem 1rem' }}>
         {/* Progress bar */}
-        <div className="quiz-progress-bar" style={{ marginBottom: '1rem' }}>
-          <div className="quiz-progress-fill" style={{ width: `${progress}%` }} />
+        <div className="quiz-progress-bar" style={{ height: '6px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '9999px', overflow: 'hidden', border: '1px solid var(--surface-border)', marginBottom: '1.5rem' }}>
+          <div className="quiz-progress-fill" style={{ height: '100%', background: 'linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 65%, #ffffff))', width: `${progress}%`, transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 0 8px var(--primary)' }} />
         </div>
 
         {/* Header: question count + timer */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '600' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             {t('games_question')} {currentIndex + 1} / {quiz.questions.length}
           </span>
           <TimerRing timeLeft={timeLeft} maxTime={question.timeLimit || 15} />
         </div>
 
         {/* Question */}
-        <div className="card" style={{ padding: '1.5rem', marginBottom: '1.25rem', borderLeft: '4px solid var(--primary)' }}>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: '700', color: 'var(--text-main)', lineHeight: '1.4' }}>
+        <div className="games-card-glass" style={{ padding: '2rem', marginBottom: '1.5rem' }}>
+          <h2 style={{ fontSize: '1.35rem', fontWeight: '800', color: 'var(--text-main)', lineHeight: '1.4', letterSpacing: '-0.01em' }}>
             {question.questionText}
           </h2>
           {question.questionType === 'true_false' && (
-            <span className="badge" style={{ marginTop: '0.5rem', fontSize: '0.7rem' }}>True / False</span>
+            <span className="badge" style={{ marginTop: '0.75rem', fontSize: '0.7rem', backgroundColor: 'color-mix(in srgb, var(--primary) 12%, transparent)', color: 'var(--primary)', borderColor: 'color-mix(in srgb, var(--primary) 25%, transparent)' }}>True / False</span>
           )}
         </div>
 
@@ -360,89 +362,110 @@ const QuizPlay = () => {
     const isGreat = results.percentage >= 70;
 
     return (
-      <div className="container" style={{ maxWidth: '650px', padding: '1rem' }}>
+      <div className="container" style={{ maxWidth: '650px', padding: '2rem 1rem' }}>
         {isPerfect && <Confetti />}
 
-        <div className="card" style={{ textAlign: 'center', padding: '2rem 1.5rem', marginBottom: '1.5rem', position: 'relative', overflow: 'hidden' }}>
+        <div className="games-card-glass" style={{ textAlign: 'center', padding: '3rem 2rem', marginBottom: '2rem', position: 'relative', overflow: 'hidden', borderLeft: 'none' }}>
           {/* Accent glow */}
           <div style={{
             position: 'absolute', top: 0, left: 0, right: 0, height: '4px',
-            background: isPerfect ? 'linear-gradient(90deg, #10b981, #34d399, #10b981)' : isGreat ? 'linear-gradient(90deg, var(--primary), var(--primary-hover), var(--primary))' : 'linear-gradient(90deg, #f59e0b, #fbbf24, #f59e0b)'
+            background: isPerfect ? 'linear-gradient(90deg, #10b981, #34d399, #10b981)' : isGreat ? 'linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #ffffff), var(--primary))' : 'linear-gradient(90deg, #f59e0b, #fbbf24, #f59e0b)'
           }} />
 
-          <div style={{ marginBottom: '1rem' }}>
+          <div style={{ marginBottom: '1.25rem' }}>
             {isPerfect ? (
-              <span style={{ fontSize: '3rem' }}>🎉</span>
+              <span style={{ fontSize: '3.5rem' }}>🎉</span>
             ) : isGreat ? (
-              <span style={{ fontSize: '3rem' }}>🌟</span>
+              <span style={{ fontSize: '3.5rem' }}>🌟</span>
             ) : (
-              <span style={{ fontSize: '3rem' }}>💪</span>
+              <span style={{ fontSize: '3.5rem' }}>💪</span>
             )}
           </div>
 
-          <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+          <h2 style={{ fontSize: '1.75rem', fontWeight: '850', color: 'var(--text-main)', marginBottom: '0.5rem', letterSpacing: '-0.02em' }}>
             {isPerfect ? t('games_perfect') : isGreat ? 'Great Job!' : 'Good Effort!'}
           </h2>
 
-          <div style={{ fontSize: '3.5rem', fontWeight: '800', color: isPerfect ? '#10b981' : 'var(--primary)', lineHeight: 1, marginBottom: '0.25rem' }}>
+          <div style={{ fontSize: '4.2rem', fontWeight: '900', color: isPerfect ? '#10b981' : 'var(--primary)', lineHeight: 1, marginBottom: '0.25rem', letterSpacing: '-0.03em' }}>
             {animatedScore}/{results.totalQuestions}
           </div>
-          <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)', fontWeight: '600', marginBottom: '1rem' }}>
+          <div style={{ fontSize: '1.3rem', color: 'var(--text-muted)', fontWeight: '700', marginBottom: '1.5rem' }}>
             {results.percentage}%
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              <Clock size={16} /> {formatTime(results.timeTakenMs)}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.88rem', fontWeight: '600' }}>
+              <Clock size={16} style={{ color: 'var(--primary)' }} /> {formatTime(results.timeTakenMs)}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.88rem', fontWeight: '600' }}>
               <CheckCircle2 size={16} style={{ color: '#10b981' }} /> {results.score} correct
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--text-muted)', fontSize: '0.88rem', fontWeight: '600' }}>
               <XCircle size={16} style={{ color: '#ef4444' }} /> {results.totalQuestions - results.score} wrong
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <button onClick={() => { setPhase('preview'); setResults(null); }} className="btn btn-secondary" style={{ gap: '0.4rem' }}>
+            <button onClick={() => { setPhase('preview'); setResults(null); }} className="btn btn-secondary" style={{ gap: '0.4rem', borderRadius: '9999px', padding: '0.6rem 1.5rem' }}>
               <RotateCcw size={16} /> {t('games_try_again')}
             </button>
-            <Link to="/games" className="btn btn-primary" style={{ gap: '0.4rem' }}>
+            <Link to="/games" className="btn btn-primary" style={{ gap: '0.4rem', borderRadius: '9999px', padding: '0.6rem 1.5rem', fontWeight: '700' }}>
               <Gamepad2 size={16} /> Back to Games
             </Link>
           </div>
         </div>
 
         {/* Answer Review */}
-        <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '0.75rem' }}>
+        <h3 style={{ fontSize: '1.25rem', fontWeight: '850', color: 'var(--text-main)', marginBottom: '1rem', letterSpacing: '-0.02em' }}>
           {t('games_review')}
         </h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {results.results.map((r, i) => (
-            <div key={i} className="card" style={{ padding: '0.75rem 1rem', borderLeft: `4px solid ${r.isCorrect ? '#10b981' : '#ef4444'}` }}>
+            <div key={i} className="games-card-glass" style={{ padding: '1rem 1.25rem', borderLeftWidth: '4px', borderLeftColor: r.isCorrect ? '#10b981' : '#ef4444' }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.4rem' }}>
                 {r.isCorrect ? (
                   <CheckCircle2 size={18} style={{ color: '#10b981', flexShrink: 0, marginTop: '2px' }} />
                 ) : (
                   <XCircle size={18} style={{ color: '#ef4444', flexShrink: 0, marginTop: '2px' }} />
                 )}
-                <span style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-main)', lineHeight: '1.3' }}>
+                <span style={{ fontSize: '0.98rem', fontWeight: '700', color: 'var(--text-main)', lineHeight: '1.4' }}>
                   {r.questionText}
                 </span>
               </div>
-              <div style={{ marginLeft: '1.6rem', fontSize: '0.8rem' }}>
+              <div style={{ marginLeft: '1.6rem', fontSize: '0.85rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+                {/* Chosen Answer (if wrong) */}
                 {!r.isCorrect && r.selectedIndex >= 0 && (
-                  <div style={{ color: '#ef4444', marginBottom: '0.15rem' }}>
-                    Your answer: {r.options[r.selectedIndex]}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', color: '#ef4444' }}>
+                    <div style={{ fontWeight: '500' }}>
+                      Your answer: <strong style={{ fontWeight: '700' }}>{String.fromCharCode(65 + r.selectedIndex)}. {r.options[r.selectedIndex]}</strong>
+                    </div>
+                    {r.explanations?.[r.selectedIndex] && (
+                      <div style={{ fontStyle: 'italic', background: 'rgba(239, 68, 68, 0.03)', border: '1px solid rgba(239, 68, 68, 0.15)', borderRadius: '8px', padding: '0.5rem 0.85rem', fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--text-main)', display: 'flex', gap: '0.4rem', alignItems: 'flex-start', backdropFilter: 'blur(4px)' }}>
+                        <span style={{ fontWeight: '800', flexShrink: 0 }}>❌</span>
+                        <span>{r.explanations[r.selectedIndex]}</span>
+                      </div>
+                    )}
                   </div>
                 )}
+
+                {/* Timed out message */}
                 {!r.isCorrect && r.selectedIndex === -1 && (
-                  <div style={{ color: '#ef4444', marginBottom: '0.15rem', fontStyle: 'italic' }}>
+                  <div style={{ color: '#ef4444', fontStyle: 'italic', fontWeight: '600' }}>
                     Timed out
                   </div>
                 )}
-                <div style={{ color: '#10b981', fontWeight: '600' }}>
-                  Correct: {r.options[r.correctIndex]}
+
+                {/* Correct Answer */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', color: '#10b981' }}>
+                  <div style={{ fontWeight: '500' }}>
+                    {r.isCorrect ? 'Correct: ' : 'Correct Answer: '}<strong style={{ fontWeight: '700' }}>{String.fromCharCode(65 + r.correctIndex)}. {r.options[r.correctIndex]}</strong>
+                  </div>
+                  {r.explanations?.[r.correctIndex] && (
+                    <div style={{ fontStyle: 'italic', background: 'rgba(16, 185, 129, 0.03)', border: '1px solid rgba(16, 185, 129, 0.15)', borderRadius: '8px', padding: '0.5rem 0.85rem', fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--text-main)', display: 'flex', gap: '0.4rem', alignItems: 'flex-start', backdropFilter: 'blur(4px)' }}>
+                      <span style={{ fontWeight: '800', flexShrink: 0 }}>💡</span>
+                      <span>{r.explanations[r.correctIndex]}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

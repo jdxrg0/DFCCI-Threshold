@@ -226,9 +226,11 @@ const SubmitDevotional = () => {
 
   return (
     <div style={S.page}>
-      <button onClick={() => navigate('/devotionals')} style={S.backBtn}>
-        <ChevronLeft size={16} /> {t('devo_back_to_dashboard')}
-      </button>
+      <div className="btn-back-wrapper">
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/devotionals')} className="btn-back-pill">
+          <ChevronLeft size={16} /> {t('back')}
+        </button>
+      </div>
 
       <div style={S.card}>
         {/* Hero gradient header */}

@@ -27,9 +27,11 @@ const ModuleDocs = () => {
       <div className="container" style={{ maxWidth: '800px', padding: '2rem 1rem', textAlign: 'center' }}>
         <h2 style={{ color: 'var(--text-main)', marginBottom: '1rem' }}>Documentation Not Found</h2>
         <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>We couldn't find the documentation for this module.</p>
-        <button className="back-btn" onClick={() => navigate('/dashboard')} style={{ margin: '0 auto' }}>
-          <ChevronLeft size={18} /> Back to Dashboard
-        </button>
+        <div className="btn-back-wrapper">
+          <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="btn-back-pill">
+            <ChevronLeft size={16} /> Back to Dashboard
+          </button>
+        </div>
       </div>
     );
   }
@@ -39,16 +41,15 @@ const ModuleDocs = () => {
   return (
     <div className="container" style={{ maxWidth: '800px', padding: '1rem' }}>
       
-      {/* Header and Back Button */}
-      <div className="flex items-center justify-between" style={{ marginBottom: '1rem' }}>
-        <button 
-          onClick={() => navigate(-1)} 
-          className="back-btn"
-          style={{ marginBottom: 0 }}
-        >
-          <ChevronLeft size={18} /> {t('back')}
+      {/* Centered Back Pill */}
+      <div className="btn-back-wrapper">
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="btn-back-pill">
+          <ChevronLeft size={16} /> Back to Dashboard
         </button>
+      </div>
 
+      {/* Language Selector Row */}
+      <div className="flex justify-end" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Globe size={16} style={{ color: 'var(--text-muted)' }} />
           <select 

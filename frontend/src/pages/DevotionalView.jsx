@@ -277,9 +277,11 @@ const DevotionalView = () => {
 
   return (
     <div style={S.page}>
-      <button onClick={() => navigate('/devotionals')} style={S.backBtn}>
-        <ChevronLeft size={16} /> {t('devo_back_to_dashboard')}
-      </button>
+      <div className="btn-back-wrapper">
+        <button onClick={() => navigate('/devotionals')} className="btn-back-pill">
+          <ChevronLeft size={16} /> {t('devo_back_to_dashboard')}
+        </button>
+      </div>
 
       {error && <div style={{ color: '#EF4444', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'center', fontWeight: '600' }}>{error}</div>}
 

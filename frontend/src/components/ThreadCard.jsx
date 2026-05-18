@@ -8,7 +8,7 @@ const ThreadCard = ({ thread, type }) => {
   const otherParty = isSender ? thread.receiver : thread.sender;
 
   return (
-    <div className="card thread-card mb-4" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+    <div className="thread-card-glass mb-4">
 
       {/* Topic title — more prominent hierarchy */}
       {thread.topic && (
@@ -16,7 +16,7 @@ const ThreadCard = ({ thread, type }) => {
           fontSize: '1.15rem',
           fontWeight: '800',
           color: 'var(--text-main)',
-          marginBottom: '0.2rem',
+          marginBottom: '0.1rem',
           lineHeight: '1.2'
         }}>
           {thread.topic}
@@ -28,15 +28,15 @@ const ThreadCard = ({ thread, type }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flex: 1, minWidth: 0 }}>
           <Tag size={14} className="text-muted" style={{ flexShrink: 0 }} />
           <h3 style={{ fontSize: '0.9rem', fontWeight: '600', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', margin: 0 }}>
-            {isSender ? `To: ${otherParty.displayName}` : `From: ${otherParty.displayName}`}
+            {isSender ? `To: ${otherParty?.displayName || 'Unknown'}` : `From: ${otherParty?.displayName || 'Unknown'}`}
           </h3>
         </div>
         <span className={`badge ${thread.status.toLowerCase()}`} style={{ flexShrink: 0, fontWeight: '700' }}>
           {thread.status}
         </span>
-        <Link to={`/mirror/thread/${thread._id}`} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} title="View Thread">
-          <Eye size={16} />
-          <span style={{ marginLeft: '0.4rem' }}>View</span>
+        <Link to={`/mirror/thread/${thread._id}`} className="btn btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem', borderRadius: '9999px', fontWeight: '700' }} title="View Thread">
+          <Eye size={14} />
+          <span style={{ marginLeft: '0.35rem' }}>View</span>
         </Link>
       </div>
 

@@ -75,17 +75,19 @@ const SendAffirmation = () => {
 
   return (
     <div className="container" style={{ maxWidth: '620px' }}>
-      <button onClick={() => navigate('/affirm/dashboard')} className="back-btn" style={{ transition: 'transform 0.2s ease' }}>
-        <ChevronLeft size={18} /> {t('sl_back_to_dashboard')}
-      </button>
+      <div className="btn-back-wrapper">
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/affirm/dashboard')} className="btn-back-pill">
+          <ChevronLeft size={16} /> {t('back')}
+        </button>
+      </div>
 
-      <div className="fun-card" style={{ borderTop: '4px solid var(--primary)' }}>
-        <h2 className="fun-title" style={{ color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'center' }}>
-          <Sun size={24} /> {t('send_shining_light')}
+      <div style={{ padding: 0 }}>
+        <h2 style={{ fontSize: '2.1rem', color: 'var(--text-main)', fontWeight: '850', margin: '0 0 1.5rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem', justifyContent: 'center', letterSpacing: '-0.03em' }}>
+          <Sun size={28} style={{ color: 'var(--primary)', flexShrink: 0 }} /> {t('send_shining_light')}
         </h2>
 
         {/* Scripture quote */}
-        <div className="ff-quote" style={{ backgroundColor: 'color-mix(in srgb, var(--primary) 10%, transparent)', borderLeftColor: 'var(--primary)' }}>
+        <div className="ff-quote-glass" style={{ borderLeft: '4px solid var(--primary)', marginBottom: '2rem' }}>
           {t('sl_scripture_quote')}
           <small>{t('sl_bible_ref')}</small>
         </div>
@@ -98,15 +100,14 @@ const SendAffirmation = () => {
             <input
               id="aff-topic"
               type="text"
-              className="ff-input"
+              className="affirmation-input-glass"
               placeholder="e.g. Thank you for your hard work!"
               value={topic}
               onChange={(e) => setForm({ ...form, topic: e.target.value })}
               maxLength={80}
               required
-              style={{ borderColor: 'color-mix(in srgb, var(--primary) 50%, transparent)' }}
             />
-            <label htmlFor="aff-topic" style={{ color: 'var(--primary)' }}>{t('sl_topic_label')}</label>
+            <label htmlFor="aff-topic" className="affirmation-field-label">{t('sl_topic_label')}</label>
           </div>
           <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '1rem', textAlign: 'right' }}>
             {topic.length}/80
@@ -116,60 +117,56 @@ const SendAffirmation = () => {
           <div className="ff-field">
             <select
               id="aff-recipient"
-              className="ff-input"
+              className={`affirmation-input-glass ${selectedUser ? 'has-value' : ''}`}
               value={selectedUser}
               onChange={(e) => setForm({ ...form, selectedUser: e.target.value })}
               required
-              style={{ borderColor: 'color-mix(in srgb, var(--primary) 50%, transparent)' }}
             >
               <option value="" disabled>{t('select_member')}</option>
               {users.map(u => (
                 <option key={u._id} value={u._id}>{u.displayName}</option>
               ))}
             </select>
-            <label htmlFor="aff-recipient" style={{ color: 'var(--primary)' }}>{t('sl_recipient')}</label>
+            <label htmlFor="aff-recipient" className="affirmation-field-label">{t('sl_recipient')}</label>
           </div>
 
           {/* Appreciation */}
           <div className="ff-field ff-textarea">
             <textarea
               id="aff-appreciation"
-              className="ff-input ff-textarea-el"
+              className="affirmation-input-glass ff-textarea-el"
               placeholder={t('sl_appreciation_placeholder')}
               value={appreciation}
               onChange={(e) => setForm({ ...form, appreciation: e.target.value })}
               required
-              style={{ borderColor: 'color-mix(in srgb, var(--primary) 50%, transparent)' }}
             />
-            <label htmlFor="aff-appreciation" style={{ color: 'var(--primary)' }}>{t('sl_appreciation_label')}</label>
+            <label htmlFor="aff-appreciation" className="affirmation-field-label">{t('sl_appreciation_label')}</label>
           </div>
 
           {/* Impact */}
           <div className="ff-field ff-textarea">
             <textarea
               id="aff-impact"
-              className="ff-input ff-textarea-el"
+              className="affirmation-input-glass ff-textarea-el"
               placeholder={t('sl_impact_placeholder')}
               value={impact}
               onChange={(e) => setForm({ ...form, impact: e.target.value })}
               required
-              style={{ borderColor: 'color-mix(in srgb, var(--primary) 50%, transparent)' }}
             />
-            <label htmlFor="aff-impact" style={{ color: 'var(--primary)' }}>{t('sl_impact_label')}</label>
+            <label htmlFor="aff-impact" className="affirmation-field-label">{t('sl_impact_label')}</label>
           </div>
 
           {/* Encouragement */}
           <div className="ff-field ff-textarea">
             <textarea
               id="aff-encouragement"
-              className="ff-input ff-textarea-el"
+              className="affirmation-input-glass ff-textarea-el"
               placeholder={t('sl_encouragement_placeholder')}
               value={encouragement}
               onChange={(e) => setForm({ ...form, encouragement: e.target.value })}
               required
-              style={{ borderColor: 'color-mix(in srgb, var(--primary) 50%, transparent)' }}
             />
-            <label htmlFor="aff-encouragement" style={{ color: 'var(--primary)' }}>{t('sl_encouragement_label')}</label>
+            <label htmlFor="aff-encouragement" className="affirmation-field-label">{t('sl_encouragement_label')}</label>
           </div>
 
           {/* Bible verse */}
@@ -177,14 +174,13 @@ const SendAffirmation = () => {
             <input
               id="aff-verse"
               type="text"
-              className="ff-input"
+              className="affirmation-input-glass"
               placeholder="e.g. 1 Thessalonians 5:11"
               value={bibleVerse}
               onChange={(e) => setForm({ ...form, bibleVerse: e.target.value })}
               required
-              style={{ borderColor: 'color-mix(in srgb, var(--primary) 50%, transparent)' }}
             />
-            <label htmlFor="aff-verse" style={{ color: 'var(--primary)' }}>{t('sl_bible_verse_label')}</label>
+            <label htmlFor="aff-verse" className="affirmation-field-label">{t('sl_bible_verse_label')}</label>
           </div>
 
           {/* Agreement checkbox */}
@@ -214,6 +210,7 @@ const SendAffirmation = () => {
               duration={30}
               disabled={!topic.trim() || !selectedUser || !appreciation.trim() || !impact.trim() || !encouragement.trim() || !bibleVerse.trim() || !agreement}
               className="btn btn-primary"
+              customStyle={{ borderRadius: '9999px', padding: '0.85rem', fontWeight: '700' }}
             />
             <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
               {t('sl_reflect_note')}

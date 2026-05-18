@@ -4,6 +4,10 @@ const bcrypt = require('bcrypt');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 const User = require('../models/User');
+const Thread = require('../models/Thread');
+const Affirmation = require('../models/Affirmation');
+const Transaction = require('../models/Transaction');
+const Devotional = require('../models/Devotional');
 const { requireAuth, requireRole, requireVerified } = require('../middleware/authMiddleware');
 const { cloudinary } = require('../utils/cloudinary');
 const sendEmail = require('../utils/sendEmail');
@@ -455,6 +459,77 @@ router.delete('/me/remove-profile-picture', requireAuth, async (req, res) => {
   } catch (error) {
     console.error('Error removing profile picture:', error);
     res.status(500).json({ message: 'Server error while removing profile picture' });
+  }
+});
+
+// ─── Dashboard Stats (Authenticated, Verified) ─────────────────────────────
+router.get('/me/dashboard-stats', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    // 1. Active Gentle Mirrors (threads where user is sender or receiver and not resolved)
+    const activeMirrors = await Thread.countDocuments({
+      $or: [{ sender: userId }, { receiver: userId }],
+      status: { $ne: 'Resolved' },
+      deletedAt: null,
+    });
+
+    // 2. Received Shining Lights (affirmations where user is receiver)
+    const receivedLights = await Affirmation.countDocuments({
+      receiver: userId,
+    });
+
+    // 3. Global Youth Fund Balance
+    const incomeAgg = await Transaction.aggregate([
+      { $match: { type: 'INCOME' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]);
+    const expenseAgg = await Transaction.aggregate([
+      { $match: { type: 'EXPENSE' } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]);
+    const totalIncome = incomeAgg[0]?.total || 0;
+    const totalExpense = expenseAgg[0]?.total || 0;
+    const fundBalance = totalIncome - totalExpense;
+
+    // 4. Devotional Day Streak
+    const devotionals = await Devotional.find({ member: userId })
+      .sort({ date: -1 })
+      .select('date')
+      .lean();
+
+    let devotionStreak = 0;
+    if (devotionals.length > 0) {
+      const dateSet = new Set(
+        devotionals.map((d) => {
+          const dt = new Date(d.date);
+          return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+        })
+      );
+
+      const today = new Date();
+      // Start from today or yesterday (if no entry today yet, the streak still counts)
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      let cursor = new Date(today);
+      if (!dateSet.has(todayStr)) {
+        cursor.setDate(cursor.getDate() - 1);
+      }
+
+      for (let i = 0; i < 400; i++) {
+        const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+        if (dateSet.has(key)) {
+          devotionStreak++;
+          cursor.setDate(cursor.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+    }
+
+    res.json({ activeMirrors, receivedLights, fundBalance, devotionStreak });
+  } catch (error) {
+    console.error('Error fetching dashboard stats:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
 

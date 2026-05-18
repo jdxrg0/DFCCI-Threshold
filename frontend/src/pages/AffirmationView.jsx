@@ -93,9 +93,11 @@ const AffirmationView = () => {
     <div className="container thread-view-container" style={{ paddingBottom: '3rem', maxWidth: '800px', margin: '0 auto' }}>
       
       {/* ── Back Button ── */}
-      <button onClick={() => navigate('/affirm/dashboard')} className="back-btn">
-        <ChevronLeft size={18} /> <span>{t('sl_back_to_dashboard')}</span>
-      </button>
+      <div className="btn-back-wrapper">
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/affirm/dashboard')} className="btn-back-pill">
+          <ChevronLeft size={16} /> {t('back')}
+        </button>
+      </div>
       
       {/* ── Header Metadata ── */}
       <div className="thread-view-header flex justify-end items-start mb-4">
@@ -120,61 +122,61 @@ const AffirmationView = () => {
 
         <div className="messages-list" style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
-          {/* Main Affirmation Card */}
+          {/* Main Affirmation Card — Premium Unboxed Layout */}
           <div className="message-item" style={{ width: '100%' }}>
             
-            <div className="fun-card" style={{ padding: 0, overflow: 'hidden', border: '1px solid var(--surface-border)' }}>
+            <div style={{ padding: 0 }}>
               {/* Card Header */}
-              <div className="sl-card-header">
+              <div className="sl-card-header" style={{ background: 'none', borderBottom: '1px solid var(--border-color)', padding: '0 0 1.5rem 0' }}>
                 {affirmation.topic && (
-                  <h2 style={{ fontSize: '1.4rem', color: 'var(--text-main)', fontWeight: '800', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <Sun size={24} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                  <h2 style={{ fontSize: '1.8rem', color: 'var(--text-main)', fontWeight: '850', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem', letterSpacing: '-0.02em' }}>
+                    <Sun size={28} style={{ color: '#f59e0b', flexShrink: 0 }} />
                     {affirmation.topic}
                   </h2>
                 )}
-                <div className="sl-card-meta">
+                <div className="sl-card-meta" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <User size={16} style={{ flexShrink: 0 }} /> <strong>From:</strong> {isSender ? affirmation.sender.displayName : 'Anonymous'}
+                    <User size={16} style={{ flexShrink: 0, color: '#f59e0b' }} /> <strong>From:</strong> {isSender ? affirmation.sender.displayName : 'Anonymous'}
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <User size={16} style={{ flexShrink: 0 }} /> <strong>To:</strong> {affirmation.receiver.displayName}
+                    <User size={16} style={{ flexShrink: 0, color: '#f59e0b' }} /> <strong>To:</strong> {affirmation.receiver.displayName}
                   </span>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Calendar size={16} style={{ flexShrink: 0 }} /> {format(new Date(affirmation.createdAt), 'MMM d, yyyy h:mm a')}
+                    <Calendar size={16} style={{ flexShrink: 0, color: '#f59e0b' }} /> {format(new Date(affirmation.createdAt), 'MMM d, yyyy h:mm a')}
                   </span>
                 </div>
               </div>
 
               {/* Card Body */}
-              <div className="sl-card-body">
+              <div className="sl-card-body" style={{ padding: '2rem 0', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                 
                 <div>
-                  <h4 style={{ fontSize: '0.85rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>
+                  <h4 style={{ fontSize: '0.8rem', color: '#d97706', textTransform: 'uppercase', letterSpacing: '1.5px', margin: '0 0 0.75rem 0', fontWeight: '800' }}>
                     {t('sl_appreciation_label')}
                   </h4>
-                  <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', color: 'var(--text-main)', fontSize: '1.05rem', margin: 0 }}>
+                  <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.85', color: 'var(--text-main)', fontSize: '1.08rem', margin: 0 }}>
                     {affirmation.content.appreciation}
                   </p>
                 </div>
 
-                <div style={{ width: '100%', height: '1px', backgroundColor: 'var(--border-color)' }}></div>
+                <div style={{ width: '100%', height: '1px', backgroundColor: 'var(--border-color)', opacity: 0.5 }}></div>
 
                 <div>
-                  <h4 style={{ fontSize: '0.85rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>
+                  <h4 style={{ fontSize: '0.8rem', color: '#d97706', textTransform: 'uppercase', letterSpacing: '1.5px', margin: '0 0 0.75rem 0', fontWeight: '800' }}>
                     {t('sl_impact_label')}
                   </h4>
-                  <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', color: 'var(--text-main)', fontSize: '1.05rem', margin: 0 }}>
+                  <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.85', color: 'var(--text-main)', fontSize: '1.08rem', margin: 0 }}>
                     {affirmation.content.impact}
                   </p>
                 </div>
 
-                <div style={{ width: '100%', height: '1px', backgroundColor: 'var(--border-color)' }}></div>
+                <div style={{ width: '100%', height: '1px', backgroundColor: 'var(--border-color)', opacity: 0.5 }}></div>
 
                 <div>
-                  <h4 style={{ fontSize: '0.85rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>
+                  <h4 style={{ fontSize: '0.8rem', color: '#d97706', textTransform: 'uppercase', letterSpacing: '1.5px', margin: '0 0 0.75rem 0', fontWeight: '800' }}>
                     {t('sl_encouragement_label')}
                   </h4>
-                  <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.7', color: 'var(--text-main)', fontSize: '1.05rem', margin: 0 }}>
+                  <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.85', color: 'var(--text-main)', fontSize: '1.08rem', margin: 0 }}>
                     {affirmation.content.encouragement}
                   </p>
                 </div>
@@ -182,13 +184,13 @@ const AffirmationView = () => {
               </div>
 
               {/* Bible Verse Footer */}
-              <div className="sl-card-footer">
-                <Quote size={24} style={{ color: 'var(--primary)', flexShrink: 0, opacity: 0.5, marginTop: '0.2rem' }} />
+              <div className="ff-quote-glass" style={{ borderLeft: '4px solid #f59e0b', margin: '1.5rem 0 0 0' }}>
+                <Quote size={20} style={{ color: '#f59e0b', flexShrink: 0, opacity: 0.4, display: 'block', marginBottom: '0.5rem' }} />
                 <div>
-                  <p style={{ whiteSpace: 'pre-wrap', fontStyle: 'italic', color: 'var(--text-main)', fontSize: '1.1rem', margin: '0 0 0.5rem 0', lineHeight: '1.6' }}>
+                  <p style={{ whiteSpace: 'pre-wrap', fontStyle: 'italic', color: 'var(--text-main)', fontSize: '1.12rem', margin: '0 0 0.5rem 0', lineHeight: '1.65' }}>
                     "{affirmation.content.bibleVerse}"
                   </p>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 'bold' }}>
+                  <span style={{ fontSize: '0.78rem', color: '#d97706', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: '800' }}>
                     — {t('sl_bible_verse_label')}
                   </span>
                 </div>
@@ -199,19 +201,19 @@ const AffirmationView = () => {
 
           {/* Receiver's Reply (if exists) */}
           {hasReplied && (
-            <div className="message-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: '100%' }}>
+            <div className="message-item" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', width: '100%', marginTop: '1.5rem' }}>
               <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem', textAlign: 'right', fontWeight: 'bold' }}>
                 {affirmation.receiver.displayName} • {format(new Date(affirmation.reply.sentAt), 'MMM d, yyyy h:mm a')}
               </div>
               <div style={{ 
-                backgroundColor: 'color-mix(in srgb, var(--primary) 10%, transparent)', 
+                backgroundColor: 'rgba(255, 255, 255, 0.03)', 
                 color: 'var(--text-main)', 
                 padding: '1.25rem 1.5rem', 
                 borderRadius: '1.5rem',
                 borderBottomRightRadius: '0.5rem',
                 maxWidth: '85%',
                 boxShadow: 'var(--shadow-sm)',
-                border: '1px solid color-mix(in srgb, var(--primary) 20%, transparent)'
+                border: '1px solid var(--border-color)'
               }}>
                 <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.6', fontSize: '1.05rem' }}>{affirmation.reply.text}</p>
               </div>
@@ -225,7 +227,7 @@ const AffirmationView = () => {
         
         {/* Receiver actions: Reply form or Mark Received button */}
         {isReceiver && !isReceived && (
-          <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ marginTop: '2.5rem', paddingTop: '2rem', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
             
             {!hasReplied && (
               <form onSubmit={handleSendReply} style={{ display: 'flex', gap: '0.5rem' }}>
@@ -235,31 +237,38 @@ const AffirmationView = () => {
                   placeholder={t('sl_reply_placeholder')}
                   value={replyText}
                   onChange={e => setReplyText(e.target.value)}
-                  style={{ flex: 1, margin: 0, padding: '0.75rem 1rem', borderRadius: 'var(--radius-full)' }}
+                  style={{ flex: 1, margin: 0, padding: '0.75rem 1.25rem', borderRadius: 'var(--radius-full)' }}
                 />
                 <button 
                   type="submit" 
                   className="btn btn-primary" 
                   disabled={!replyText.trim() || sendingReply}
-                  style={{ padding: '0 1.5rem', borderRadius: 'var(--radius-full)' }}
+                  style={{ padding: '0 1.5rem', borderRadius: 'var(--radius-full)', backgroundColor: '#f59e0b', borderColor: '#f59e0b', color: 'white', fontWeight: '700' }}
                 >
-                  <Send size={18} />
-                  <span className="hide-text-mobile" style={{ marginLeft: '0.5rem' }}>{t('sl_send_reply_btn')}</span>
+                  <Send size={16} />
+                  <span className="hide-text-mobile" style={{ marginLeft: '0.4rem' }}>{t('sl_send_reply_btn')}</span>
                 </button>
               </form>
             )}
 
             <button 
               onClick={handleMarkReceivedClick} 
-              className="btn btn-primary" 
+              className="btn btn-action-heart" 
               disabled={markingReceived}
-              style={{ width: '100%', padding: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', fontSize: '1rem', borderRadius: 'var(--radius-md)' }}
+              style={{ width: '100%', padding: '0.85rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', fontSize: '1rem', borderRadius: '9999px', fontWeight: '700' }}
             >
               <Heart size={20} /> 
               {t('sl_mark_received_btn')}
             </button>
           </div>
         )}
+
+        {/* ── Standard Centered Bottom Back Button ── */}
+        <div className="btn-back-wrapper" style={{ marginTop: '3.5rem' }}>
+          <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/affirm/dashboard')} className="btn-back-pill">
+            <ChevronLeft size={16} /> {t('back')}
+          </button>
+        </div>
 
       </div>
 

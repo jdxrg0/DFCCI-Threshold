@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
-import { ArrowLeft, Download, BookOpen } from 'lucide-react';
+import { ArrowLeft, Download, BookOpen, ChevronLeft } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 const getDownloadUrl = (url) => {
@@ -92,23 +92,43 @@ const ResourceDetail = () => {
   }
 
   return (
-    <div style={{ maxWidth: '100%', overflowX: 'hidden' }}>
+    <div className="resource-detail-view">
+      
+      {/* Centered Back Pill at the top */}
+      <div className="btn-back-wrapper" style={{ marginBottom: '1rem' }}>
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/resources')} className="btn-back-pill">
+          <ChevronLeft size={16} /> {t('back') || 'Back'}
+        </button>
+      </div>
 
-      {/* ── HERO HEADER ── */}
-      <div className="resource-hero">
-        <div className="resource-hero-inner">
-          {/* Top Navigation Row */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-            <button
-              onClick={() => navigate('/resources')}
-              className="resource-back-btn"
-              style={{ marginBottom: 0 }}
-            >
-              <ArrowLeft size={16} />
-              Resource Center
-            </button>
+      {/* Premium Reader Card Container */}
+      <div className="resource-reading-card">
+        
+        {/* Header Block inside Card */}
+        <div className="resource-reading-header">
+          {/* Categories and tags floating inside Card */}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <span className="resource-tag resource-tag-primary" style={{ background: 'var(--primary)', color: 'white', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              {resource.category}
+            </span>
+            {resource.tags?.map(tag => (
+              <span key={tag} className="resource-tag resource-tag-muted" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-muted)', padding: '0.25rem 0.75rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '600' }}>
+                {tag}
+              </span>
+            ))}
+          </div>
 
-            {/* Compact Download CTA */}
+          {/* Title */}
+          <h1 className="resource-reading-title">{resource.title}</h1>
+
+          {/* Metadata Row inside Card */}
+          <div className="resource-reading-meta">
+            <div className="resource-reading-author">
+              <BookOpen size={16} style={{ color: 'var(--primary)' }} />
+              <span>{resource.author || 'Unknown Author'}</span>
+            </div>
+
+            {/* Slick compact Download Link */}
             {resource.fileUrl ? (
               <a
                 href={getDownloadUrl(resource.fileUrl)}
@@ -116,57 +136,54 @@ const ResourceDetail = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-primary"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', padding: '0.5rem 1rem', borderRadius: '0' }}
+                style={{ 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  gap: '0.4rem', 
+                  fontSize: '0.78rem', 
+                  padding: '0.45rem 1.15rem', 
+                  borderRadius: '9999px', 
+                  boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
+                  fontWeight: '700',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em'
+                }}
               >
-                <Download size={16} />
+                <Download size={14} />
                 Download File
               </a>
             ) : (
-              <span style={{ fontSize: '0.8rem', padding: '0.4rem 1rem', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.2)', display: 'inline-block' }}>
-                {t('no_file_attached') || 'No file attached'}
+              <span style={{ fontSize: '0.75rem', padding: '0.4rem 1rem', borderRadius: '9999px', backgroundColor: 'rgba(255,255,255,0.05)', color: 'var(--text-muted)', border: '1px solid var(--border-color)', display: 'inline-block' }}>
+                {t('no_file_attached') || 'No Attached File'}
               </span>
             )}
           </div>
-
-          {/* Tags */}
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
-            <span className="resource-tag resource-tag-primary">{resource.category}</span>
-            {resource.tags?.map(tag => (
-              <span key={tag} className="resource-tag resource-tag-muted">{tag}</span>
-            ))}
-          </div>
-
-          {/* Title */}
-          <h1 className="resource-hero-title">{resource.title}</h1>
-
-          {/* Meta row */}
-          <div className="resource-hero-meta">
-            {resource.author && (
-              <span className="resource-meta-item">
-                <BookOpen size={15} />
-                {resource.author}
-              </span>
-            )}
-          </div>
-
-
         </div>
-      </div>
 
-      {/* ── READING BODY ── */}
-      <div className="resource-body-container">
-        {resource.description ? (
-          <div
-            className="quill-content resource-reading-content"
-            dangerouslySetInnerHTML={{ __html: resource.description.replace(/&nbsp;|\u00A0/g, ' ') }}
-          />
-        ) : (
-          <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 0' }}>
-            {t('no_description') || 'No abstract or description provided for this resource.'}
-          </p>
-        )}
-      </div>
+        {/* ── READING BODY ── */}
+        <div className="resource-reading-content">
+          {resource.description ? (
+            <div
+              className="quill-content"
+              dangerouslySetInnerHTML={{ __html: resource.description.replace(/&nbsp;|\u00A0/g, ' ') }}
+            />
+          ) : (
+            <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', textAlign: 'center', padding: '4rem 0' }}>
+              {t('no_description') || 'No abstract or description provided for this resource.'}
+            </p>
+          )}
+        </div>
 
+        {/* Bottom Centered Back Trigger */}
+        <div className="resource-reading-footer">
+          <div className="btn-back-wrapper" style={{ margin: 0 }}>
+            <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/resources')} className="btn-back-pill">
+              <ChevronLeft size={16} /> {t('back') || 'Back'}
+            </button>
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 };

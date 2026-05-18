@@ -75,15 +75,19 @@ const SendMirror = () => {
 
   return (
     <div className="container" style={{ maxWidth: '620px' }}>
-      <button onClick={() => navigate('/mirror/dashboard')} className="back-btn">
-        <ChevronLeft size={18} /> {t('back_to_dashboard')}
-      </button>
+      <div className="btn-back-wrapper">
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/mirror/dashboard')} className="btn-back-pill">
+          <ChevronLeft size={16} /> {t('back')}
+        </button>
+      </div>
 
-      <div className="fun-card">
-        <h2 className="fun-title">{t('send_gentle_mirror')}</h2>
+      <div style={{ padding: 0 }}>
+        <h2 style={{ fontSize: '2.1rem', color: 'var(--text-main)', fontWeight: '850', margin: '0 0 1.5rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem', justifyContent: 'center', letterSpacing: '-0.03em' }}>
+          {t('send_gentle_mirror')}
+        </h2>
 
         {/* Scripture quote */}
-        <div className="ff-quote">
+        <div className="ff-quote-glass" style={{ borderLeft: '4px solid var(--primary)', marginBottom: '2rem' }}>
           "Ang sugat na likha ng tapat na kaibigan, ay mabuti kaysa halik ng kaaway na mapagkunwari."
           <small>Kawikaan 27:6</small>
         </div>
@@ -96,14 +100,14 @@ const SendMirror = () => {
             <input
               id="mirror-topic"
               type="text"
-              className="ff-input"
+              className="mirror-input-glass"
               placeholder="e.g. Tungkol sa aming pag-uusap noong Linggo…"
               value={topic}
               onChange={(e) => setForm({ ...form, topic: e.target.value })}
               maxLength={80}
               required
             />
-            <label htmlFor="mirror-topic">{t('topic_label')}</label>
+            <label htmlFor="mirror-topic" className="mirror-field-label">{t('topic_label')}</label>
           </div>
           <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '1rem', textAlign: 'right' }}>
             {topic.length}/80
@@ -113,7 +117,7 @@ const SendMirror = () => {
           <div className="ff-field">
             <select
               id="mirror-recipient"
-              className="ff-input"
+              className={`mirror-input-glass ${selectedUser ? 'has-value' : ''}`}
               value={selectedUser}
               onChange={(e) => setForm({ ...form, selectedUser: e.target.value })}
               required
@@ -123,46 +127,46 @@ const SendMirror = () => {
                 <option key={u._id} value={u._id}>{u.displayName}</option>
               ))}
             </select>
-            <label htmlFor="mirror-recipient">{t('recipient')}</label>
+            <label htmlFor="mirror-recipient" className="mirror-field-label">{t('recipient')}</label>
           </div>
 
           {/* Concern */}
           <div className="ff-field ff-textarea">
             <textarea
               id="mirror-concern"
-              className="ff-input ff-textarea-el"
+              className="mirror-input-glass ff-textarea-el"
               placeholder={t('concern_placeholder')}
               value={concern}
               onChange={(e) => setForm({ ...form, concern: e.target.value })}
               required
             />
-            <label htmlFor="mirror-concern">{t('concern_label')}</label>
+            <label htmlFor="mirror-concern" className="mirror-field-label">{t('concern_label')}</label>
           </div>
 
           {/* Impact */}
           <div className="ff-field ff-textarea">
             <textarea
               id="mirror-impact"
-              className="ff-input ff-textarea-el"
+              className="mirror-input-glass ff-textarea-el"
               placeholder={t('impact_placeholder')}
               value={impact}
               onChange={(e) => setForm({ ...form, impact: e.target.value })}
               required
             />
-            <label htmlFor="mirror-impact">{t('impact_label')}</label>
+            <label htmlFor="mirror-impact" className="mirror-field-label">{t('impact_label')}</label>
           </div>
 
           {/* Desired change */}
           <div className="ff-field ff-textarea">
             <textarea
               id="mirror-change"
-              className="ff-input ff-textarea-el"
+              className="mirror-input-glass ff-textarea-el"
               placeholder={t('change_placeholder')}
               value={desiredChange}
               onChange={(e) => setForm({ ...form, desiredChange: e.target.value })}
               required
             />
-            <label htmlFor="mirror-change">{t('change_label')}</label>
+            <label htmlFor="mirror-change" className="mirror-field-label">{t('change_label')}</label>
           </div>
 
           {/* Bible verse */}
@@ -170,13 +174,13 @@ const SendMirror = () => {
             <input
               id="mirror-verse"
               type="text"
-              className="ff-input"
+              className="mirror-input-glass"
               placeholder="e.g. Kawikaan 27:6"
               value={bibleVerse}
               onChange={(e) => setForm({ ...form, bibleVerse: e.target.value })}
               required
             />
-            <label htmlFor="mirror-verse">{t('bible_verse_label')}</label>
+            <label htmlFor="mirror-verse" className="mirror-field-label">{t('bible_verse_label')}</label>
           </div>
 
           {/* Agreement checkbox */}
@@ -188,6 +192,7 @@ const SendMirror = () => {
               checked={agreement}
               onChange={(e) => setForm({ ...form, agreement: e.target.checked })}
               required
+              style={{ accentColor: 'var(--primary)' }}
             />
             <label htmlFor="mirror-agreement" className="ff-checkbox-label">
               {t('agreement_label')}
@@ -199,10 +204,11 @@ const SendMirror = () => {
             <TimerButton
               type="submit"
               onConfirm={handleSubmit}
-
+              module="mirror"
               label={t('send_btn')}
               loading={loading}
               disabled={!topic.trim() || !selectedUser || !concern.trim() || !impact.trim() || !desiredChange.trim() || !bibleVerse.trim() || !agreement}
+              customStyle={{ borderRadius: '9999px', padding: '0.85rem', fontWeight: '700' }}
             />
             <p style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
               {t('reflect_before_send')}

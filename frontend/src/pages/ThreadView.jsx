@@ -265,9 +265,11 @@ const ThreadView = () => {
 
   return (
     <div className="container" style={{ maxWidth: '800px', paddingBottom: '2rem' }}>
-      <button onClick={() => navigate('/mirror/dashboard')} className="back-btn">
-        <ChevronLeft size={18} /> {t('back_to_dashboard')}
-      </button>
+      <div className="btn-back-wrapper">
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/mirror/dashboard')} className="btn-back-pill">
+          <ChevronLeft size={16} /> {t('back')}
+        </button>
+      </div>
 
       <div className="thread-view-header flex justify-between items-start mb-4">
         <div>

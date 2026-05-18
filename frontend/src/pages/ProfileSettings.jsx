@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { 
+  ChevronLeft,
   Camera, 
   User, 
   Mail, 
@@ -337,21 +338,20 @@ const ProfileSettings = () => {
   };
 
   return (
-    <div className="container" style={{ maxWidth: '850px', marginTop: '2rem', marginBottom: '4rem' }}>
+    <div className="container" style={{ maxWidth: '900px', marginTop: '1.5rem', marginBottom: '4rem' }}>
       
+      {/* ── Back Button ── */}
+      <div className="btn-back-wrapper">
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="btn-back-pill">
+          <ChevronLeft size={16} /> {t('back')}
+        </button>
+      </div>
+
       {/* ── Header Row ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Link to="/dashboard" className="btn btn-secondary" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-            <ArrowLeft size={16} /> {t('back')}
-          </Link>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Settings size={26} color="var(--primary)" />
-            <h1 className="text-gradient text-hero" style={{ fontSize: '2.2rem', margin: 0, lineHeight: 1.1 }}>
-              {t('profile_settings')}
-            </h1>
-          </div>
-        </div>
+      <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+        <h1 className="text-gradient text-hero" style={{ fontSize: '1.75rem', margin: 0, lineHeight: 1.1, textAlign: 'center' }}>
+          {t('profile_settings')}
+        </h1>
       </div>
 
       {/* ── Premium Centered Modal Dialog Popup ── */}
@@ -633,15 +633,15 @@ const ProfileSettings = () => {
       )}
 
       {/* ── Primary Settings Panels Grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
         
         {/* PANEL 1: Profile & Avatar */}
-        <div className="fun-card" style={{ padding: '2rem' }}>
-          <h2 style={{ fontSize: '1.4rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-            <User size={20} color="var(--primary)" /> Profile Info & Picture
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', padding: '1.5rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-md)' }}>
+          <h2 style={{ fontSize: '1.1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+            <User size={18} color="var(--primary)" /> Profile Info
           </h2>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', alignItems: 'center', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', alignItems: 'center', width: '100%' }}>
             
             {/* Drag & Drop Avatar Uploader Container */}
             <div 
@@ -658,41 +658,36 @@ const ProfileSettings = () => {
                 width: '100%',
                 maxWidth: '300px',
                 padding: '1.5rem',
-                borderRadius: 'var(--radius)',
+                borderRadius: '1.25rem',
                 border: dragActive ? '2px dashed var(--primary)' : '2px dashed var(--border-color)',
                 backgroundColor: dragActive ? 'rgba(var(--primary-rgb), 0.05)' : 'rgba(255, 255, 255, 0.02)',
                 transition: 'all 0.3s ease',
               }}
             >
               <div style={{ position: 'relative', cursor: 'pointer' }} onClick={triggerFileSelect}>
-                {renderCurrentPhoto(120)}
+                {renderCurrentPhoto(80)}
                 <div 
                   style={{
                     position: 'absolute',
-                    bottom: '5px',
-                    right: '5px',
+                    bottom: '0',
+                    right: '0',
                     backgroundColor: 'var(--primary)',
                     borderRadius: '50%',
-                    padding: '6px',
+                    padding: '5px',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                     color: '#fff',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    transition: 'transform 0.2s',
                   }}
-                  className="avatar-cam-badge"
                 >
-                  <Camera size={16} />
+                  <Camera size={14} />
                 </div>
               </div>
 
               <div style={{ textAlign: 'center' }}>
-                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-main)', fontWeight: '600' }}>
-                  Drag & drop image here or click to browse
-                </p>
-                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  PNG, JPG, or WEBP up to 5MB
+                <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-main)', fontWeight: '500' }}>
+                  Tap to change picture
                 </p>
               </div>
 
@@ -710,35 +705,33 @@ const ProfileSettings = () => {
                   onClick={handleRemovePhoto}
                   className="btn btn-secondary"
                   style={{ 
-                    padding: '0.35rem 0.75rem', 
-                    fontSize: '0.78rem', 
+                    padding: '0.25rem 0.75rem', 
+                    fontSize: '0.75rem', 
                     color: '#EF4444', 
                     border: '1px solid rgba(239, 68, 68, 0.2)',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.25rem',
-                    background: 'transparent'
+                    background: 'transparent',
+                    borderRadius: '9999px'
                   }}
                   disabled={profileLoading}
                 >
-                  <Trash2 size={13} /> {t('remove_picture')}
+                  <Trash2 size={12} /> {t('remove_picture')}
                 </button>
               )}
             </div>
 
             {/* Grid of Preset SVG Avatars */}
             <div style={{ width: '100%' }}>
-              <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '600', textAlign: 'center' }}>
-                {t('preset_avatars')}
-              </p>
               <div 
                 style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(55px, 1fr))',
-                  gap: '0.75rem',
-                  maxWidth: '520px',
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  maxWidth: '300px',
                   margin: '0 auto',
-                  padding: '0.5rem',
                 }}
               >
                 {PRESETS.map((presetId, idx) => {
@@ -749,14 +742,14 @@ const ProfileSettings = () => {
                       onClick={() => handlePresetSelect(presetId)}
                       style={{
                         padding: 0,
-                        border: isActive ? '3px solid var(--primary)' : '2px solid transparent',
+                        border: isActive ? '2px solid var(--primary)' : '2px solid transparent',
                         borderRadius: '50%',
                         overflow: 'hidden',
                         cursor: 'pointer',
-                        width: '55px',
-                        height: '55px',
+                        width: '40px',
+                        height: '40px',
                         background: 'transparent',
-                        boxShadow: isActive ? '0 0 12px rgba(var(--primary-rgb), 0.5)' : 'none',
+                        boxShadow: isActive ? '0 0 10px rgba(var(--primary-rgb), 0.4)' : 'none',
                         transition: 'transform 0.2s, border-color 0.2s',
                         display: 'flex',
                         alignItems: 'center',
@@ -766,7 +759,7 @@ const ProfileSettings = () => {
                       disabled={profileLoading}
                       title={`Preset Avatar ${idx + 1}`}
                     >
-                      {renderPresetSvg(presetId, 55, { boxShadow: 'none' })}
+                      {renderPresetSvg(presetId, 40, { boxShadow: 'none' })}
                     </button>
                   );
                 })}
@@ -774,8 +767,8 @@ const ProfileSettings = () => {
             </div>
 
             {/* Display Name Update Field Form */}
-            <form onSubmit={handleSaveInfo} style={{ width: '100%', maxWidth: '520px', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', marginTop: '0.5rem' }}>
-              <div className="ff-field" style={{ marginBottom: '1.25rem' }}>
+            <form onSubmit={handleSaveInfo} style={{ width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginTop: '0.25rem' }}>
+              <div className="ff-field" style={{ marginBottom: '1rem' }}>
                 <input
                   id="settings-name"
                   type="text"
@@ -792,7 +785,7 @@ const ProfileSettings = () => {
               <button
                 type="submit"
                 className="ff-btn ff-btn-primary"
-                style={{ width: '100%' }}
+                style={{ width: '100%', borderRadius: '9999px', padding: '0.6rem' }}
                 disabled={profileLoading}
               >
                 {profileLoading ? (
@@ -807,12 +800,12 @@ const ProfileSettings = () => {
         </div>
 
         {/* PANEL 2: Email & Security */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1.25rem', alignContent: 'start' }}>
           
           {/* Card: Email Management */}
-          <div className="fun-card" style={{ padding: '2rem' }}>
-            <h2 style={{ fontSize: '1.3rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-              <Mail size={18} color="var(--primary)" /> {t('update_email_btn')}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', padding: '1.5rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-md)' }}>
+            <h2 style={{ fontSize: '1.1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+              <Mail size={16} color="var(--primary)" /> {t('update_email_btn')}
             </h2>
 
             {user?.pendingEmail && (
@@ -820,7 +813,7 @@ const ProfileSettings = () => {
                 style={{
                   backgroundColor: 'rgba(59, 130, 246, 0.08)',
                   border: '1px solid rgba(59, 130, 246, 0.25)',
-                  borderRadius: '12px',
+                  borderRadius: '1.25rem',
                   padding: '1.25rem',
                   marginBottom: '1.5rem',
                   color: 'var(--text-main)',
@@ -865,7 +858,7 @@ const ProfileSettings = () => {
 
             <form onSubmit={handleUpdateEmail}>
               {user?.googleId && (
-                <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '0.75rem', borderRadius: 'var(--radius)', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-main)' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.2)', padding: '0.75rem', borderRadius: '1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--text-main)' }}>
                   <ShieldAlert size={16} color="#3B82F6" style={{ flexShrink: 0, marginTop: '2px' }} />
                   <div>
                     <strong>Signed in with Google:</strong> Updating your system communication email will not modify your primary Google OAuth account.
@@ -873,7 +866,7 @@ const ProfileSettings = () => {
                 </div>
               )}
 
-              <div className="ff-field" style={{ marginBottom: '1.25rem' }}>
+              <div className="ff-field" style={{ marginBottom: '1rem' }}>
                 <input
                   id="settings-email"
                   type="email"
@@ -890,7 +883,7 @@ const ProfileSettings = () => {
               <button
                 type="submit"
                 className="ff-btn ff-btn-primary"
-                style={{ width: '100%' }}
+                style={{ width: '100%', borderRadius: '9999px', padding: '0.6rem' }}
                 disabled={emailLoading}
               >
                 {emailLoading ? (
@@ -903,16 +896,16 @@ const ProfileSettings = () => {
           </div>
 
           {/* Card: Password Change / Settings */}
-          <div className="fun-card" style={{ padding: '2rem' }}>
-            <h2 style={{ fontSize: '1.3rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>
-              <LockKeyhole size={18} color="var(--primary)" /> {t('update_password_btn')}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', padding: '1.5rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-md)' }}>
+            <h2 style={{ fontSize: '1.1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-color)' }}>
+              <LockKeyhole size={16} color="var(--primary)" /> {t('update_password_btn')}
             </h2>
 
             <form onSubmit={handleUpdatePassword}>
               
               {/* If Google-only account, give clear instruction they can create password */}
               {!user?.hasPassword ? (
-                <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '0.75rem', borderRadius: 'var(--radius)', marginBottom: '1.25rem', fontSize: '0.8rem', color: 'var(--text-main)' }}>
+                <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.2)', padding: '0.75rem', borderRadius: '1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: 'var(--text-main)' }}>
                   <ShieldAlert size={16} color="#10B981" style={{ flexShrink: 0, marginTop: '2px' }} />
                   <div>
                     <strong>Create Account Password:</strong> Since you signed up via Google, you do not have a password set. You can set one here to enable direct email/password login!
@@ -983,7 +976,7 @@ const ProfileSettings = () => {
                 </div>
               )}
 
-              <div className="ff-field" style={{ marginBottom: '1.5rem' }}>
+              <div className="ff-field" style={{ marginBottom: '1.25rem' }}>
                 <input
                   id="settings-confirm-pass"
                   type={showConfirmPass ? "text" : "password"}
@@ -1007,7 +1000,7 @@ const ProfileSettings = () => {
               <button
                 type="submit"
                 className="ff-btn ff-btn-primary"
-                style={{ width: '100%' }}
+                style={{ width: '100%', borderRadius: '9999px', padding: '0.6rem' }}
                 disabled={passwordLoading}
               >
                 {passwordLoading ? (

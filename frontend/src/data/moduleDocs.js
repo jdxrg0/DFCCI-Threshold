@@ -541,5 +541,118 @@ export const moduleDocs = {
         'Streaks are based on consecutive calendar days with at least one quiz played. Don\'t break the streak, bes!'
       ]
     }
+  },
+  'devotional-tracker': {
+    en: {
+      title: 'Devotional Tracker',
+      description: 'A personal daily quiet time tracker to build a consistent scripture reading habit, trace Bible reading progress, and stay accountable with your leaders.',
+      whatIsIt: 'The Devotional Tracker is a dedicated quiet time journal and accountability module. It helps members log their daily time in God\'s Word, track streaks, map out scripture reading, and receive encouraging feedback from leaders. The built-in Bible Tracker automatically visualizes reading progress, showing exactly which parts of the Bible you have read so far.',
+      howToUse: [
+        'Open the Devotional Tracker from the main dashboard to view your personal stats, calendar, and recent entries.',
+        'Click the "Submit Devotional" button in the top right to log a new entry.',
+        'Select the Date of Devotion. You can only pick 2 days ago, yesterday, or today to help you build a timely, consistent habit.',
+        'Select the Bible Book from the dropdown and type the chapters and verses (supports chapters like 1, ranges like 1-3, specific verses like 1:1-10, or complex lists).',
+        'Write a detailed Summary of the key takeaways and an actionable personal Application of the scripture.',
+        'Add an optional Prayer Focus if there are specific prayer requests or struggles you want your leaders to be aware of and pray for.',
+        'Check the pledge checkbox to confirm your genuine quiet time and submit your entry.',
+        'View your color-coded Mini Calendar Heatmap to see your consistency. Green days represent Submitted entries, while purple/blue days represent entries Acknowledged by a leader.',
+        'Switch to the "Bible Tracker" tab to see a visual map of the entire Bible showing the chapters and verses you have read and tracked.',
+        'If you are a Leader (Admin/Counselor), use the "Leader View" tab to access Member Folders, view real-time pending badges, review member entries, leave encouraging notes, and view their individual Bible reading progress.'
+      ],
+      rules: [
+        'Timely submission: Entries must be submitted within a 3-day window (2 days ago, yesterday, or today) to prevent massive backlog dumping.',
+        'Authenticity pledge: Every submission requires a pledge that your reflection is a genuine product of your own quiet time, free from AI-generated text or plagiarism.',
+        'Locked upon acknowledgment: You can freely edit or delete your devotional entries, but ONLY before a leader acknowledges it. Once acknowledged, the entry is locked.',
+        'Streak continuity: Your active day streak is calculated by consecutive calendar days with at least one devotional entry. If you miss a day, your streak will reset to 0.',
+        'Streak reminders: Automated notifications will be sent to your email and in-app notifications 3 hours and 1 hour before the day ends (UTC time) if your streak is at risk.'
+      ],
+      templates: [
+        {
+          title: "SOAP Devotional Method",
+          description: "A structured, time-tested approach to daily quiet time to help you study, reflect, and apply God's Word.",
+          structure: [
+            { label: "Passage", text: "Select the book and input chapter/verse range." },
+            { label: "Summary", text: "Describe what the passage is about and key takeaways." },
+            { label: "Application", text: "How will you apply this to your life today? Make it personal, specific, and actionable." },
+            { label: "Prayer Focus", text: "A brief prayer or request related to your reflection or current needs." }
+          ],
+          example: "Passage: Psalm 23:1-6\nSummary: David describes the Lord as our Shepherd who provides, guides, restores, and protects us even in the shadow of death.\nApplication: Instead of stressing over my weekly tasks, I will trust the Shepherd to guide my schedule and give me rest today.\nPrayer Focus: Lord, help me rest in Your presence. Please pray for peace amidst my busy week."
+        }
+      ]
+    },
+    fil: {
+      title: 'Devotional Tracker',
+      description: 'Isang personal na quiet time tracker upang bumuo ng pare-parehong ugali sa pagbabasa ng Bibliya, subaybayan ang iyong pag-unlad, at manatiling accountable sa iyong mga lider.',
+      whatIsIt: 'Ang Devotional Tracker ay isang journal at accountability module. Tinutulungan nito ang mga miyembro na i-record ang kanilang araw-araw na pagbabasa ng Bibliya, bumuo ng streak, makita ang natapos na basahin, at makatanggap ng encouraging feedback mula sa mga lider. Ang built-in na Bible Tracker ay awtomatikong nagpapakita ng porsyento ng iyong pagbabasa sa buong Bibliya.',
+      howToUse: [
+        'Buksan ang Devotional Tracker mula sa main dashboard upang makita ang iyong stats, calendar, at mga nakaraang entry.',
+        'I-click ang "Isumite ang Debosyon" button sa kanang itaas upang magdagdag ng bagong entry.',
+        'Piliin ang Petsa ng Debosyon. Maaari lamang pumili ng kahapon, ngayon, o 2 araw ang nakalipas upang masanay sa regular na pag-aaral.',
+        'Piliin ang Aklat sa Bibliya mula sa dropdown at ilagay ang chapter at talata (hal. chapter 1, range na 1-3, partikular na talata tulad ng 1:1-10, o iba pang listahan).',
+        'Sumulat ng detalyadong Buod ng iyong natutunan at isang tiyak na Aplikasyon para sa iyong buhay.',
+        'Magdagdag ng opsyonal na Prayer Focus kung may mga partikular na kahilingan sa panalangin na nais mong ipagdasal ng iyong mga lider.',
+        'Markahan ang pledge checkbox upang kumpirmahin ang iyong personal na oras sa Salita at i-submit ang iyong entry.',
+        'Tingnan ang iyong Mini Calendar Heatmap: ang berdeng araw ay para sa mga na-submit, at ang ube/asul na araw ay para sa mga tinanggap (acknowledged) na ng lider.',
+        'Pumunta sa "Bible Tracker" tab para makita ang visual map ng buong Bibliya at ang mga chapters na iyong nabasa.',
+        'Kung ikaw ay Lider (Admin/Counselor), gamitin ang "Tingin ng Lider" tab para buksan ang Member Folders, makita ang pending badges, suriin ang mga entry ng miyembro, mag-iwan ng nota, at tingnan ang kanilang sariling Bible progress.'
+      ],
+      rules: [
+        'Napapanahong submission: Maaari lamang mag-submit ng entry sa loob ng 3-araw na window (2 araw ang nakalipas, kahapon, o ngayon) upang maiwasan ang tambak na pag-log.',
+        'Tapat na pangako: Ang bawat submission ay nangangailangan ng tapat na pangako na ang reflection ay galing sa iyong sariling quiet time, hindi gawa ng AI o kinopya.',
+        'Naka-lock kapag tinanggap na: Maaari mong i-edit o burahin ang iyong entry, ngunit kapag ito ay tinanggap na ng lider, hindi na ito pwedeng baguhin.',
+        'Streak ng Araw: Ang iyong active streak ay binibilang base sa sunod-sunod na araw na may kahit isang submission. Kapag may lumipas na araw, babalik ito sa 0.',
+        'Alerto at paalala: May awtomatikong email at in-app reminder na ipapadala 3 oras at 1 oras bago matapos ang araw (UTC) kung nanganganib maputol ang iyong streak.'
+      ],
+      templates: [
+        {
+          title: "Paraang SOAP sa Devotional",
+          description: "Isang maayos at subok na paraan ng quiet time upang matulungan kang mag-aral, magnilay, at maglapat ng Salita ng Diyos.",
+          structure: [
+            { label: "Talata (Passage)", text: "Piliin ang aklat at ilagay ang chapter/talata." },
+            { label: "Buod (Summary)", text: "Ilarawan ang pangunahing mensahe ng talata at iyong mga natutunan." },
+            { label: "Aplikasyon", text: "Paano mo ito ilalapat sa iyong buhay ngayon? Gawin itong personal, tiyak, at praktikal." },
+            { label: "Prayer Focus", text: "Maikling panalangin o hiling na may kaugnayan sa iyong binasa o kasalukuyang pinagdadaanan." }
+          ],
+          example: "Talata: Awit 23:1-6\nBuod: Inilalarawan ni David ang Panginoon bilang ating Mabuting Pastol na nagbibigay ng ating pangangailangan, gumagabay, nagpapanumbalik ng lakas, at nagtatanggol sa atin sa gitna ng panganib.\nAplikasyon: Sa halip na mag-alala sa aking mga gawain ngayong linggo, magtitiwala ako sa aking Pastol na gagabayan ang aking oras at bibigyan ako ng kapayapaan.\nPrayer Focus: Panginoon, tulungan Mo akong magpahinga sa Iyong piling. Ipanalangin po ang kapayapaan sa aking abalang linggo."
+        }
+      ]
+    },
+    conyo: {
+      title: 'Devotional Tracker',
+      description: 'Your personal daily quiet time tracker to build a consistent QT habit, keep tabs on your Bible reading journey, and stay accountable with your leaders, bes!',
+      whatIsIt: 'The Devotional Tracker is basically your quiet time journal and accountability buddy. It helps members log their daily time in God\'s Word, build those fire streaks, map out Bible chapters, and get nice encouraging feedback from leaders. The Bible Tracker automatically colors the books you\'ve read, which is super satisfying, promise!',
+      howToUse: [
+        'Open the Devotional Tracker from the main dashboard to flex your stats, calendar, and recent entries.',
+        'Hit the "Submit Devotional" button in the top right to log a new reflection.',
+        'Choose the Date of Devotion. You can only pick 2 days ago, yesterday, or today so you don\'t accumulate a mountain of backlog, literally.',
+        'Pick the Bible Book from the dropdown, then type the chapters and verses (supports single chapters, ranges like 1-3, specific verses like 1:1-10, or list-style ranges).',
+        'Write your Key Takeaways in the Summary box, and write an actionable personal Application.',
+        'Drop a Prayer Focus if you have struggles or prayer requests you want your leaders to be aware of and pray for, bes.',
+        'Tick the pledge checkbox to confirm it\'s your own real-life QT, then hit submit.',
+        'Check your Mini Calendar Heatmap: green is for Submitted, and purple/blue means your leader Acknowledged it already.',
+        'Go to the "Bible Tracker" tab to see the map of the whole Bible. Watch it light up as you read and track chapters!',
+        'If you\'re a Leader, go to the "Leader View" tab to open Member Folders, see real-time pending badges, review their entries, drop encouraging notes, and check their Bible Tracker progress.'
+      ],
+      rules: [
+        'Timely logging: You only have a 3-day window (2 days ago, yesterday, or today) to submit. No massive backlog dumping allowed, bes!',
+        'Sincerity pledge: You gotta tick that pledge box to verify that this is your own genuine reflection, not AI-generated or copy-pasted.',
+        'Lock on acknowledgment: You can edit or delete your entry anytime, but ONLY before a leader acknowledges it. Once they acknowledge, it\'s locked forever!',
+        'Streak protection: Your streak counts consecutive calendar days. Miss a day, and it\'s back to zero. Keep the fire burning, bes!',
+        'Streak reminders: Automated notifications will slide into your email and in-app alerts 3 hours and 1 hour before the day ends (UTC) to warn you if your streak is at risk.'
+      ],
+      templates: [
+        {
+          title: "SOAP Quiet Time Method",
+          description: "A structured, super easy approach to daily quiet time to help you study, reflect, and apply God's Word, literally.",
+          structure: [
+            { label: "Passage", text: "Select the book and type the chapter/verse range." },
+            { label: "Summary", text: "What's the passage about? Spill the tea on your key takeaways." },
+            { label: "Application", text: "How will you apply this today? Make it real, specific, and super actionable, bes." },
+            { label: "Prayer Focus", text: "A quick prayer or request about your reflection or current life vibes." }
+          ],
+          example: "Passage: Psalm 23:1-6\nSummary: David describes the Lord as our Shepherd who provides, guides, restores, and protects us even when things are super messy or scary.\nApplication: Instead of stressing over my school projects, I will trust the Shepherd to guide my schedule and give me rest today.\nPrayer Focus: Lord, help me rest in Your presence. Please pray for peace amidst my super busy week, bes."
+        }
+      ]
+    }
   }
 };

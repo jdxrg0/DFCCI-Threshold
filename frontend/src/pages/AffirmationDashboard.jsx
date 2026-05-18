@@ -14,10 +14,10 @@ const AffirmationCard = ({ affirmation, type }) => {
   const { t } = useLanguage();
 
   return (
-    <div className="card thread-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', borderLeft: '4px solid var(--primary)', padding: '0.65rem 1rem', marginBottom: '0.5rem' }}>
+    <div className="affirmation-card-glass mb-4">
 
       {affirmation.topic && (
-        <div style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '0.2rem', lineHeight: '1.2' }}>
+        <div style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '0.1rem', lineHeight: '1.2' }}>
           {affirmation.topic}
         </div>
       )}
@@ -30,9 +30,9 @@ const AffirmationCard = ({ affirmation, type }) => {
             {isSender ? t('sl_to')(otherParty?.displayName || 'Unknown') : t('sl_from')('Anonymous')}
           </h3>
         </div>
-        <Link to={`/affirm/${affirmation._id}`} className="btn btn-primary" style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }} title="View Affirmation">
-          <Eye size={16} />
-          <span style={{ marginLeft: '0.4rem' }}>View</span>
+        <Link to={`/affirm/${affirmation._id}`} className="btn btn-primary" style={{ padding: '0.4rem 0.85rem', fontSize: '0.8rem', borderRadius: '9999px', fontWeight: '700' }} title="View Affirmation">
+          <Eye size={14} />
+          <span style={{ marginLeft: '0.35rem' }}>View</span>
         </Link>
       </div>
 
@@ -58,36 +58,36 @@ const RecipientFolder = ({ name, affirmations }) => {
   }, {});
 
   return (
-    <div className="recipient-folder">
+    <div className="recipient-folder-glass">
       <button
-        className="recipient-folder__header"
+        className="recipient-folder-glass__header"
         onClick={() => setOpen(o => !o)}
         aria-expanded={open}
       >
-        <span className="recipient-folder__icon" style={{ color: 'var(--primary)' }}>
+        <span className="recipient-folder-glass__icon" style={{ color: 'var(--primary)' }}>
           {open ? <FolderOpen size={20} /> : <Folder size={20} />}
         </span>
-        <span className="recipient-folder__name">
-          <User size={14} style={{ opacity: 0.6, flexShrink: 0 }} />
+        <span className="recipient-folder-glass__name">
+          <User size={14} style={{ opacity: 0.6, flexShrink: 0, color: 'var(--primary)' }} />
           {name}
         </span>
-        <span className="recipient-folder__meta">
+        <span className="recipient-folder-glass__meta">
           {Object.entries(statusCounts).map(([status, count]) => {
             if (status !== 'Received') return null;
             return (
-              <span key={status} className={`badge`} style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', backgroundColor: 'color-mix(in srgb, var(--primary) 20%, transparent)', color: 'var(--primary)' }}>
+              <span key={status} className={`badge`} style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', backgroundColor: 'color-mix(in srgb, var(--primary) 20%, transparent)', color: 'var(--primary)', fontWeight: '700' }}>
                 {count} {t('sl_status_received')}
               </span>
             );
           })}
-          <span className="recipient-folder__count">{affirmations.length} total</span>
+          <span className="recipient-folder-glass__count">{affirmations.length} total</span>
         </span>
-        <span className="recipient-folder__chevron">
+        <span className="recipient-folder-glass__chevron">
           {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </span>
       </button>
       {open && (
-        <div className="recipient-folder__body">
+        <div className="recipient-folder-glass__body">
           {affirmations.map(aff => (
             <AffirmationCard key={aff._id} affirmation={aff} type="sent" />
           ))}
@@ -151,47 +151,53 @@ const AffirmationDashboard = () => {
 
   return (
     <div className="container mirror-dashboard-container" style={{ maxWidth: '800px' }}>
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="dashboard-title" style={{ fontSize: '2rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Sun size={28} /> {t('shining_light_dashboard')}
-        </h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <Link to="/docs/shining-light" className="btn btn-secondary" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Help & Documentation">
-            <BookOpen size={20} />
-          </Link>
-          <Link to="/affirm/send" className="btn btn-primary" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('send_shining_light')}>
-            <Send size={20} />
-          </Link>
+      
+      {/* ── BREATHTAKING MESH gradient HERO BANNER ── */}
+      <div className="affirmation-hero-banner">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <h1 className="affirmation-hero-title" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <Sun size={28} style={{ color: 'var(--primary)' }} /> {t('shining_light_dashboard')}
+            </h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.35rem 0 0 0', fontWeight: '500' }}>
+              Encourage one another daily, highlight spiritual fruits, and share God's light.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Link to="/docs/shining-light" className="btn btn-secondary" style={{ width: '40px', height: '40px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px' }} title="Help & Documentation">
+              <BookOpen size={18} />
+            </Link>
+            <Link to="/affirm/send" className="btn btn-primary" style={{ height: '40px', padding: '0 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderRadius: '9999px', fontWeight: '700' }} title={t('send_shining_light')}>
+              <Send size={16} />
+              <span>Send Light</span>
+            </Link>
+          </div>
         </div>
       </div>
 
-      <div className="dashboard-tabs" style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', gap: '1rem', paddingBottom: '0.25rem' }}>
-        {[
-          { key: 'received', label: t('sl_received'), Icon: Inbox },
-          { key: 'sent',     label: t('sl_sent'),     Icon: Send  },
-          { key: 'my_fruits', label: t('my_fruits_tab'), Icon: User },
-          { key: 'endorse',  label: t('endorse_tab'), Icon: Tag },
-        ].map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            className="dashboard-tab-btn"
-            onClick={() => setActiveTab(key)}
-            style={{
-              padding: '0.75rem 1rem',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              borderBottom: activeTab === key ? '2px solid var(--primary)' : '2px solid transparent',
-              color: activeTab === key ? 'var(--primary)' : 'var(--text-muted)',
-            }}
-            title={label}
-          >
-            <span className="dashboard-tab-content" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Icon size={20} className="dashboard-tab-icon" />
-              <span className="dashboard-tab-label" style={{ fontSize: '0.9rem', fontWeight: activeTab === key ? 'bold' : 'normal' }}>{label}</span>
-            </span>
-          </button>
-        ))}
+      {/* ── premium SLIDING TABS TRACK ── */}
+      <div className="premium-tabs-scroll">
+        <div className="premium-tabs-track">
+          {[
+            { key: 'received', label: t('sl_received'), Icon: Inbox },
+            { key: 'sent',     label: t('sl_sent'),     Icon: Send  },
+            { key: 'my_fruits', label: t('my_fruits_tab'), Icon: User },
+            { key: 'endorse',  label: t('endorse_tab'), Icon: Tag },
+          ].map(({ key, label, Icon }) => {
+            const isActive = activeTab === key;
+            return (
+              <button
+                key={key}
+                className={`premium-tab-pill ${isActive ? 'active-affirmation' : ''}`}
+                onClick={() => setActiveTab(key)}
+                title={label}
+              >
+                <Icon size={16} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {error && <p style={{ color: '#EF4444' }}>{error}</p>}

@@ -47,9 +47,11 @@ const CounselorDashboard = () => {
 
   return (
     <div className="container" style={{ maxWidth: '800px', paddingBottom: '4rem' }}>
-      <button onClick={() => navigate('/dashboard')} className="back-btn">
-        <ChevronLeft size={18} /> Back to Dashboard
-      </button>
+      <div className="btn-back-wrapper">
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="btn-back-pill">
+          <ChevronLeft size={16} /> Back to Dashboard
+        </button>
+      </div>
 
       <h2 style={{ marginBottom: '1.5rem', color: 'var(--primary)' }}>Counselor Dashboard</h2>
       {error && <p style={{ color: '#B91C1C' }}>{error}</p>}

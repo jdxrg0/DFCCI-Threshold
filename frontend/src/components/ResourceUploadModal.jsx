@@ -90,7 +90,7 @@ const ResourceUploadModal = ({ onClose, onSuccess, resourceToEdit }) => {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '650px', background: 'var(--surface)', borderRadius: '0', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '650px', background: 'var(--surface)', borderRadius: '1.25rem', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', maxHeight: '90vh', backdropFilter: 'blur(16px)' }}>
         
         {/* Colored top accent bar */}
         <div style={{ height: '4px', background: `linear-gradient(90deg, ${accentColor}, var(--primary))`, transition: 'background 0.3s' }} />
@@ -145,7 +145,7 @@ const ResourceUploadModal = ({ onClose, onSuccess, resourceToEdit }) => {
                 <FileText size={16} />
                 {t('abstract') || 'Description / Abstract'}
               </label>
-              <div className="quill-custom" style={{ border: '1px solid var(--border-color)', borderRadius: '0', overflow: 'hidden' }}>
+              <div className="quill-custom" style={{ border: '1px solid var(--border-color)', borderRadius: '0.75rem', overflow: 'hidden' }}>
                 <ReactQuill 
                   theme="snow" 
                   value={formData.description} 
@@ -164,7 +164,7 @@ const ResourceUploadModal = ({ onClose, onSuccess, resourceToEdit }) => {
                   </div>
                   {resourceToEdit?.fileUrl && <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: '600', backgroundColor: 'rgba(34, 197, 94, 0.1)', padding: '0.15rem 0.5rem', borderRadius: '12px' }}>✓ Saved</span>}
                 </label>
-                <div style={{ position: 'relative', border: '1px dashed var(--border-color)', padding: '1rem', background: 'var(--surface-border)', textAlign: 'center', flex: 1, display: 'flex', alignItems: 'center' }}>
+                <div style={{ position: 'relative', border: '1px dashed var(--border-color)', padding: '1rem', background: 'var(--surface-border)', textAlign: 'center', flex: 1, display: 'flex', alignItems: 'center', borderRadius: '0.75rem', overflow: 'hidden' }}>
                   <input 
                     type="file" 
                     onChange={handleFileChange} 
@@ -185,7 +185,7 @@ const ResourceUploadModal = ({ onClose, onSuccess, resourceToEdit }) => {
                   </div>
                   {resourceToEdit?.coverImageUrl && <span style={{ fontSize: '0.75rem', color: 'var(--success)', fontWeight: '600', backgroundColor: 'rgba(34, 197, 94, 0.1)', padding: '0.15rem 0.5rem', borderRadius: '12px' }}>✓ Saved</span>}
                 </label>
-                <div style={{ position: 'relative', border: '1px dashed var(--border-color)', padding: '1rem', background: 'var(--surface-border)', textAlign: 'center', flex: 1, display: 'flex', alignItems: 'center' }}>
+                <div style={{ position: 'relative', border: '1px dashed var(--border-color)', padding: '1rem', background: 'var(--surface-border)', textAlign: 'center', flex: 1, display: 'flex', alignItems: 'center', borderRadius: '0.75rem', overflow: 'hidden' }}>
                   <input 
                     type="file" 
                     accept="image/*"
@@ -205,10 +205,10 @@ const ResourceUploadModal = ({ onClose, onSuccess, resourceToEdit }) => {
 
         {/* Footer */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.25rem 1.5rem', borderTop: '1px solid var(--border-color)', background: 'var(--bg-color)', flexShrink: 0 }}>
-          <button type="button" onClick={onClose} className="btn btn-secondary" disabled={loading} style={{ padding: '0.6rem 1.25rem', borderRadius: '0', fontWeight: '600' }}>
+          <button type="button" onClick={onClose} className="btn btn-secondary" disabled={loading} style={{ padding: '0.6rem 1.5rem', borderRadius: '9999px', fontWeight: '600' }}>
             {t('cancel') || 'Cancel'}
           </button>
-          <button type="submit" form="resource-form" className="btn btn-primary" disabled={loading} style={{ padding: '0.6rem 1.5rem', borderRadius: '0', background: accentColor, border: 'none', fontWeight: '700', boxShadow: `0 4px 14px ${accentColor}55` }}>
+          <button type="submit" form="resource-form" className="btn btn-primary" disabled={loading} style={{ padding: '0.6rem 1.75rem', borderRadius: '9999px', background: accentColor, border: 'none', fontWeight: '700', boxShadow: `0 4px 14px ${accentColor}44` }}>
             {loading ? (t('loading') || 'Saving...') : (resourceToEdit ? (t('save') || 'Save Changes') : t('upload_resource') || 'Upload Resource')}
           </button>
         </div>

@@ -15,6 +15,10 @@ const questionSchema = new mongoose.Schema({
     type: String,
     trim: true
   }],
+  explanations: [{
+    type: String,
+    trim: true
+  }],
   correctIndex: {
     type: Number,
     required: true

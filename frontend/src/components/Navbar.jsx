@@ -4,7 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-import { Bell, LayoutDashboard, Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, BookOpen, Sun, Wallet, BookHeart } from 'lucide-react';
+import { Bell, Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, Sun, Wallet, BookHeart, ChevronRight, Settings, Globe } from 'lucide-react';
 import ThemePanel, { ThemePanelContent } from './ThemePanel';
 import LanguageSwitcher from './LanguageSwitcher';
 import api from '../api';
@@ -49,10 +49,8 @@ const MODULE_MAP = [
 
 // ── Mobile language section ────────────────────────────────────────────────
 const MobileLanguageSection = () => {
-  const { t } = useLanguage();
   return (
-    <div style={{ width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
-      <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.78rem', color: 'var(--text-muted)', textAlign: 'center' }}>{t('language')}</p>
+    <div style={{ width: '100%', paddingTop: '0.25rem' }}>
       <LanguageSwitcher />
     </div>
   );
@@ -63,20 +61,20 @@ const MobileThemeSection = ({ onClose }) => {
   const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
   return (
-    <div style={{ width: '100%', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem', marginTop: 'auto' }}>
+    <div style={{ width: '100%', paddingTop: '0.25rem' }}>
       <button
         onClick={() => setExpanded(v => !v)}
         className="btn btn-secondary"
-        style={{ width: '100%', justifyContent: 'space-between' }}
+        style={{ width: '100%', justifyContent: 'space-between', padding: '0.6rem 1rem', borderRadius: '0.75rem' }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r="0.5"/><circle cx="17.5" cy="10.5" r="0.5"/><circle cx="8.5" cy="7.5" r="0.5"/><circle cx="6.5" cy="12.5" r="0.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
           {t('theme_colors')}
         </span>
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       {expanded && (
-        <div className="theme-panel-inline">
+        <div className="theme-panel-inline" style={{ marginTop: '0.5rem' }}>
           <ThemePanelContent onThemeChange={onClose} />
         </div>
       )}
@@ -174,13 +172,18 @@ const Navbar = () => {
             <img src={logo} alt="DFCCI Logo" className="navbar-logo" />
           </Link>
           <div className="navbar-title-container">
-            <Link 
-              to={user ? '/dashboard' : '/login'} 
-              className="navbar-title"
-              onClick={() => setIsMobileMenuOpen(false)}
-            >
-              DFCCI Threshold
-            </Link>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <Link 
+                to={user ? '/dashboard' : '/login'} 
+                className="navbar-title"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
+                DFCCI Threshold
+              </Link>
+              <span className="badge" style={{ fontSize: '0.62rem', padding: '0.12rem 0.35rem', borderRadius: '9999px', backgroundColor: 'color-mix(in srgb, var(--primary) 15%, transparent)', color: 'var(--primary)', border: '1px solid color-mix(in srgb, var(--primary) 30%, transparent)', fontWeight: '800', lineHeight: '1', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center' }}>
+                v2
+              </span>
+            </div>
             <span className="navbar-tagline">
               Truth, held gently.
             </span>
@@ -246,21 +249,6 @@ const Navbar = () => {
                   )}
                 </Link>
               )}
-              <Link to="/funds" className="btn btn-secondary" style={{ padding: '0.5rem', position: 'relative' }} title={t('fund_tracker')}>
-                <Wallet size={20} color={location.pathname === '/funds' ? 'var(--primary)' : 'var(--text-main)'} style={{ transition: 'color 0.2s' }} />
-                {location.pathname === '/funds' && (
-                  <span style={{
-                    position: 'absolute',
-                    bottom: '3px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '4px',
-                    height: '4px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--primary)',
-                  }} />
-                )}
-              </Link>
 
               {/* Notification bell */}
               <button
@@ -359,76 +347,84 @@ const Navbar = () => {
           <div className="mobile-nav-menu">
             {user ? (
               <>
+                {/* Profile Glass Card */}
                 <Link 
                   to="/settings" 
                   onClick={() => setIsMobileMenuOpen(false)}
-                  style={{ 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    alignItems: 'center', 
-                    gap: '0.5rem', 
-                    textDecoration: 'none',
-                    padding: '1rem',
-                    borderBottom: '1px solid var(--border-color)',
-                    width: '100%',
-                    marginBottom: '0.5rem'
-                  }}
+                  className="mobile-menu-profile-card"
                 >
-                  {renderAvatar(user, 64)}
-                  <span style={{ fontWeight: '500', color: 'var(--text-main)', fontSize: '1.05rem', marginTop: '0.25rem' }}>
-                    {t('hello')}, <span style={{ color: 'var(--primary)' }}>{user.displayName || user.email}</span>
-                  </span>
+                  <div className="mobile-menu-avatar-glow">
+                    {renderAvatar(user, 48)}
+                  </div>
+                  <div className="mobile-menu-profile-info">
+                    <span className="mobile-menu-profile-greeting">{t('hello')}</span>
+                    <span className="mobile-menu-profile-name">{user.displayName || user.email}</span>
+                  </div>
+                  <div className="mobile-menu-profile-settings-btn">
+                    <Settings size={18} />
+                  </div>
                 </Link>
 
-                {location.pathname !== '/dashboard' && (
-                  <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)} className="btn btn-secondary">
-                    <LayoutDashboard size={20} /> {t('main_dashboard')}
-                  </Link>
-                )}
-  
-                {displayedModule?.docsPath && (
-                  <Link 
-                    to={`${displayedModule.docsPath}${location.pathname === '/mirror/send' ? '#templates' : ''}`}
-                    onClick={() => setIsMobileMenuOpen(false)} 
-                    className="btn btn-primary"
+                {/* Refined Navigation list */}
+                <div className="mobile-menu-list">
+                  {user.role === 'ADMIN' && (
+                    <Link to="/admin" onClick={() => setIsMobileMenuOpen(false)} className="mobile-menu-item">
+                      <Shield size={18} />
+                      <span>{t('admin')}</span>
+                      <ChevronRight size={16} className="mobile-menu-chevron" />
+                    </Link>
+                  )}
+                  {['ADMIN', 'COUNSELOR'].includes(user.role) && (
+                    <Link to="/counselor" onClick={() => setIsMobileMenuOpen(false)} className="mobile-menu-item">
+                      <Users size={18} />
+                      <span>{t('counselor')}</span>
+                      <ChevronRight size={16} className="mobile-menu-chevron" />
+                    </Link>
+                  )}
+
+                  <button 
+                    onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} 
+                    className="mobile-menu-item" 
+                    style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
                   >
-                    <BookOpen size={20} /> Documentation
-                  </Link>
-                )}
-                {user.role === 'ADMIN' && (
-                  <Link to="/admin" onClick={() => setIsMobileMenuOpen(false)} className="btn btn-secondary">
-                    <Shield size={20} /> {t('admin')}
-                  </Link>
-                )}
-                {['ADMIN', 'COUNSELOR'].includes(user.role) && (
-                  <Link to="/counselor" onClick={() => setIsMobileMenuOpen(false)} className="btn btn-secondary">
-                    <Users size={20} /> {t('counselor')}
-                  </Link>
-                )}
-                <Link to="/funds" onClick={() => setIsMobileMenuOpen(false)} className="btn btn-secondary">
-                  <Wallet size={20} /> {t('fund_tracker')}
-                </Link>
-
-                <button onClick={() => { handleLogout(); setIsMobileMenuOpen(false); }} className="btn btn-secondary">
-                  <LogOut size={20} /> {t('logout')}
-                </button>
+                    <LogOut size={18} />
+                    <span>{t('logout')}</span>
+                    <ChevronRight size={16} className="mobile-menu-chevron" />
+                  </button>
+                </div>
               </>
             ) : (
-              <>
-                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="btn btn-secondary">
-                  <LogIn size={20} /> {t('login')}
+              <div className="mobile-menu-list">
+                <Link to="/login" onClick={() => setIsMobileMenuOpen(false)} className="mobile-menu-item">
+                  <LogIn size={18} />
+                  <span>{t('login')}</span>
+                  <ChevronRight size={16} className="mobile-menu-chevron" />
                 </Link>
-                <Link to="/signup" onClick={() => setIsMobileMenuOpen(false)} className="btn btn-primary">
-                  <UserPlus size={20} /> {t('sign_up')}
+                <Link to="/signup" onClick={() => setIsMobileMenuOpen(false)} className="mobile-menu-item">
+                  <UserPlus size={18} style={{ color: 'var(--primary)' }} />
+                  <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>{t('sign_up')}</span>
+                  <ChevronRight size={16} className="mobile-menu-chevron" style={{ color: 'var(--primary)', opacity: 0.8 }} />
                 </Link>
-              </>
+              </div>
             )}
 
-            {/* Language switcher — inside hamburger */}
-            <MobileLanguageSection />
+            {/* Settings Card Footer */}
+            <div className="mobile-menu-settings-card">
+              <div>
+                <span className="mobile-menu-section-title">
+                  <Globe size={14} /> {t('language')}
+                </span>
+                <MobileLanguageSection />
+              </div>
 
-            {/* Theme panel — inline inside hamburger */}
-            <MobileThemeSection onClose={() => setIsMobileMenuOpen(false)} />
+              <div>
+                <span className="mobile-menu-section-title">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r="0.5"/><circle cx="17.5" cy="10.5" r="0.5"/><circle cx="8.5" cy="7.5" r="0.5"/><circle cx="6.5" cy="12.5" r="0.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+                  {t('theme_colors')}
+                </span>
+                <MobileThemeSection onClose={() => setIsMobileMenuOpen(false)} />
+              </div>
+            </div>
           </div>,
           document.body
         )}

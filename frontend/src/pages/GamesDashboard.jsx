@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Gamepad2, Trophy, BarChart3, BookOpen, Plus, Play, Users, Flame, Clock, ChevronLeft, Star, Target, Zap } from 'lucide-react';
+import { Gamepad2, Trophy, BarChart3, Plus, Play, Users, Flame, Clock, ChevronLeft, Star, Target, Zap } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -77,25 +77,30 @@ const GamesDashboard = () => {
   };
 
   return (
-    <div className="container mirror-dashboard-container" style={{ maxWidth: '800px' }}>
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="dashboard-title" style={{ fontSize: '2rem', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Gamepad2 size={28} /> {t('games_dashboard')}
-        </h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <Link to="/docs/games" className="btn btn-secondary" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Help & Documentation">
-            <BookOpen size={20} />
-          </Link>
+    <div className="container mirror-dashboard-container" style={{ maxWidth: '800px', padding: 0 }}>
+      {/* ── BREATHTAKING MESH GRADIENT GAMES BANNER ── */}
+      <div className="games-hero-banner">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <h1 className="games-dashboard-title" style={{ fontSize: '2.1rem', color: 'var(--text-main)', margin: 0, fontWeight: '850', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <Gamepad2 size={28} style={{ color: 'var(--primary)' }} /> {t('games_dashboard')}
+            </h1>
+            <p className="games-dashboard-desc" style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.35rem 0 0 0', fontWeight: '500' }}>
+              Test your knowledge, challenge the community, and climb the spiritual ranks!
+            </p>
+          </div>
           {isAdmin && (
-            <Link to="/games/create" className="btn btn-primary" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('games_create_quiz')}>
-              <Plus size={20} />
-            </Link>
+            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+              <Link to="/games/create" className="btn btn-primary" style={{ padding: '0.6rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('games_create_quiz')}>
+                <Plus size={16} />
+              </Link>
+            </div>
           )}
         </div>
       </div>
 
       {/* Tab Bar */}
-      <div className="dashboard-tabs" style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '1.5rem', gap: '1rem', paddingBottom: '0.25rem' }}>
+      <div className="games-tabs-glass">
         {[
           { key: 'quizzes', label: t('games_quizzes'), Icon: Gamepad2 },
           { key: 'leaderboard', label: t('games_leaderboard'), Icon: Trophy },
@@ -103,27 +108,17 @@ const GamesDashboard = () => {
         ].map(({ key, label, Icon }) => (
           <button
             key={key}
-            className="dashboard-tab-btn"
+            className={`games-tab-btn-glass ${activeTab === key ? 'active' : ''}`}
             onClick={() => setActiveTab(key)}
-            style={{
-              padding: '0.75rem 1rem',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              borderBottom: activeTab === key ? '2px solid var(--primary)' : '2px solid transparent',
-              color: activeTab === key ? 'var(--primary)' : 'var(--text-muted)',
-            }}
             title={label}
           >
-            <span className="dashboard-tab-content" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-              <Icon size={20} className="dashboard-tab-icon" />
-              <span className="dashboard-tab-label" style={{ fontSize: '0.9rem', fontWeight: activeTab === key ? 'bold' : 'normal' }}>{label}</span>
-            </span>
+            <Icon size={16} />
+            <span style={{ fontSize: '0.85rem' }}>{label}</span>
           </button>
         ))}
       </div>
 
-      {error && <p style={{ color: '#EF4444' }}>{error}</p>}
+      {error && <p style={{ color: '#EF4444', marginBottom: '1rem', fontWeight: '600' }}>{error}</p>}
 
       <div style={{ minHeight: '400px', position: 'relative', opacity: loading ? 0.6 : 1, transition: 'opacity 0.2s ease', pointerEvents: loading ? 'none' : 'auto' }}>
 
@@ -134,58 +129,58 @@ const GamesDashboard = () => {
               <Gamepad2 size={48} style={{ color: 'var(--text-muted)', marginBottom: '1rem', opacity: 0.5 }} />
               <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>{t('games_no_quizzes')}</p>
               {isAdmin && (
-                <Link to="/games/create" className="btn btn-primary" style={{ marginTop: '1rem' }}>
-                  <Plus size={18} style={{ marginRight: '0.5rem' }} /> {t('games_create_quiz')}
+                <Link to="/games/create" className="btn btn-primary" style={{ marginTop: '1rem', borderRadius: '9999px' }}>
+                  <Plus size={16} style={{ marginRight: '0.4rem' }} /> {t('games_create_quiz')}
                 </Link>
               )}
             </div>
           ) : (
-            <div className="games-quiz-grid">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {quizzes.map(quiz => (
-                <div key={quiz._id} className="card quiz-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', borderLeft: '4px solid var(--primary)', padding: '1rem 1.25rem', cursor: 'pointer', transition: 'transform 0.15s ease, box-shadow 0.15s ease' }}
+                <div key={quiz._id} className="games-card-glass" style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', cursor: 'pointer' }}
                   onClick={() => navigate(`/games/play/${quiz._id}`)}
                 >
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: 'var(--text-main)', marginBottom: '0.25rem', lineHeight: '1.2' }}>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: '850', color: 'var(--text-main)', marginBottom: '0.25rem', lineHeight: '1.2', letterSpacing: '-0.02em' }}>
                         {quiz.title}
                       </h3>
                       {quiz.description && (
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.4', marginBottom: '0.5rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', lineHeight: '1.4', marginBottom: '0.5rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                           {quiz.description}
                         </p>
                       )}
                     </div>
                     {!quiz.isPublished && isAdmin && (
-                      <span className="badge" style={{ fontSize: '0.7rem', flexShrink: 0, backgroundColor: 'rgba(245,158,11,0.15)', color: '#f59e0b', borderColor: '#f59e0b' }}>Draft</span>
+                      <span className="badge" style={{ fontSize: '0.7rem', flexShrink: 0, backgroundColor: 'color-mix(in srgb, var(--primary) 15%, transparent)', color: 'var(--primary)', borderColor: 'color-mix(in srgb, var(--primary) 30%, transparent)' }}>Draft</span>
                     )}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                    <span className="badge" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem' }}>{quiz.category}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <Target size={13} /> {quiz.questionCount} {t('games_questions')}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', fontSize: '0.8rem', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                    <span className="badge" style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)' }}>{quiz.category}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: '500' }}>
+                      <Target size={13} style={{ color: 'var(--primary)' }} /> {quiz.questionCount} {t('games_questions')}
                     </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                      <Users size={13} /> {quiz.playCount} {quiz.playCount === 1 ? 'play' : 'plays'}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: '500' }}>
+                      <Users size={13} style={{ color: 'var(--primary)' }} /> {quiz.playCount} {quiz.playCount === 1 ? 'play' : 'plays'}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.25rem' }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.5rem', borderTop: '1px solid var(--surface-border)', paddingTop: '0.6rem' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: '500' }}>
                       {format(new Date(quiz.createdAt), 'MMM d, yyyy')}
                     </span>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                       {isAdmin && (
                         <Link 
                           to={`/games/edit/${quiz._id}`}
                           className="btn btn-secondary"
-                          style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
+                          style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem', borderRadius: '9999px' }}
                           onClick={(e) => e.stopPropagation()}
                         >
                           {t('edit')}
                         </Link>
                       )}
-                      <span className="btn btn-primary" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <Play size={13} /> {t('games_start_quiz')}
+                      <span className="btn btn-primary" style={{ padding: '0.35rem 0.85rem', fontSize: '0.75rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: '700' }}>
+                        <Play size={12} /> {t('games_start_quiz')}
                       </span>
                     </div>
                   </div>
@@ -206,32 +201,29 @@ const GamesDashboard = () => {
             <div>
               {/* Podium - top 3 */}
               {leaderboard.length >= 3 && (
-                <div className="games-podium" style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: '0.75rem', marginBottom: '2rem', padding: '1rem 0' }}>
+                <div className="games-podium" style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: '1rem', marginBottom: '2.5rem', padding: '1rem 0' }}>
                   {[1, 0, 2].map(rank => {
                     const entry = leaderboard[rank];
                     if (!entry) return null;
-                    const heights = { 0: '120px', 1: '90px', 2: '70px' };
-                    const colors = { 0: '#FFD700', 1: '#C0C0C0', 2: '#CD7F32' };
+                    const heights = { 0: '120px', 1: '95px', 2: '75px' };
+                    const colors = { 0: '#ffd700', 1: '#c0c0c0', 2: '#cd7f32' };
                     const isMe = entry._id === user?._id;
                     return (
-                      <div key={rank} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem', flex: '1', maxWidth: '140px' }}>
+                      <div key={rank} className="games-podium-column-glass">
                         <span style={{ fontSize: rank === 0 ? '1.8rem' : '1.4rem' }}>{['🥇', '🥈', '🥉'][rank]}</span>
-                        <span style={{ fontSize: '0.8rem', fontWeight: '700', color: isMe ? 'var(--primary)' : 'var(--text-main)', textAlign: 'center', lineHeight: '1.2' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: '800', color: isMe ? 'var(--primary)' : 'var(--text-main)', textAlign: 'center', lineHeight: '1.2' }}>
                           {entry.displayName}
                         </span>
-                        <div style={{
-                          width: '100%',
-                          height: heights[rank],
-                          background: `linear-gradient(180deg, ${colors[rank]}33 0%, ${colors[rank]}11 100%)`,
-                          border: `1px solid ${colors[rank]}44`,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.25rem'
-                        }}>
-                          <span style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-main)' }}>{entry.totalScore}</span>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{entry.avgPercentage}% avg</span>
+                        <div 
+                          className="games-podium-tower" 
+                          style={{
+                            height: heights[rank],
+                            background: `linear-gradient(180deg, color-mix(in srgb, ${colors[rank]} 22%, transparent) 0%, color-mix(in srgb, ${colors[rank]} 6%, transparent) 100%)`,
+                            border: `1px solid color-mix(in srgb, ${colors[rank]} 40%, transparent)`
+                          }}
+                        >
+                          <span style={{ fontSize: '1.6rem', fontWeight: '850', color: 'var(--text-main)', letterSpacing: '-0.02em', lineHeight: '1' }}>{entry.totalScore}</span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>{entry.avgPercentage}% avg</span>
                         </div>
                       </div>
                     );
@@ -240,7 +232,7 @@ const GamesDashboard = () => {
               )}
 
               {/* Full list */}
-              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              <div className="games-card-glass" style={{ padding: 0, borderLeft: 'none' }}>
                 {leaderboard.map((entry, index) => {
                   const isMe = entry._id === user?._id;
                   return (
@@ -250,20 +242,20 @@ const GamesDashboard = () => {
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.75rem',
-                        padding: '0.75rem 1rem',
-                        borderBottom: index < leaderboard.length - 1 ? '1px solid var(--border-color)' : 'none',
+                        padding: '0.85rem 1.25rem',
+                        borderBottom: index < leaderboard.length - 1 ? '1px solid var(--surface-border)' : 'none',
                         background: isMe ? 'color-mix(in srgb, var(--primary) 8%, transparent)' : 'transparent',
                       }}
                     >
-                      <span style={{ minWidth: '32px', textAlign: 'center' }}>{getRankIcon(index)}</span>
-                      <span style={{ flex: 1, fontWeight: isMe ? '700' : '500', color: isMe ? 'var(--primary)' : 'var(--text-main)', fontSize: '0.9rem' }}>
-                        {entry.displayName} {isMe && '(You)'}
+                      <span style={{ minWidth: '32px', display: 'flex', justifyContent: 'center' }}>{getRankIcon(index)}</span>
+                      <span style={{ flex: 1, fontWeight: isMe ? '800' : '600', color: isMe ? 'var(--primary)' : 'var(--text-main)', fontSize: '0.92rem' }}>
+                        {entry.displayName} {isMe && `(${t('me') || 'You'})`}
                       </span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                        <Gamepad2 size={13} /> {entry.quizzesPlayed}
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: '500' }}>
+                        <Gamepad2 size={13} style={{ color: 'var(--primary)' }} /> {entry.quizzesPlayed}
                       </span>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{entry.avgPercentage}%</span>
-                      <span style={{ fontWeight: '800', fontSize: '1rem', color: 'var(--primary)', minWidth: '40px', textAlign: 'right' }}>{entry.totalScore}</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>{entry.avgPercentage}%</span>
+                      <span style={{ fontWeight: '850', fontSize: '1.05rem', color: 'var(--primary)', minWidth: '40px', textAlign: 'right' }}>{entry.totalScore}</span>
                     </div>
                   );
                 })}
@@ -279,34 +271,34 @@ const GamesDashboard = () => {
           ) : (
             <div>
               {/* Stats Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                <div className="card" style={{ textAlign: 'center', padding: '1rem' }}>
-                  <Gamepad2 size={22} style={{ color: 'var(--primary)', marginBottom: '0.5rem' }} />
-                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--text-main)' }}>{myStats.quizzesPlayed}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>{t('games_quizzes_played')}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '2rem' }}>
+                <div className="games-stat-tile-glass">
+                  <Gamepad2 size={24} style={{ color: 'var(--primary)', marginBottom: '0.5rem' }} />
+                  <div style={{ fontSize: '1.8rem', fontWeight: '850', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>{myStats.quizzesPlayed}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700' }}>{t('games_quizzes_played')}</div>
                 </div>
-                <div className="card" style={{ textAlign: 'center', padding: '1rem' }}>
-                  <Star size={22} style={{ color: '#f59e0b', marginBottom: '0.5rem' }} />
-                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--text-main)' }}>{myStats.totalScore}</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>{t('games_total_score')}</div>
+                <div className="games-stat-tile-glass">
+                  <Star size={24} style={{ color: 'var(--primary)', marginBottom: '0.5rem' }} />
+                  <div style={{ fontSize: '1.8rem', fontWeight: '850', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>{myStats.totalScore}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700' }}>{t('games_total_score')}</div>
                 </div>
-                <div className="card" style={{ textAlign: 'center', padding: '1rem' }}>
-                  <Target size={22} style={{ color: '#10b981', marginBottom: '0.5rem' }} />
-                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--text-main)' }}>{myStats.avgPercentage}%</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>{t('games_avg_score')}</div>
+                <div className="games-stat-tile-glass">
+                  <Target size={24} style={{ color: 'var(--primary)', marginBottom: '0.5rem' }} />
+                  <div style={{ fontSize: '1.8rem', fontWeight: '850', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>{myStats.avgPercentage}%</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700' }}>{t('games_avg_score')}</div>
                 </div>
-                <div className="card" style={{ textAlign: 'center', padding: '1rem' }}>
-                  <Flame size={22} style={{ color: '#ef4444', marginBottom: '0.5rem' }} />
-                  <div style={{ fontSize: '1.6rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                <div className="games-stat-tile-glass">
+                  <Flame size={24} style={{ color: 'var(--primary)', marginBottom: '0.5rem' }} />
+                  <div style={{ fontSize: '1.8rem', fontWeight: '850', color: 'var(--text-main)', letterSpacing: '-0.02em' }}>
                     {myStats.currentStreak}
                     {myStats.currentStreak > 0 && <span style={{ marginLeft: '0.25rem' }}>🔥</span>}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600' }}>{t('games_streak')}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '700' }}>{t('games_streak')}</div>
                 </div>
               </div>
 
               {/* Recent Attempts */}
-              <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '0.75rem' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: '850', color: 'var(--text-main)', marginBottom: '0.85rem', letterSpacing: '-0.02em' }}>
                 {t('games_recent_attempts')}
               </h3>
               {myStats.recentAttempts.length === 0 ? (
@@ -314,23 +306,23 @@ const GamesDashboard = () => {
                   {t('games_no_attempts')}
                 </p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {myStats.recentAttempts.map(attempt => (
-                    <div key={attempt._id} className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', borderLeft: `4px solid ${attempt.percentage === 100 ? '#10b981' : attempt.percentage >= 70 ? 'var(--primary)' : '#f59e0b'}` }}>
+                    <div key={attempt._id} className="games-card-glass" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.85rem 1.25rem', borderLeft: `4px solid ${attempt.percentage === 100 ? '#10b981' : attempt.percentage >= 70 ? 'var(--primary)' : '#f59e0b'}` }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '0.95rem', fontWeight: '700', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>
                           {attempt.quizTitle}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.2rem' }}>
+                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '0.25rem', fontWeight: '500' }}>
                           <span>{format(new Date(attempt.createdAt), 'MMM d, yyyy h:mm a')}</span>
-                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}><Clock size={12} /> {formatTime(attempt.timeTakenMs)}</span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}><Clock size={12} style={{ color: 'var(--primary)' }} /> {formatTime(attempt.timeTakenMs)}</span>
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div style={{ fontSize: '1.1rem', fontWeight: '800', color: attempt.percentage === 100 ? '#10b981' : 'var(--primary)' }}>
+                        <div style={{ fontSize: '1.25rem', fontWeight: '850', color: attempt.percentage === 100 ? '#10b981' : 'var(--primary)', letterSpacing: '-0.02em', lineHeight: '1.1' }}>
                           {attempt.score}/{attempt.totalQuestions}
                         </div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '600' }}>
                           {attempt.percentage}%
                         </div>
                       </div>

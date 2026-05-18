@@ -1,7 +1,22 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api';
-import { Link } from 'react-router-dom';
-import { BookOpen, Copy, Pencil } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { 
+  BookOpen, 
+  Copy, 
+  Pencil, 
+  ChevronLeft, 
+  Plus, 
+  TrendingUp, 
+  TrendingDown, 
+  Coins, 
+  Users, 
+  Briefcase, 
+  Trash2, 
+  Edit3, 
+  ShieldAlert,
+  Info
+} from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -23,12 +38,27 @@ function getLocalYMD(d) {
 }
 
 const inputStyle = {
-  width: '100%', background: 'var(--bg-color)', border: '1px solid var(--border-color)',
-  color: 'var(--text-main)', borderRadius: 'var(--radius)', padding: '0.6rem 0.85rem', boxSizing: 'border-box', fontSize: '1rem',
+  width: '100%', 
+  background: 'rgba(255, 255, 255, 0.03)', 
+  border: '1px solid var(--border-color)',
+  color: 'var(--text-main)', 
+  borderRadius: '0.75rem', 
+  padding: '0.6rem 0.85rem', 
+  boxSizing: 'border-box', 
+  fontSize: '1rem',
+  outline: 'none',
+  transition: 'all 0.2s ease',
 };
 const selectStyle = {
-  background: 'var(--bg-color)', border: '1px solid var(--border-color)', color: 'var(--text-main)',
-  borderRadius: 'var(--radius)', padding: '0.5rem 0.75rem', fontSize: '0.95rem',
+  background: 'var(--surface)', 
+  border: '1px solid var(--border-color)', 
+  color: 'var(--text-main)',
+  borderRadius: '0.75rem', 
+  padding: '0.5rem 0.75rem', 
+  fontSize: '0.9rem',
+  cursor: 'pointer',
+  outline: 'none',
+  transition: 'all 0.2s ease',
 };
 const labelStyle = { display: 'block', fontSize: '0.95rem', fontWeight: '500', color: 'var(--text-main)', marginBottom: '0.4rem' };
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -36,7 +66,15 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 export default function FundTrackerDashboard() {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const navigate = useNavigate();
   const isPrivileged = user?.role === 'ADMIN' || user?.role === 'YOUTH_TREASURER';
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const [activeTab, setActiveTab] = useState(() => {
     return localStorage.getItem('fundTrackerActiveTab') || 'overview';
@@ -630,177 +668,384 @@ ${formattedDesc}
   };
 
   return (
-    <div className="container" style={{ maxWidth: '1000px', padding: '1rem 0.5rem' }}>
-      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.25rem' }}>{t('fund_dashboard')}</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{t('fund_desc')}</p>
-        </div>
-        <Link to="/docs/fund-tracker" className="btn btn-secondary" style={{ padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }} title="Help & Documentation">
-          <BookOpen size={20} />
+    <div className="container" style={{ maxWidth: '1000px', padding: isMobile ? '0.5rem 0.35rem' : '1rem 0.5rem' }}>
+      {/* ── Back Button & Help ── */}
+      <div style={{ marginBottom: isMobile ? '0.4rem' : '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="back-btn" style={{ padding: isMobile ? '0.3rem 0.6rem' : '0.4rem 0.8rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }}>
+          <ChevronLeft size={isMobile ? 15 : 18} /> {t('back')}
+        </button>
+        <Link to="/docs/fund-tracker" className="back-btn" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem', padding: isMobile ? '0.3rem 0.6rem' : '0.4rem 0.8rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }} title="Help & Documentation">
+          <BookOpen size={isMobile ? 14 : 16} /> {t('read_docs') || 'Docs'}
         </Link>
       </div>
 
-      {/* Summary Unified Card */}
-      <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 0.5rem', marginBottom: '1.5rem' }}>
-        <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('current_balance')}</p>
-          <p style={{ fontSize: '1.3rem', fontWeight: '800', color: summary.currentBalance >= 0 ? '#22c55e' : '#ef4444', lineHeight: 1 }}>{fmtCompact(summary.currentBalance)}</p>
-          <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>{fmt(summary.currentBalance)}</p>
+      {/* ── Header Row ── */}
+      <div style={{ marginBottom: isMobile ? '0.85rem' : '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.15rem' }}>
+        <h1 className="text-gradient text-hero" style={{ fontSize: isMobile ? '1.4rem' : '1.75rem', margin: 0, lineHeight: 1.1, textAlign: 'center' }}>
+          {t('fund_dashboard')}
+        </h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.75rem' : '0.85rem', margin: 0, textAlign: 'center' }}>{t('fund_desc')}</p>
+      </div>
+
+      {/* ── Summary Metrics Grid ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr 1fr' : 'repeat(auto-fit, minmax(240px, 1fr))', gap: isMobile ? '0.35rem' : '1rem', marginBottom: isMobile ? '0.85rem' : '1.5rem' }}>
+        
+        {/* CARD 1: Current Balance */}
+        <div style={{ 
+          background: 'var(--surface)', 
+          border: '1px solid var(--surface-border)', 
+          borderRadius: isMobile ? '0.75rem' : '1.25rem', 
+          padding: isMobile ? '0.5rem 0.6rem' : '1.25rem', 
+          backdropFilter: 'blur(16px)', 
+          boxShadow: 'var(--shadow-md)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{ zIndex: 1, width: '100%' }}>
+            <p style={{ fontSize: isMobile ? '0.58rem' : '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: isMobile ? '0.15rem' : '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isMobile ? 'Balance' : t('current_balance')}
+            </p>
+            <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.65rem', fontWeight: '800', color: summary.currentBalance >= 0 ? '#10b981' : '#ef4444', margin: 0, lineHeight: 1.1, letterSpacing: isMobile ? '-0.02em' : 'normal' }}>
+              {fmtCompact(summary.currentBalance)}
+            </h3>
+            <p style={{ fontSize: isMobile ? '0.62rem' : '0.75rem', color: 'var(--text-muted)', margin: '0.2rem 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {fmt(summary.currentBalance)}
+            </p>
+          </div>
+          {!isMobile && (
+            <div style={{ 
+              background: summary.currentBalance >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+              borderRadius: '1rem', 
+              padding: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: summary.currentBalance >= 0 ? '#10b981' : '#ef4444'
+            }}>
+              <Coins size={24} />
+            </div>
+          )}
         </div>
-        <div style={{ width: '1px', height: '50px', background: 'var(--border-color)' }} />
-        <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_income')}</p>
-          <p style={{ fontSize: '1.3rem', fontWeight: '700', color: '#22c55e', lineHeight: 1 }}>+{fmtCompact(summary.totalIncome)}</p>
-          <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>{fmt(summary.totalIncome)}</p>
+
+        {/* CARD 2: Total Income */}
+        <div style={{ 
+          background: 'var(--surface)', 
+          border: '1px solid var(--surface-border)', 
+          borderRadius: isMobile ? '0.75rem' : '1.25rem', 
+          padding: isMobile ? '0.5rem 0.6rem' : '1.25rem', 
+          backdropFilter: 'blur(16px)', 
+          boxShadow: 'var(--shadow-md)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{ zIndex: 1, width: '100%' }}>
+            <p style={{ fontSize: isMobile ? '0.58rem' : '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: isMobile ? '0.15rem' : '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isMobile ? 'Income' : t('total_income')}
+            </p>
+            <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.65rem', fontWeight: '800', color: '#10b981', margin: 0, lineHeight: 1.1, letterSpacing: isMobile ? '-0.02em' : 'normal' }}>
+              +{fmtCompact(summary.totalIncome)}
+            </h3>
+            <p style={{ fontSize: isMobile ? '0.62rem' : '0.75rem', color: 'var(--text-muted)', margin: '0.2rem 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {fmt(summary.totalIncome)}
+            </p>
+          </div>
+          {!isMobile && (
+            <div style={{ 
+              background: 'rgba(16, 185, 129, 0.1)', 
+              borderRadius: '1rem', 
+              padding: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#10b981'
+            }}>
+              <TrendingUp size={24} />
+            </div>
+          )}
         </div>
-        <div style={{ width: '1px', height: '50px', background: 'var(--border-color)' }} />
-        <div style={{ flex: 1, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.3rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('total_expense')}</p>
-          <p style={{ fontSize: '1.3rem', fontWeight: '700', color: '#ef4444', lineHeight: 1 }}>-{fmtCompact(summary.totalExpense)}</p>
-          <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '0.3rem' }}>{fmt(summary.totalExpense)}</p>
+
+        {/* CARD 3: Total Expense */}
+        <div style={{ 
+          background: 'var(--surface)', 
+          border: '1px solid var(--surface-border)', 
+          borderRadius: isMobile ? '0.75rem' : '1.25rem', 
+          padding: isMobile ? '0.5rem 0.6rem' : '1.25rem', 
+          backdropFilter: 'blur(16px)', 
+          boxShadow: 'var(--shadow-md)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          <div style={{ zIndex: 1, width: '100%' }}>
+            <p style={{ fontSize: isMobile ? '0.58rem' : '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: isMobile ? '0.15rem' : '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {isMobile ? 'Expense' : t('total_expense')}
+            </p>
+            <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.65rem', fontWeight: '800', color: '#ef4444', margin: 0, lineHeight: 1.1, letterSpacing: isMobile ? '-0.02em' : 'normal' }}>
+              -{fmtCompact(summary.totalExpense)}
+            </h3>
+            <p style={{ fontSize: isMobile ? '0.62rem' : '0.75rem', color: 'var(--text-muted)', margin: '0.2rem 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {fmt(summary.totalExpense)}
+            </p>
+          </div>
+          {!isMobile && (
+            <div style={{ 
+              background: 'rgba(239, 68, 68, 0.1)', 
+              borderRadius: '1rem', 
+              padding: '0.75rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ef4444'
+            }}>
+              <TrendingDown size={24} />
+            </div>
+          )}
         </div>
+
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+      <div style={{ 
+        display: 'inline-flex', 
+        gap: '0.25rem', 
+        marginBottom: isMobile ? '0.85rem' : '1.5rem', 
+        overflowX: 'auto', 
+        padding: '0.2rem',
+        background: 'rgba(255, 255, 255, 0.03)',
+        border: '1px solid var(--surface-border)',
+        borderRadius: '9999px',
+        backdropFilter: 'blur(8px)',
+        maxWidth: '100%',
+        whiteSpace: 'nowrap'
+      }}>
         {[
           { id: 'overview', label: t('overview_tab') }, 
           { id: 'dues', label: t('weekly_dues_tab') },
           { id: 'budgets', label: 'Designated Funds' }
-        ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ background: activeTab === tab.id ? 'var(--primary)' : 'var(--bg-color)', border: '1px solid', borderColor: activeTab === tab.id ? 'var(--primary)' : 'var(--border-color)', borderRadius: '99px', padding: '0.5rem 1.25rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600', color: activeTab === tab.id ? '#ffffff' : 'var(--text-main)', transition: 'all 0.2s', whiteSpace: 'nowrap', boxShadow: activeTab === tab.id ? '0 4px 12px rgba(59, 130, 246, 0.25)' : 'none' }}>
-            {tab.label}
-          </button>
-        ))}
+        ].map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button 
+              key={tab.id} 
+              onClick={() => setActiveTab(tab.id)} 
+              style={{ 
+                background: isActive ? 'var(--primary)' : 'transparent', 
+                border: 'none',
+                borderRadius: '9999px', 
+                padding: isMobile ? '0.35rem 0.85rem' : '0.5rem 1.5rem', 
+                cursor: 'pointer', 
+                fontSize: isMobile ? '0.75rem' : '0.85rem', 
+                fontWeight: '600', 
+                color: isActive ? '#ffffff' : 'var(--text-muted)', 
+                transition: 'all 0.25s ease', 
+                whiteSpace: 'nowrap', 
+                boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
+                outline: 'none'
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
           {/* ── OVERVIEW TAB ── */}
           {activeTab === 'overview' && (
-            <div className="card">
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-                <h2 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0 }}>{t('recent_transactions')}</h2>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-                  <select value={month} onChange={e => setMonth(e.target.value)} style={selectStyle}>
+            <div style={{ 
+              background: 'var(--surface)', 
+              border: '1px solid var(--surface-border)', 
+              borderRadius: isMobile ? '0.85rem' : '1.25rem', 
+              padding: isMobile ? '0.75rem' : '1.5rem', 
+              backdropFilter: 'blur(16px)', 
+              boxShadow: 'var(--shadow-md)' 
+            }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: isMobile ? '0.75rem' : '1.5rem' }}>
+                <h2 style={{ fontSize: isMobile ? '0.95rem' : '1.1rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Coins size={isMobile ? 15 : 18} style={{ color: 'var(--primary)' }} />
+                  {t('recent_transactions')}
+                </h2>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
+                  <select value={month} onChange={e => setMonth(e.target.value)} style={{ ...selectStyle, padding: isMobile ? '0.3rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.75rem' : '0.9rem', height: 'auto' }}>
                     <option value="">{t('all_months')}</option>
                     {MONTHS.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
                   </select>
-                  <select value={year} onChange={e => setYear(e.target.value)} style={selectStyle}>
+                  <select value={year} onChange={e => setYear(e.target.value)} style={{ ...selectStyle, padding: isMobile ? '0.3rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.75rem' : '0.9rem', height: 'auto' }}>
                     <option value="">{t('all_years')}</option>
                     {[new Date().getFullYear(), new Date().getFullYear()-1].map(y => <option key={y} value={y}>{y}</option>)}
                   </select>
-                  <select value={filterType} onChange={e => setFilterType(e.target.value)} style={selectStyle}>
+                  <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ ...selectStyle, padding: isMobile ? '0.3rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.75rem' : '0.9rem', height: 'auto' }}>
                     <option value="ALL">All Types</option>
                     <option value="WEEKLY_DUES">Weekly Dues</option>
                     <option value="OTHERS">Others</option>
                   </select>
                   {isPrivileged && (
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => setShowFellowshipForm(true)} className="btn btn-secondary" style={{ fontSize: '0.85rem' }}>+ Fellowship Exp.</button>
-                      <button onClick={() => openForm()} className="btn btn-primary" style={{ fontSize: '0.85rem' }}>+ {t('add_transaction')}</button>
+                    <div style={{ display: 'flex', gap: '0.35rem' }}>
+                      <button onClick={() => setShowFellowshipForm(true)} className="btn btn-secondary" style={{ fontSize: isMobile ? '0.72rem' : '0.8rem', borderRadius: '9999px', padding: isMobile ? '0.3rem 0.75rem' : '0.4rem 1rem' }}>+ Fellowship Exp.</button>
+                      <button onClick={() => openForm()} className="btn btn-primary" style={{ fontSize: isMobile ? '0.72rem' : '0.8rem', borderRadius: '9999px', padding: isMobile ? '0.3rem 0.75rem' : '0.4rem 1rem' }}>+ {t('add_transaction')}</button>
                     </div>
                   )}
                 </div>
               </div>
-              <div className="hide-on-mobile" style={{ overflowX: 'auto' }}>
+              
+              <div className="hide-on-mobile" style={{ overflowX: 'auto', borderRadius: '0.75rem', border: '1px solid var(--border-color)' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
                       {[t('date'), t('type'), t('category'), t('description'), t('amount'), 'Actions'].map(h => (
-                        <th key={h} style={{ padding: '0.75rem 1rem', textAlign: 'left', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.75rem', textTransform: 'uppercase' }}>{h}</th>
+                        <th key={h} style={{ padding: '1rem', textAlign: 'left', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.75rem', textTransform: 'uppercase' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {transactions.length === 0 ? (
-                      <tr><td colSpan={6} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>No transactions found.</td></tr>
+                      <tr><td colSpan={6} style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>No transactions found.</td></tr>
                     ) : transactions.map(tx => (
-                      <tr key={tx._id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(tx.date).toLocaleDateString()}</td>
-                        <td style={{ padding: '0.75rem 1rem' }}>
-                          <span style={{ padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', background: tx.type === 'INCOME' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)', color: tx.type === 'INCOME' ? '#22c55e' : '#ef4444' }}>
+                      <tr key={tx._id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }}>
+                        <td style={{ padding: '1rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(tx.date).toLocaleDateString()}</td>
+                        <td style={{ padding: '1rem' }}>
+                          <span style={{ 
+                            padding: '0.25rem 0.65rem', 
+                            borderRadius: '9999px', 
+                            fontSize: '0.72rem', 
+                            fontWeight: '700', 
+                            background: tx.type === 'INCOME' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)', 
+                            color: tx.type === 'INCOME' ? '#10b981' : '#ef4444',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.03em'
+                          }}>
                             {tx.type === 'INCOME' ? t('income') : t('expense')}
                           </span>
                         </td>
-                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-main)' }}>{tx.category}</td>
-                        <td style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap' }}>{tx.description || '—'}</td>
-                        <td style={{ padding: '0.75rem 1rem', fontWeight: '600', color: tx.type === 'INCOME' ? '#22c55e' : '#ef4444' }}>{tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}</td>
-                        <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap' }}>
-                          {tx.description?.startsWith('Registration fee') && isPrivileged && (
-                            <button onClick={() => handleCopyAnnouncement(tx)} style={{ background: 'none', border: 'none', color: 'var(--text-main)', cursor: 'pointer', marginRight: '0.75rem', fontSize: '0.8rem' }} title="Copy Announcement"><Copy size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '2px' }}/> Copy</button>
-                          )}
-                          {isPrivileged ? (
-                            <>
-                              <button onClick={() => openForm(tx)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', marginRight: '0.75rem', fontSize: '0.8rem' }}>{t('edit')}</button>
-                              <button onClick={() => handleDelete(tx._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.8rem' }}>{t('delete')}</button>
-                            </>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>—</span>
-                          )}
+                        <td style={{ padding: '1rem' }}>
+                          <span style={{ 
+                            display: 'inline-flex',
+                            padding: '0.2rem 0.6rem', 
+                            borderRadius: '0.5rem', 
+                            fontSize: '0.78rem', 
+                            fontWeight: '600', 
+                            background: 'rgba(255, 255, 255, 0.04)', 
+                            border: '1px solid var(--border-color)', 
+                            color: 'var(--text-main)' 
+                          }}>{tx.category}</span>
+                        </td>
+                        <td style={{ padding: '1rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap', maxWidth: '300px' }}>{tx.description || '—'}</td>
+                        <td style={{ padding: '1rem', fontWeight: '700', fontSize: '0.9rem', color: tx.type === 'INCOME' ? '#10b981' : '#ef4444' }}>{tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}</td>
+                        <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                            {tx.description?.startsWith('Registration fee') && isPrivileged && (
+                              <button onClick={() => handleCopyAnnouncement(tx)} className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem', borderRadius: '9999px', background: 'transparent' }} title="Copy Announcement">
+                                <Copy size={12} /> Copy
+                              </button>
+                            )}
+                            {isPrivileged ? (
+                              <>
+                                <button onClick={() => openForm(tx)} className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem', color: 'var(--primary)', borderColor: 'rgba(59, 130, 246, 0.25)', borderRadius: '9999px', background: 'transparent' }}>
+                                  {t('edit')}
+                                </button>
+                                <button onClick={() => handleDelete(tx._id)} className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.25)', borderRadius: '9999px', background: 'transparent' }}>
+                                  {t('delete')}
+                                </button>
+                              </>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>—</span>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-
+ 
               {/* Mobile Card List */}
               <div className="show-on-mobile" style={{ flexDirection: 'column', gap: '0.4rem' }}>
                 {transactions.length === 0 ? (
-                  <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                     No transactions found.
                   </div>
                 ) : transactions.map(tx => (
-                  <div key={tx._id} style={{ padding: '0.5rem 0.6rem', background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-                        <span style={{ fontWeight: 'bold', color: 'var(--text-main)', fontSize: '0.85rem', lineHeight: '1.2' }}>{tx.category}</span>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date(tx.date).toLocaleDateString()}</span>
-                          <span style={{ padding: '0.05rem 0.3rem', borderRadius: '4px', fontSize: '0.6rem', fontWeight: 'bold', background: tx.type === 'INCOME' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)', color: tx.type === 'INCOME' ? '#22c55e' : '#ef4444' }}>
+                  <div key={tx._id} style={{ 
+                    padding: '0.6rem 0.75rem', 
+                    background: 'rgba(255, 255, 255, 0.02)', 
+                    border: '1px solid var(--border-color)', 
+                    borderRadius: '0.75rem',
+                    backdropFilter: 'blur(8px)'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                        <span style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '0.82rem' }}>{tx.category}</span>
+                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{new Date(tx.date).toLocaleDateString()}</span>
+                          <span style={{ 
+                            padding: '0.08rem 0.35rem', 
+                            borderRadius: '9999px', 
+                            fontSize: '0.6rem', 
+                            fontWeight: '750', 
+                            background: tx.type === 'INCOME' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)', 
+                            color: tx.type === 'INCOME' ? '#10b981' : '#ef4444',
+                            textTransform: 'uppercase'
+                          }}>
                             {tx.type === 'INCOME' ? t('income') : t('expense')}
                           </span>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.1rem' }}>
-                        <span style={{ fontWeight: 'bold', fontSize: '0.9rem', color: tx.type === 'INCOME' ? '#22c55e' : '#ef4444', lineHeight: '1.2' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                        <span style={{ fontWeight: '800', fontSize: '0.88rem', color: tx.type === 'INCOME' ? '#10b981' : '#ef4444' }}>
                           {tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}
                         </span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          {tx.description?.startsWith('Registration fee') && isPrivileged && (
-                            <button onClick={() => handleCopyAnnouncement(tx)} style={{ background: 'none', border: 'none', color: 'var(--text-main)', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }} title="Copy Announcement"><Copy size={12} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '2px' }}/> Copy</button>
-                          )}
-                          {isPrivileged && (
-                            <>
-                              <button onClick={() => openForm(tx)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }}>{t('edit')}</button>
-                              <button onClick={() => handleDelete(tx._id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', padding: 0 }}>{t('delete')}</button>
-                            </>
-                          )}
-                        </div>
                       </div>
                     </div>
                     {tx.description && (
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.3rem', padding: '0.25rem 0.4rem', background: 'var(--bg-color)', borderRadius: '2px', lineHeight: '1.3', whiteSpace: 'pre-wrap' }}>
+                      <div style={{ 
+                        fontSize: '0.7rem', 
+                        color: 'var(--text-muted)', 
+                        marginTop: '0.35rem', 
+                        padding: '0.35rem 0.5rem', 
+                        background: 'rgba(0, 0, 0, 0.15)', 
+                        borderRadius: '0.4rem', 
+                        lineHeight: '1.3', 
+                        whiteSpace: 'pre-wrap',
+                        border: '1px solid rgba(255, 255, 255, 0.03)'
+                      }}>
                         {tx.description}
+                      </div>
+                    )}
+                    {isPrivileged && (
+                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.4rem' }}>
+                        {tx.description?.startsWith('Registration fee') && (
+                          <button onClick={() => handleCopyAnnouncement(tx)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '2px', outline: 'none' }} title="Copy Announcement">
+                            <Copy size={11} /> Copy
+                          </button>
+                        )}
+                        <button onClick={() => openForm(tx)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', outline: 'none' }}>{t('edit')}</button>
+                        <button onClick={() => handleDelete(tx._id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', outline: 'none' }}>{t('delete')}</button>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
-
+ 
               {/* Shared Pagination Controls */}
               {totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.25rem', paddingTop: '0.75rem', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.3rem', paddingTop: isMobile ? '0.85rem' : '1.25rem', flexWrap: 'wrap', borderTop: '1px solid var(--border-color)', marginTop: '0.75rem' }}>
                   <button
                     onClick={() => goToPage(currentPage - 1)}
                     disabled={currentPage === 1}
-                    style={{ background: 'none', border: '1px solid var(--border-color)', color: currentPage === 1 ? 'var(--text-muted)' : 'var(--text-main)', borderRadius: '6px', padding: '0.3rem 0.65rem', cursor: currentPage === 1 ? 'default' : 'pointer', fontSize: '0.9rem', opacity: currentPage === 1 ? 0.4 : 1 }}
+                    style={{ background: 'none', border: '1px solid var(--border-color)', color: currentPage === 1 ? 'var(--text-muted)' : 'var(--text-main)', borderRadius: '9999px', padding: isMobile ? '0.25rem 0.55rem' : '0.3rem 0.75rem', cursor: currentPage === 1 ? 'default' : 'pointer', fontSize: isMobile ? '0.72rem' : '0.85rem', opacity: currentPage === 1 ? 0.3 : 1, transition: 'all 0.2s', outline: 'none' }}
                   >‹</button>
-
+ 
                   {getPaginationPages().map((p, i, arr) => (
                     <React.Fragment key={p}>
                       {i > 0 && arr[i - 1] !== p - 1 && (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '0 0.1rem' }}>…</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', padding: '0 0.05rem' }}>…</span>
                       )}
                       <button
                         onClick={() => goToPage(p)}
@@ -808,24 +1053,26 @@ ${formattedDesc}
                           background: currentPage === p ? 'var(--primary)' : 'none',
                           color: currentPage === p ? 'white' : 'var(--text-muted)',
                           border: '1px solid ' + (currentPage === p ? 'var(--primary)' : 'var(--border-color)'),
-                          borderRadius: '6px',
-                          padding: '0.3rem 0.65rem',
+                          borderRadius: '9999px',
+                          padding: isMobile ? '0.25rem 0.55rem' : '0.3rem 0.75rem',
                           cursor: 'pointer',
-                          fontWeight: currentPage === p ? '700' : '400',
-                          fontSize: '0.85rem',
-                          minWidth: '2rem',
+                          fontWeight: currentPage === p ? '700' : '500',
+                          fontSize: isMobile ? '0.72rem' : '0.8rem',
+                          minWidth: isMobile ? '1.85rem' : '2.25rem',
+                          transition: 'all 0.2s',
+                          outline: 'none'
                         }}
                       >{p}</button>
                     </React.Fragment>
                   ))}
-
+ 
                   <button
                     onClick={() => goToPage(currentPage + 1)}
                     disabled={currentPage === totalPages}
-                    style={{ background: 'none', border: '1px solid var(--border-color)', color: currentPage === totalPages ? 'var(--text-muted)' : 'var(--text-main)', borderRadius: '6px', padding: '0.3rem 0.65rem', cursor: currentPage === totalPages ? 'default' : 'pointer', fontSize: '0.9rem', opacity: currentPage === totalPages ? 0.4 : 1 }}
+                    style={{ background: 'none', border: '1px solid var(--border-color)', color: currentPage === totalPages ? 'var(--text-muted)' : 'var(--text-main)', borderRadius: '9999px', padding: isMobile ? '0.25rem 0.55rem' : '0.3rem 0.75rem', cursor: currentPage === totalPages ? 'default' : 'pointer', fontSize: isMobile ? '0.72rem' : '0.85rem', opacity: currentPage === totalPages ? 0.3 : 1, transition: 'all 0.2s', outline: 'none' }}
                   >›</button>
-
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginLeft: '0.25rem' }}>
+ 
+                  <span style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.72rem' : '0.78rem', marginLeft: '0.3rem' }}>
                     Page {currentPage} of {totalPages}
                   </span>
                 </div>
@@ -836,21 +1083,28 @@ ${formattedDesc}
 
           {/* ── WEEKLY DUES LEDGER TAB ── */}
           {activeTab === 'dues' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1.25rem' }}>
               
               {/* Ledger Matrix */}
-              <div className="card" style={{ padding: '0.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+              <div style={{ 
+                background: 'var(--surface)', 
+                border: '1px solid var(--surface-border)', 
+                borderRadius: isMobile ? '0.85rem' : '1.25rem', 
+                padding: isMobile ? '0.75rem' : '1.5rem', 
+                backdropFilter: 'blur(16px)', 
+                boxShadow: 'var(--shadow-md)' 
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                     <button 
                       onClick={() => {
                         let y = ledgerYear; let m = ledgerMonth - 1;
                         if (m < 0) { m = 11; y -= 1; }
                         setLedgerMonth(m); setLedgerYear(y);
                       }} 
-                      className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.9rem' }}>‹
+                      className="btn btn-secondary" style={{ padding: isMobile ? '0.2rem 0.45rem' : '0.3rem 0.6rem', fontSize: isMobile ? '0.78rem' : '0.85rem', borderRadius: '9999px' }}>‹
                     </button>
-                    <span style={{ fontWeight: 'bold', color: 'var(--text-main)', fontSize: '0.9rem', minWidth: '90px', textAlign: 'center' }}>
+                    <span style={{ fontWeight: 'bold', color: 'var(--text-main)', fontSize: isMobile ? '0.88rem' : '0.95rem', minWidth: isMobile ? '80px' : '100px', textAlign: 'center' }}>
                       {MONTHS[ledgerMonth]} {ledgerYear}
                     </span>
                     <button 
@@ -859,29 +1113,34 @@ ${formattedDesc}
                         if (m > 11) { m = 0; y += 1; }
                         setLedgerMonth(m); setLedgerYear(y);
                       }} 
-                      className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.9rem' }}>›
+                      className="btn btn-secondary" style={{ padding: isMobile ? '0.2rem 0.45rem' : '0.3rem 0.6rem', fontSize: isMobile ? '0.78rem' : '0.85rem', borderRadius: '9999px' }}>›
                     </button>
                   </div>
-                  {isPrivileged && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Click any cell to edit amount</span>}
+                  {isPrivileged && (
+                    <span style={{ fontSize: isMobile ? '0.68rem' : '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                      <Info size={isMobile ? 11 : 13} style={{ color: 'var(--primary)' }} />
+                      Click cell to edit
+                    </span>
+                  )}
                 </div>
-
+ 
                 {loadingDues ? (
-                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>{t('loading')}</p>
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2.5rem 0', fontSize: '0.85rem' }}>{t('loading')}</p>
                 ) : ledgerData.members.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>{t('no_roster')}</p>
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2.5rem 0', fontSize: '0.85rem' }}>{t('no_roster')}</p>
                 ) : (
-                  <div style={{ overflowX: 'auto', borderRadius: 'var(--radius)', border: '1px solid var(--border-color)', WebkitOverflowScrolling: 'touch' }}>
+                  <div style={{ overflowX: 'auto', borderRadius: '0.75rem', border: '1px solid var(--border-color)', WebkitOverflowScrolling: 'touch' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
                       <thead>
-                        <tr style={{ background: 'var(--bg-color)', borderBottom: '2px solid var(--border-color)' }}>
-                          <th style={{ padding: '0.4rem 0.5rem', textAlign: 'left', color: 'var(--text-main)', fontWeight: 'bold', position: 'sticky', left: 0, background: 'var(--surface)', zIndex: 2, boxShadow: '2px 0 5px rgba(0,0,0,0.05)' }}>{t('member_name')}</th>
+                        <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '2px solid var(--border-color)' }}>
+                          <th style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'left', color: 'var(--text-main)', fontWeight: 'bold', position: 'sticky', left: 0, background: 'var(--surface)', backdropFilter: 'blur(8px)', zIndex: 2, boxShadow: '2px 0 5px rgba(0,0,0,0.05)' }}>{t('member_name')}</th>
                           {sundays.map((date, i) => (
-                            <th key={i} style={{ padding: '0.4rem 0.2rem', textAlign: 'center', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.7rem', borderLeft: '1px solid var(--border-color)', minWidth: '35px' }}>
+                            <th key={i} style={{ padding: '0.45rem 0.2rem', textAlign: 'center', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.7rem', borderLeft: '1px solid var(--border-color)', minWidth: '34px' }}>
                               {date.getDate()}
                             </th>
                           ))}
-                          <th style={{ padding: '0.4rem 0.5rem', textAlign: 'right', color: 'var(--text-main)', fontWeight: 'bold', borderLeft: '2px solid var(--border-color)' }}>TOTAL</th>
-                          <th style={{ padding: '0.4rem 0.5rem', textAlign: 'center', color: 'var(--text-main)', fontWeight: 'bold' }}>STATUS</th>
+                          <th style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'right', color: 'var(--text-main)', fontWeight: 'bold', borderLeft: '2px solid var(--border-color)' }}>TOTAL</th>
+                          <th style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'center', color: 'var(--text-main)', fontWeight: 'bold' }}>STATUS</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -890,8 +1149,8 @@ ${formattedDesc}
                           const coveredSundays = Math.floor(totalPaid / 10);
                           
                           return (
-                          <tr key={m._id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                            <td style={{ padding: '0.4rem 0.5rem', color: 'var(--text-main)', fontWeight: '500', position: 'sticky', left: 0, background: 'var(--surface)', zIndex: 1, boxShadow: '2px 0 5px rgba(0,0,0,0.05)' }}>
+                          <tr key={m._id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }}>
+                            <td style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', color: 'var(--text-main)', fontWeight: '600', position: 'sticky', left: 0, background: 'var(--surface)', backdropFilter: 'blur(8px)', zIndex: 1, boxShadow: '2px 0 5px rgba(0,0,0,0.05)', fontSize: isMobile ? '0.72rem' : '0.75rem' }}>
                               {m.name}
                             </td>
                             {sundays.map((date, i) => {
@@ -903,22 +1162,23 @@ ${formattedDesc}
                               
                               let bg = 'transparent';
                               if (isEditing) {
-                                bg = 'var(--bg-color)';
+                                bg = 'rgba(255, 255, 255, 0.05)';
                               } else if (isCovered) {
-                                bg = amt > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.06)';
+                                bg = amt > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.05)';
                               }
-
+ 
                               return (
                                 <td 
                                   key={i} 
                                   onClick={() => isPrivileged && !isEditing && handleCellClick(m._id, dateStr, amt)}
                                   style={{ 
-                                    padding: '0.1rem', 
+                                    padding: '0.05rem', 
                                     textAlign: 'center', 
                                     borderLeft: '1px solid var(--border-color)',
                                     cursor: (isPrivileged && !isEditing) ? 'pointer' : 'default',
                                     background: bg,
-                                    minWidth: '40px'
+                                    minWidth: '36px',
+                                    transition: 'background 0.25s'
                                   }}
                                 >
                                   {isEditing ? (
@@ -926,32 +1186,32 @@ ${formattedDesc}
                                       autoFocus
                                       type="number"
                                       min="0"
-                                      style={{ width: '100%', minWidth: '40px', background: 'var(--bg-color)', border: '1px solid var(--primary)', color: 'var(--text-main)', padding: '0.2rem', borderRadius: '2px', textAlign: 'center', fontSize: '16px' }}
+                                      style={{ width: '100%', minWidth: '36px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--primary)', color: 'var(--text-main)', padding: '0.15rem', borderRadius: '4px', textAlign: 'center', fontSize: '13px', outline: 'none' }}
                                       value={editingCell.value}
                                       onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
                                       onBlur={handleCellBlur}
                                       onKeyDown={handleCellKeyDown}
                                     />
                                   ) : (
-                                    <div style={{ padding: '0.3rem', color: amt > 0 ? '#10b981' : isCovered ? 'rgba(16,185,129,0.5)' : 'transparent', fontWeight: 'bold' }}>
+                                    <div style={{ padding: '0.25rem', color: amt > 0 ? '#10b981' : isCovered ? 'rgba(16,185,129,0.5)' : 'transparent', fontWeight: 'bold', fontSize: '0.72rem' }}>
                                       {amt > 0 ? amt : isCovered ? '✓' : '-'}
                                     </div>
                                   )}
                                 </td>
                               );
                             })}
-                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'right', fontWeight: 'bold', color: 'var(--primary)', borderLeft: '2px solid var(--border-color)' }}>
+                            <td style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'right', fontWeight: '700', color: 'var(--primary)', borderLeft: '2px solid var(--border-color)', fontSize: isMobile ? '0.72rem' : '0.75rem' }}>
                               {totalPaid > 0 ? fmt(totalPaid) : '—'}
                             </td>
-                            <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                            <td style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'center' }}>
                               {(() => {
                                 const bal = totalPaid - expectedDues;
                                 if (bal > 0) {
-                                  return <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '0.7rem', background: 'rgba(16,185,129,0.1)', padding: '0.1rem 0.3rem', borderRadius: '4px', whiteSpace: 'nowrap' }}>+{bal}</span>;
+                                  return <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '0.65rem', background: 'rgba(16,185,129,0.12)', padding: '0.12rem 0.35rem', borderRadius: '9999px', whiteSpace: 'nowrap' }}>+{bal}</span>;
                                 } else if (bal === 0) {
-                                  return <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '0.7rem', background: 'rgba(16,185,129,0.1)', padding: '0.1rem 0.3rem', borderRadius: '4px', whiteSpace: 'nowrap' }}>0</span>;
+                                  return <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '0.65rem', background: 'rgba(16,185,129,0.12)', padding: '0.12rem 0.35rem', borderRadius: '9999px', whiteSpace: 'nowrap' }}>0</span>;
                                 } else {
-                                  return <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.7rem', background: 'rgba(239,68,68,0.1)', padding: '0.1rem 0.3rem', borderRadius: '4px', whiteSpace: 'nowrap' }}>{bal}</span>;
+                                  return <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.65rem', background: 'rgba(239,68,68,0.12)', padding: '0.12rem 0.35rem', borderRadius: '9999px', whiteSpace: 'nowrap' }}>{bal}</span>;
                                 }
                               })()}
                             </td>
@@ -962,70 +1222,47 @@ ${formattedDesc}
                   </div>
                 )}
               </div>
-
+ 
               {/* Roster management (Privileged only) */}
               {isPrivileged && (
-                <div className="card">
-                  <button type="button" onClick={() => setShowRoster(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', fontWeight: '600', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: showRoster ? '1rem' : 0 }}>
-                    <span style={{ fontSize: '0.8rem', transform: showRoster ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
+                <div style={{ 
+                  background: 'var(--surface)', 
+                  border: '1px solid var(--surface-border)', 
+                  borderRadius: isMobile ? '0.85rem' : '1.25rem', 
+                  padding: isMobile ? '0.75rem' : '1.5rem', 
+                  backdropFilter: 'blur(16px)', 
+                  boxShadow: 'var(--shadow-md)' 
+                }}>
+                  <button type="button" onClick={() => setShowRoster(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', fontWeight: '700', fontSize: isMobile ? '0.88rem' : '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%', textAlign: 'left', outline: 'none' }}>
+                    <span style={{ fontSize: '0.7rem', transform: showRoster ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
                     {t('dues_roster')} ({totalCount} {t('member_name').toLowerCase()}s)
                   </button>
                   {showRoster && (
-                    <>
+                    <div style={{ marginTop: isMobile ? '0.75rem' : '1.25rem', display: 'flex', flexDirection: 'column', gap: isMobile ? '0.6rem' : '0.85rem' }}>
                       {ledgerData.members.map(m => (
-                        <div key={m._id} style={{ padding: '0.6rem 0', borderBottom: '1px solid var(--border-color)' }}>
+                        <div key={m._id} style={{ paddingBottom: isMobile ? '0.5rem' : '0.85rem', borderBottom: '1px solid rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', gap: isMobile ? '0.2rem' : '0.35rem' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <span style={{ color: 'var(--text-main)', fontWeight: '500' }}>{m.name}</span>
-                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                              {m.linkedUser ? (
-                                <>
-                                  <button
-                                    onClick={() => handleSendDuesEmail(m)}
-                                    disabled={sendingEmail === m._id}
-                                    title={`Email dues statement to ${m.linkedUser.email}`}
-                                    style={{ background: 'none', border: '1px solid #0284c7', color: '#0284c7', cursor: 'pointer', fontSize: '0.72rem', borderRadius: '4px', padding: '0.15rem 0.45rem', opacity: sendingEmail === m._id ? 0.6 : 1 }}
-                                  >
-                                    {sendingEmail === m._id ? 'Sending…' : '📧 Send Email'}
-                                  </button>
-                                  <button
-                                    onClick={() => openLinkModal(m)}
-                                    style={{ background: 'none', border: '1px solid var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', borderRadius: '4px', padding: '0.15rem 0.45rem' }}
-                                  >
-                                    🔗 Change
-                                  </button>
-                                  <button
-                                    onClick={() => handleUnlinkUser(m)}
-                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.72rem' }}
-                                  >
-                                    Unlink
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  onClick={() => openLinkModal(m)}
-                                  style={{ background: 'none', border: '1px dashed var(--border-color)', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.72rem', borderRadius: '4px', padding: '0.15rem 0.45rem' }}
-                                >
-                                  🔗 Link User
-                                </button>
-                              )}
-                              <button onClick={() => handleRemoveMember(m._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.72rem' }}>{t('remove_from_roster')}</button>
+                            <span style={{ color: 'var(--text-main)', fontWeight: '600', fontSize: isMobile ? '0.82rem' : '0.9rem' }}>{m.name}</span>
+                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                              <button onClick={() => openLinkModal(m)} style={{ background: 'none', border: 'none', color: m.linkedUser ? 'var(--text-muted)' : 'var(--primary)', cursor: 'pointer', fontSize: isMobile ? '0.72rem' : '0.78rem', display: 'flex', alignItems: 'center', gap: '2px', outline: 'none' }}>
+                                <LinkIcon size={isMobile ? 11 : 13} /> {m.linkedUser ? 'Linked' : 'Link User'}
+                              </button>
+                              <button onClick={() => handleDeleteMember(m._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: isMobile ? '0.72rem' : '0.78rem', display: 'flex', alignItems: 'center', gap: '2px', outline: 'none' }}>
+                                <Trash2 size={isMobile ? 11 : 13} /> {t('delete')}
+                              </button>
                             </div>
                           </div>
-                          {m.linkedUser && (
-                            <p style={{ margin: '0.25rem 0 0', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                              Linked to: <strong style={{ color: 'var(--text-main)' }}>{m.linkedUser.displayName}</strong> · <span style={{ fontFamily: 'monospace' }}>{m.linkedUser.email}</span>
-                            </p>
-                          )}
                         </div>
                       ))}
-                      <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '1rem' }}>
+                      
+                      <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <input value={newMemberName} onChange={e => setNewMemberName(e.target.value)} placeholder={t('enter_name')} style={{ ...inputStyle, flex: 1 }} />
-                          <button type="submit" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>{t('add_member')}</button>
+                          <input type="text" placeholder="New roster member name..." value={newMemberName} onChange={e => setNewMemberName(e.target.value)} required style={{ ...inputStyle, padding: isMobile ? '0.35rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }} />
+                          <button type="submit" className="btn btn-primary" style={{ whiteSpace: 'nowrap', borderRadius: '0.75rem', padding: isMobile ? '0.35rem 0.75rem' : '0.5rem 1rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }}>{t('add_member')}</button>
                         </div>
                         {addError && <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: 0 }}>{addError}</p>}
                       </form>
-                    </>
+                    </div>
                   )}
                 </div>
               )}
@@ -1034,72 +1271,93 @@ ${formattedDesc}
 
           {/* ── BUDGETS / DESIGNATED FUNDS TAB ── */}
           {activeTab === 'budgets' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <div>
-                  <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0 }}>Designated Funds</h2>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '0.2rem 0 0' }}>Track and manage budgets for specific use cases.</p>
+                  <h2 style={{ fontSize: isMobile ? '1rem' : '1.25rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Briefcase size={isMobile ? 16 : 20} style={{ color: 'var(--primary)' }} />
+                    Designated Funds
+                  </h2>
+                  <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.75rem' : '0.85rem', margin: '0.15rem 0 0' }}>Track and manage budgets for specific use cases.</p>
                 </div>
                 {isPrivileged && (
-                  <button onClick={() => openFundForm()} className="btn btn-primary" style={{ fontSize: '0.85rem', padding: '0.5rem 1rem' }}>+ Create Budget</button>
+                  <button onClick={() => openFundForm()} className="btn btn-primary" style={{ fontSize: isMobile ? '0.72rem' : '0.8rem', padding: isMobile ? '0.35rem 0.85rem' : '0.5rem 1.25rem', borderRadius: '9999px' }}>+ Create Budget</button>
                 )}
               </div>
-
+ 
               {loadingFunds ? (
-                <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>{t('loading')}</p>
+                <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2.5rem 0', fontSize: '0.85rem' }}>{t('loading')}</p>
               ) : designatedFunds.length === 0 ? (
-                <div className="card" style={{ padding: '3rem 1rem', textAlign: 'center' }}>
-                  <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📊</div>
-                  <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.5rem' }}>No Budgets Yet</h3>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem', maxWidth: '300px', margin: '0 auto 1.5rem' }}>Designated funds let you allocate income to specific causes and track their balances automatically.</p>
-                  {isPrivileged && <button onClick={() => openFundForm()} className="btn btn-secondary">Set up a budget</button>}
+                <div style={{ 
+                  background: 'var(--surface)', 
+                  border: '1px solid var(--surface-border)', 
+                  borderRadius: isMobile ? '0.85rem' : '1.25rem', 
+                  padding: isMobile ? '2rem 1rem' : '3rem 1.5rem', 
+                  textAlign: 'center',
+                  backdropFilter: 'blur(16px)',
+                  boxShadow: 'var(--shadow-md)'
+                }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📊</div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.5rem' }}>No Budgets Yet</h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', maxWidth: '340px', margin: '0 auto 1.25rem', lineHeight: '1.4' }}>Designated funds let you allocate income to specific causes and track their balances automatically.</p>
+                  {isPrivileged && <button onClick={() => openFundForm()} className="btn btn-secondary" style={{ borderRadius: '9999px', padding: '0.4rem 1.25rem', fontSize: '0.8rem' }}>Set up a budget</button>}
                 </div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(260px, 1fr))' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: isMobile ? '0.75rem' : '1.25rem' }}>
                   {designatedFunds.map(fund => {
                     const progress = fund.targetAmount > 0 ? Math.min(100, Math.max(0, (fund.currentBalance / fund.targetAmount) * 100)) : 0;
                     return (
-                      <div key={fund._id} style={{ background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+                      <div key={fund._id} style={{ 
+                        background: 'var(--surface)', 
+                        border: '1px solid var(--surface-border)', 
+                        borderRadius: isMobile ? '0.85rem' : '1.25rem', 
+                        overflow: 'hidden', 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        backdropFilter: 'blur(16px)',
+                        boxShadow: 'var(--shadow-md)',
+                        transition: 'transform 0.2s ease, box-shadow 0.2s ease'
+                      }}>
                         <div style={{ height: '5px', background: fund.color || '#3b82f6' }} />
-                        <div style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                            <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0, wordBreak: 'break-word' }}>{fund.name}</h3>
+                        <div style={{ padding: isMobile ? '1rem' : '1.5rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                            <h3 style={{ fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '700', color: 'var(--text-main)', margin: 0, wordBreak: 'break-word' }}>{fund.name}</h3>
                             {isPrivileged && (
-                              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button onClick={() => openFundForm(fund)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }} title="Edit"><Pencil size={14} /></button>
+                              <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                                <button onClick={() => openFundForm(fund)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.2rem', outline: 'none' }} title="Edit"><Pencil size={14} /></button>
                               </div>
                             )}
                           </div>
-                          {fund.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 1rem', lineHeight: '1.4' }}>{fund.description}</p>}
+                          {fund.description && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: isMobile ? '0 0 0.75rem' : '0 0 1.25rem', lineHeight: '1.4' }}>{fund.description}</p>}
                           
-                          <div style={{ marginTop: 'auto', paddingTop: '1rem' }}>
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.25rem' }}>Available Balance</p>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginBottom: '1rem' }}>
-                              <span style={{ fontSize: '1.75rem', fontWeight: '800', color: fund.currentBalance >= 0 ? fund.color || '#3b82f6' : '#ef4444', lineHeight: 1 }}>
+                          <div style={{ marginTop: 'auto', paddingTop: '0.35rem' }}>
+                            <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.15rem' }}>Available Balance</p>
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', marginBottom: isMobile ? '0.6rem' : '1rem' }}>
+                              <span style={{ fontSize: isMobile ? '1.35rem' : '1.75rem', fontWeight: '850', color: fund.currentBalance >= 0 ? fund.color || '#3b82f6' : '#ef4444', lineHeight: 1 }}>
                                 {fmt(fund.currentBalance)}
                               </span>
-                              {fund.targetAmount > 0 && <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>/ {fmt(fund.targetAmount)}</span>}
+                              {fund.targetAmount > 0 && <span style={{ fontSize: isMobile ? '0.78rem' : '0.85rem', color: 'var(--text-muted)' }}>/ {fmt(fund.targetAmount)}</span>}
                             </div>
                             
                             {fund.targetAmount > 0 && (
-                              <div style={{ marginBottom: '1rem' }}>
-                                <div style={{ height: '6px', background: 'var(--bg-color)', borderRadius: '99px', overflow: 'hidden' }}>
+                              <div style={{ marginBottom: isMobile ? '0.6rem' : '1rem' }}>
+                                <div style={{ height: '5px', background: 'rgba(255,255,255,0.05)', borderRadius: '99px', overflow: 'hidden' }}>
                                   <div style={{ height: '100%', width: `${progress}%`, background: fund.color || '#3b82f6', transition: 'width 0.5s ease-out' }} />
                                 </div>
                               </div>
                             )}
-
-                            <div style={{ display: 'flex', gap: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
+ 
+                            <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid var(--border-color)', paddingTop: isMobile ? '0.5rem' : '0.75rem', marginBottom: '0.25rem' }}>
                               <div style={{ flex: 1 }}>
-                                <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Total In</p>
-                                <p style={{ fontSize: '0.85rem', fontWeight: '600', color: '#22c55e' }}>+{fmt(fund.totalIncome)}</p>
+                                <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginBottom: '0.1rem', textTransform: 'uppercase' }}>Total In</p>
+                                <p style={{ fontSize: isMobile ? '0.78rem' : '0.85rem', fontWeight: '750', color: '#10b981' }}>+{fmt(fund.totalIncome)}</p>
                               </div>
                               <div style={{ flex: 1 }}>
-                                <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '0.15rem' }}>Total Out</p>
-                                <p style={{ fontSize: '0.85rem', fontWeight: '600', color: '#ef4444' }}>-{fmt(fund.totalExpense)}</p>
+                                <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginBottom: '0.1rem', textTransform: 'uppercase' }}>Total Out</p>
+                                <p style={{ fontSize: isMobile ? '0.78rem' : '0.85rem', fontWeight: '750', color: '#ef4444' }}>-{fmt(fund.totalExpense)}</p>
                               </div>
                             </div>
-                            <button onClick={() => openFundTxModal(fund)} style={{ width: '100%', marginTop: '1rem', padding: '0.5rem', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-main)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: '600', transition: 'background 0.2s' }} onMouseOver={e => e.currentTarget.style.background='var(--surface)'} onMouseOut={e => e.currentTarget.style.background='var(--bg-color)'}>
+                            <button onClick={() => openFundTxModal(fund)} className="btn btn-secondary" style={{ width: '100%', marginTop: '0.5rem', padding: isMobile ? '0.35rem 0.85rem' : '0.45rem 1rem', borderRadius: '9999px', fontSize: isMobile ? '0.75rem' : '0.8rem', fontWeight: '600', background: 'transparent' }}>
                               View Transactions
                             </button>
                           </div>
@@ -1118,31 +1376,31 @@ ${formattedDesc}
         const accentColor = isIncome ? '#22c55e' : '#ef4444';
         return (
           <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
-            <div style={{ width: '100%', maxWidth: '520px', background: 'var(--surface)', borderRadius: '0', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
+            <div style={{ width: '100%', maxWidth: '520px', maxHeight: '95vh', background: 'var(--surface)', borderRadius: '1.25rem', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', border: '1px solid var(--surface-border)', backdropFilter: 'blur(16px)', display: 'flex', flexDirection: 'column' }}>
 
               {/* Colored top accent bar */}
-              <div style={{ height: '4px', background: `linear-gradient(90deg, ${accentColor}, ${isIncome ? '#16a34a' : '#dc2626'})`, transition: 'background 0.3s' }} />
+              <div style={{ height: '4px', background: `linear-gradient(90deg, ${accentColor}, ${isIncome ? '#16a34a' : '#dc2626'})`, transition: 'background 0.3s', flexShrink: 0 }} />
 
-              {/* Header */}
-              <div style={{ padding: '1.5rem 1.5rem 0' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+               {/* Header */}
+              <div style={{ padding: isMobile ? '1rem 1rem 0' : '1.5rem 1.5rem 0', flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? '0.75rem' : '1.25rem' }}>
                   <div>
-                    <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
+                    <h3 style={{ fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
                       {editingId ? t('edit_transaction') : t('add_transaction')}
                     </h3>
                     <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>
                       {editingId ? 'Update the transaction details below.' : 'Fill in the details to record a new transaction.'}
                     </p>
                   </div>
-                  <button type="button" onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, padding: '0.1rem 0.3rem', marginTop: '-0.1rem' }}>✕</button>
+                  <button type="button" onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, padding: '0.1rem 0.3rem', marginTop: '-0.1rem', outline: 'none' }}>✕</button>
                 </div>
 
                 {/* Type toggle pills */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: isMobile ? '0.75rem' : '1.25rem' }}>
                   {[{ val: 'INCOME', label: t('income'), icon: '↑', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' }, { val: 'EXPENSE', label: t('expense'), icon: '↓', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' }].map(({ val, label, icon, color, bg }) => {
                     const active = formData.type === val;
                     return (
-                      <button key={val} type="button" onClick={() => handleInput({ target: { name: 'type', value: val } })} style={{ padding: '0.65rem', borderRadius: '0', border: `1.5px solid ${active ? color : 'var(--border-color)'}`, background: active ? bg : 'transparent', color: active ? color : 'var(--text-muted)', fontWeight: active ? '700' : '500', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
+                      <button key={val} type="button" onClick={() => handleInput({ target: { name: 'type', value: val } })} style={{ padding: isMobile ? '0.45rem' : '0.65rem', borderRadius: '9999px', border: `1.5px solid ${active ? color : 'var(--border-color)'}`, background: active ? bg : 'transparent', color: active ? color : 'var(--text-muted)', fontWeight: active ? '700' : '500', fontSize: isMobile ? '0.8rem' : '0.9rem', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', outline: 'none' }}>
                         <span style={{ fontWeight: '700' }}>{icon}</span>{label}
                       </button>
                     );
@@ -1150,15 +1408,15 @@ ${formattedDesc}
                 </div>
               </div>
 
-              <form onSubmit={handleSubmit}>
-                <div style={{ padding: '0 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <div style={{ padding: isMobile ? '0 1rem' : '0 1.5rem', display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
 
                   {/* Amount */}
                   <div>
                     <label style={labelStyle}>{t('amount')}</label>
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: accentColor, fontWeight: '700', fontSize: '1rem', pointerEvents: 'none', transition: 'color 0.3s' }}>₱</span>
-                      <input type="number" name="amount" value={formData.amount} onChange={handleInput} required min="0.01" step="0.01" placeholder="0.00" style={{ ...inputStyle, paddingLeft: '2rem', fontWeight: '600', fontSize: '1.05rem' }} />
+                      <input type="number" name="amount" value={formData.amount} onChange={handleInput} required min="0.01" step="0.01" placeholder="0.00" style={{ ...inputStyle, paddingLeft: '2rem', fontWeight: '600', fontSize: isMobile ? '0.95rem' : '1.05rem' }} />
                     </div>
                   </div>
 
@@ -1167,19 +1425,19 @@ ${formattedDesc}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
                       <label style={labelStyle}>{t('category')}</label>
                       {categories.length > 0 && !customCategory && (
-                        <button type="button" onClick={() => { setShowManageCategories(v => !v); setEditingCategory(null); }} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <button type="button" onClick={() => { setShowManageCategories(v => !v); setEditingCategory(null); }} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px', outline: 'none' }}>
                           {showManageCategories ? 'Done' : <><Pencil size={11} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />Manage</>}
                         </button>
                       )}
                     </div>
                     {showManageCategories && !customCategory && (
-                      <div style={{ background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '0', padding: '0.5rem', marginBottom: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: '160px', overflowY: 'auto' }}>
+                      <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', borderRadius: '0.75rem', padding: '0.5rem', marginBottom: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: isMobile ? '100px' : '160px', overflowY: 'auto' }}>
                         {categories.map(cat => (
                           <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             {editingCategory?.original === cat ? (
                               <>
                                 <input autoFocus type="text" value={editingCategory.draft} onChange={e => setEditingCategory(ec => ({ ...ec, draft: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleRenameCategory(); } if (e.key === 'Escape') setEditingCategory(null); }} style={{ ...inputStyle, flex: 1, padding: '0.3rem 0.5rem', fontSize: '0.85rem' }} />
-                                <button type="button" onClick={handleRenameCategory} style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '0', padding: '0.25rem 0.6rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Save</button>
+                                <button type="button" onClick={handleRenameCategory} style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '9999px', padding: '0.25rem 0.6rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Save</button>
                                 <button type="button" onClick={() => setEditingCategory(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.78rem' }}>✕</button>
                               </>
                             ) : (
@@ -1193,13 +1451,13 @@ ${formattedDesc}
                       </div>
                     )}
                     {!customCategory && categories.length > 0 ? (
-                      <select name="category" value={formData.category} onChange={handleInput} required style={{ ...inputStyle }}>
+                      <select name="category" value={formData.category} onChange={handleInput} required style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>
                         {categories.map(c => <option key={c} value={c}>{c}</option>)}
                         <option value="__CUSTOM__">+ Add New Category</option>
                       </select>
                     ) : (
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <input type="text" name="category" value={formData.category} onChange={e => setFormData(f => ({ ...f, category: e.target.value }))} placeholder="e.g. Donations, Food" required style={{ ...inputStyle, flex: 1 }} />
+                        <input type="text" name="category" value={formData.category} onChange={e => setFormData(f => ({ ...f, category: e.target.value }))} placeholder="e.g. Donations, Food" required style={{ ...inputStyle, flex: 1, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
                         {categories.length > 0 && <button type="button" onClick={() => setCustomCategory(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>}
                       </div>
                     )}
@@ -1209,7 +1467,7 @@ ${formattedDesc}
                   {designatedFunds.length > 0 && (
                     <div>
                       <label style={labelStyle}>Designated Fund <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
-                      <select name="designatedFund" value={formData.designatedFund} onChange={handleInput} style={{ ...inputStyle }}>
+                      <select name="designatedFund" value={formData.designatedFund} onChange={handleInput} style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>
                         <option value="">-- No Designated Fund --</option>
                         {designatedFunds.map(fund => (
                           <option key={fund._id} value={fund._id}>{fund.name}</option>
@@ -1221,51 +1479,51 @@ ${formattedDesc}
                   {/* Description */}
                   <div>
                     <label style={labelStyle}>{t('description')} <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
-                    <textarea name="description" value={formData.description} onChange={handleInput} style={{ ...inputStyle, minHeight: '80px', resize: 'vertical' }} placeholder={`E.g. Registration fee\n- John\n- Jane`} />
+                    <textarea name="description" value={formData.description} onChange={e => setFormData(f => ({ ...f, description: e.target.value }))} style={{ ...inputStyle, minHeight: isMobile ? '60px' : '80px', resize: 'vertical', padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} placeholder={`E.g. Registration fee\n- John\n- Jane`} />
                   </div>
 
                   {/* Date */}
                   <div>
                     <label style={labelStyle}>{t('date')}</label>
-                    <input type="date" name="date" value={formData.date} onChange={handleInput} required style={inputStyle} />
+                    <input type="date" name="date" value={formData.date} onChange={handleInput} required style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem', maxWidth: isMobile ? '160px' : '200px', display: 'block', boxSizing: 'border-box' }} />
                   </div>
                 </div>
 
                 {/* Footer */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', padding: '1.25rem 1.5rem', marginTop: '0.75rem', borderTop: '1px solid var(--border-color)', background: 'var(--bg-color)' }}>
-                  <button type="button" onClick={() => setShowForm(false)} style={{ padding: '0.6rem 1.25rem', borderRadius: '0', border: '1px solid var(--border-color)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem' }}>{t('cancel')}</button>
-                  <button type="submit" style={{ padding: '0.6rem 1.5rem', borderRadius: '0', border: 'none', background: accentColor, color: 'white', cursor: 'pointer', fontWeight: '700', fontSize: '0.9rem', transition: 'background 0.3s', boxShadow: `0 4px 14px ${accentColor}55` }}>{t('save')}</button>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', padding: isMobile ? '0.75rem 1rem' : '1.25rem 1.5rem', marginTop: isMobile ? '0.75rem' : '1.25rem', borderTop: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.1)', flexShrink: 0 }}>
+                  <button type="button" onClick={() => setShowForm(false)} style={{ padding: isMobile ? '0.45rem 1.1rem' : '0.6rem 1.25rem', borderRadius: '9999px', border: '1px solid var(--border-color)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '600', fontSize: isMobile ? '0.8rem' : '0.9rem', outline: 'none' }}>{t('cancel')}</button>
+                  <button type="submit" style={{ padding: isMobile ? '0.45rem 1.35rem' : '0.6rem 1.5rem', borderRadius: '9999px', border: 'none', background: accentColor, color: 'white', cursor: 'pointer', fontWeight: '700', fontSize: isMobile ? '0.85rem' : '0.9rem', transition: 'background 0.3s', boxShadow: `0 4px 14px ${accentColor}55`, outline: 'none' }}>{t('save')}</button>
                 </div>
               </form>
             </div>
           </div>
         );
       })()}
-
+ 
       {/* Fellowship Modal */}
-
+ 
       {showFellowshipForm && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
-            <h3 style={{ fontSize: '1.35rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '1.25rem' }}>Youth Fellowship Expense</h3>
-            <form onSubmit={handleFellowshipSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', overflowY: 'auto', overflowX: 'hidden' }}>
+          <div style={{ width: '100%', maxWidth: '560px', maxHeight: '95vh', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', padding: isMobile ? '1rem' : '1.5rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-lg)', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
+            <h3 style={{ fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: isMobile ? '0.75rem' : '1.25rem' }}>Youth Fellowship Expense</h3>
+            <form onSubmit={handleFellowshipSubmit} style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem', overflowY: 'auto', overflowX: 'hidden' }}>
               <div>
                 <label style={labelStyle}>Event Name</label>
-                <input type="text" value={fellowshipData.eventName} onChange={e => setFellowshipData(f => ({...f, eventName: e.target.value}))} placeholder="E.g. Binhi #Pru-Task" required style={inputStyle} />
+                <input type="text" value={fellowshipData.eventName} onChange={e => setFellowshipData(f => ({...f, eventName: e.target.value}))} placeholder="E.g. Binhi #Pru-Task" required style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
               </div>
               <div>
                 <label style={labelStyle}>Fee per Participant (₱)</label>
-                <input type="number" value={fellowshipData.fee} onChange={e => setFellowshipData(f => ({...f, fee: Number(e.target.value)}))} required min="1" style={inputStyle} />
+                <input type="number" value={fellowshipData.fee} onChange={e => setFellowshipData(f => ({...f, fee: Number(e.target.value)}))} required min="1" style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
               </div>
               <div>
                 <label style={labelStyle}>{t('date')}</label>
-                <input type="date" value={fellowshipData.date} onChange={e => setFellowshipData(f => ({...f, date: e.target.value}))} required style={{ ...inputStyle, maxWidth: '100%' }} />
+                <input type="date" value={fellowshipData.date} onChange={e => setFellowshipData(f => ({...f, date: e.target.value}))} required style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem', maxWidth: isMobile ? '160px' : '200px', display: 'block', boxSizing: 'border-box' }} />
               </div>
               <div>
                 <label style={labelStyle}>Select Participants from Roster ({fellowshipData.participants.length} selected)</label>
-                <div style={{ maxHeight: '160px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '4px', padding: '0.5rem', background: 'var(--bg-color)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                <div style={{ maxHeight: isMobile ? '100px' : '160px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '0.75rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
                   {ledgerData.members.map(m => (
-                    <label key={m._id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-main)' }}>
+                    <label key={m._id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-main)' }}>
                       <input type="checkbox" checked={fellowshipData.participants.includes(m._id)} onChange={() => toggleParticipant(m._id)} />
                       {m.name}
                     </label>
@@ -1275,58 +1533,58 @@ ${formattedDesc}
               </div>
               <div>
                 <label style={labelStyle}>Additional / Guest Participants (Comma separated)</label>
-                <input type="text" value={fellowshipData.customParticipants} onChange={e => setFellowshipData(f => ({...f, customParticipants: e.target.value}))} placeholder="E.g. Guest 1, Mark, Anna's Friend" style={inputStyle} />
+                <input type="text" value={fellowshipData.customParticipants} onChange={e => setFellowshipData(f => ({...f, customParticipants: e.target.value}))} placeholder="E.g. Guest 1, Mark, Anna's Friend" style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem' }}>
-                <div style={{ fontWeight: 'bold', color: '#ef4444' }}>Total: ₱{fellowshipData.fee * (fellowshipData.participants.length + fellowshipData.customParticipants.split(',').map(s=>s.trim()).filter(Boolean).length)}</div>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button type="button" onClick={() => setShowFellowshipForm(false)} className="btn btn-secondary">{t('cancel')}</button>
-                  <button type="submit" className="btn btn-primary">Submit</button>
+                <div style={{ fontWeight: '800', fontSize: isMobile ? '0.9rem' : '1rem', color: '#ef4444' }}>Total: ₱{fellowshipData.fee * (fellowshipData.participants.length + fellowshipData.customParticipants.split(',').map(s=>s.trim()).filter(Boolean).length)}</div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button type="button" onClick={() => setShowFellowshipForm(false)} className="btn btn-secondary" style={{ borderRadius: '9999px', padding: isMobile ? '0.4rem 1rem' : '0.5rem 1.25rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>{t('cancel')}</button>
+                  <button type="submit" className="btn btn-primary" style={{ borderRadius: '9999px', padding: isMobile ? '0.4rem 1rem' : '0.5rem 1.25rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>Submit</button>
                 </div>
               </div>
             </form>
           </div>
         </div>
       )}
-
+ 
       {/* Designated Fund Form Modal */}
       {showFundForm && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
-          <div style={{ width: '100%', maxWidth: '560px', maxHeight: '90vh', background: 'var(--surface)', borderRadius: '0', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ height: '4px', background: fundData.color || '#3b82f6', transition: 'background 0.3s' }} />
-            <div style={{ padding: '1.5rem 1.5rem 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '1rem', flexShrink: 0 }}>
+          <div style={{ width: '100%', maxWidth: '560px', maxHeight: '95vh', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', display: 'flex', flexDirection: 'column', backdropFilter: 'blur(16px)' }}>
+            <div style={{ height: '4px', background: fundData.color || '#3b82f6', transition: 'background 0.3s', flexShrink: 0 }} />
+            <div style={{ padding: isMobile ? '1rem 1rem 0' : '1.5rem 1.5rem 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? '0.75rem' : '1rem', flexShrink: 0 }}>
               <div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
+                <h3 style={{ fontSize: isMobile ? '1.15rem' : '1.2rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
                   {editingFundId ? 'Edit Designated Fund' : 'Create Designated Fund'}
                 </h3>
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>Configure a budget bucket based on transaction categories.</p>
               </div>
-              <button type="button" onClick={() => setShowFundForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '0.1rem 0.3rem' }}>✕</button>
+              <button type="button" onClick={() => setShowFundForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '0.1rem 0.3rem', outline: 'none' }}>✕</button>
             </div>
             
             <form onSubmit={handleFundSubmit} style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <div style={{ padding: '0 1.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ padding: isMobile ? '0 1rem 0.75rem' : '0 1.5rem 1rem', display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem', flex: 1 }}>
                 <div>
                   <label style={labelStyle}>Fund Name</label>
-                  <input type="text" value={fundData.name} onChange={e => setFundData(f => ({ ...f, name: e.target.value }))} required placeholder="e.g. Fellowship Fund" style={inputStyle} />
+                  <input type="text" value={fundData.name} onChange={e => setFundData(f => ({ ...f, name: e.target.value }))} required placeholder="e.g. Fellowship Fund" style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
                 </div>
                 <div>
                   <label style={labelStyle}>Description <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
-                  <textarea value={fundData.description} onChange={e => setFundData(f => ({ ...f, description: e.target.value }))} placeholder="What is this fund for?" style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }} />
+                  <textarea value={fundData.description} onChange={e => setFundData(f => ({ ...f, description: e.target.value }))} placeholder="What is this fund for?" style={{ ...inputStyle, minHeight: isMobile ? '50px' : '60px', resize: 'vertical', padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
                 </div>
                 <div style={{ display: 'flex', gap: '1rem' }}>
                   <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>Target Amount / Budget Goal <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
-                    <input type="number" value={fundData.targetAmount} onChange={e => setFundData(f => ({ ...f, targetAmount: e.target.value }))} min="0" placeholder="0.00" style={inputStyle} />
+                    <label style={labelStyle}>Target / Budget Goal <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
+                    <input type="number" value={fundData.targetAmount} onChange={e => setFundData(f => ({ ...f, targetAmount: e.target.value }))} min="0" placeholder="0.00" style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
                   </div>
                   <div>
-                    <label style={labelStyle}>Accent Color</label>
-                    <input type="color" value={fundData.color} onChange={e => setFundData(f => ({ ...f, color: e.target.value }))} style={{ width: '50px', height: '38px', padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
+                    <label style={labelStyle}>Color</label>
+                    <input type="color" value={fundData.color} onChange={e => setFundData(f => ({ ...f, color: e.target.value }))} style={{ width: '45px', height: isMobile ? '32px' : '38px', padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
                   </div>
                 </div>
 
                 {/* Auto-assign toggle */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', background: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '4px', marginTop: '0.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: isMobile ? '0.6rem' : '0.75rem', background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', borderRadius: '0.75rem', marginTop: '0.25rem' }}>
                   <label style={{ position: 'relative', display: 'inline-block', width: '42px', height: '22px', flexShrink: 0, cursor: 'pointer' }}>
                     <input type="checkbox" checked={fundData.autoAssignWeeklyDues} onChange={e => setFundData(f => ({ ...f, autoAssignWeeklyDues: e.target.checked }))} style={{ opacity: 0, width: 0, height: 0 }} />
                     <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: fundData.autoAssignWeeklyDues ? (fundData.color || '#3b82f6') : '#94a3b8', borderRadius: '99px', transition: '0.3s' }}>
@@ -1334,42 +1592,41 @@ ${formattedDesc}
                     </span>
                   </label>
                   <div>
-                    <p style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-main)', margin: 0 }}>Auto-assign Weekly Dues</p>
+                    <p style={{ fontSize: isMobile ? '0.8rem' : '0.85rem', fontWeight: '600', color: 'var(--text-main)', margin: 0 }}>Auto-assign Weekly Dues</p>
                     <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0.15rem 0 0', lineHeight: 1.3 }}>Automatically link all new weekly dues payments to this budget.</p>
                   </div>
                 </div>
 
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4, marginTop: '0.5rem' }}>Any transactions manually assigned to this budget will also update its balance.</p>
+                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4, marginTop: '0.25rem' }}>Any transactions manually assigned to this budget will also update its balance.</p>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', padding: '1.25rem 1.5rem', borderTop: '1px solid var(--border-color)', background: 'var(--bg-color)', marginTop: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: isMobile ? '0.75rem 1rem' : '1.25rem 1.5rem', borderTop: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.1)', marginTop: 'auto', flexShrink: 0 }}>
                 {editingFundId ? (
-                  <button type="button" onClick={() => handleDeleteFund(editingFundId)} style={{ padding: '0.6rem 1rem', border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}>Delete Fund</button>
+                  <button type="button" onClick={() => handleDeleteFund(editingFundId)} style={{ padding: isMobile ? '0.45rem 0.8rem' : '0.6rem 1rem', border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: '600', fontSize: isMobile ? '0.8rem' : '0.85rem', outline: 'none' }}>Delete</button>
                 ) : <div />}
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button type="button" onClick={() => setShowFundForm(false)} style={{ padding: '0.6rem 1.25rem', borderRadius: '0', border: '1px solid var(--border-color)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '600', fontSize: '0.9rem' }}>Cancel</button>
-                  <button type="submit" style={{ padding: '0.6rem 1.5rem', borderRadius: '0', border: 'none', background: fundData.color || 'var(--primary)', color: 'white', cursor: 'pointer', fontWeight: '700', fontSize: '0.9rem', boxShadow: `0 4px 14px ${fundData.color || 'var(--primary)'}55` }}>Save Budget</button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button type="button" onClick={() => setShowFundForm(false)} style={{ padding: isMobile ? '0.45rem 1.1rem' : '0.6rem 1.25rem', borderRadius: '9999px', border: '1px solid var(--border-color)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '600', fontSize: isMobile ? '0.8rem' : '0.9rem', outline: 'none' }}>Cancel</button>
+                  <button type="submit" style={{ padding: isMobile ? '0.45rem 1.35rem' : '0.6rem 1.5rem', borderRadius: '9999px', border: 'none', background: fundData.color || 'var(--primary)', color: 'white', cursor: 'pointer', fontWeight: '700', fontSize: isMobile ? '0.85rem' : '0.9rem', boxShadow: `0 4px 14px ${fundData.color || 'var(--primary)'}55`, outline: 'none' }}>Save Budget</button>
                 </div>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      {/* Designated Fund Transactions Modal */}
+ 
       {fundTxModal.isOpen && fundTxModal.fund && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
-            <div style={{ height: '4px', background: fundTxModal.fund.color || '#3b82f6' }} />
-            <div style={{ padding: '1.25rem', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div style={{ width: '100%', maxWidth: '600px', maxHeight: '95vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', backdropFilter: 'blur(16px)', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
+            <div style={{ height: '4px', background: fundTxModal.fund.color || '#3b82f6', flexShrink: 0 }} />
+            <div style={{ padding: isMobile ? '0.85rem 1rem' : '1.25rem', borderBottom: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
-                <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0 }}>{fundTxModal.fund.name}</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0.2rem 0 0' }}>Associated Transactions</p>
+                <h3 style={{ fontSize: isMobile ? '1.1rem' : '1.2rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0 }}>{fundTxModal.fund.name}</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0.2rem 0 0' }}>Associated Transactions</p>
               </div>
-              <button onClick={() => setFundTxModal({ ...fundTxModal, isOpen: false })} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '0.1rem 0.3rem' }}>✕</button>
+              <button onClick={() => setFundTxModal({ ...fundTxModal, isOpen: false })} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '0.1rem 0.3rem', outline: 'none' }}>✕</button>
             </div>
             
-            <div style={{ padding: '1rem', overflowY: 'auto', flex: 1, background: 'var(--bg-color)' }}>
+            <div style={{ padding: isMobile ? '0.75rem' : '1rem', overflowY: 'auto', flex: 1, background: 'transparent' }}>
               {fundTxModal.loading ? (
                 <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>Loading...</p>
               ) : fundTxModal.transactions.length === 0 ? (
@@ -1377,17 +1634,17 @@ ${formattedDesc}
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {fundTxModal.transactions.map(tx => (
-                    <div key={tx._id} style={{ padding: '0.75rem', background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+                    <div key={tx._id} style={{ padding: isMobile ? '0.6rem' : '0.75rem', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-color)', borderRadius: '0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div>
-                          <p style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.9rem', margin: '0 0 0.25rem' }}>{tx.category}</p>
+                          <p style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: isMobile ? '0.85rem' : '0.9rem', margin: '0 0 0.25rem' }}>{tx.category}</p>
                           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>{new Date(tx.date).toLocaleDateString()}</p>
                         </div>
-                        <span style={{ fontWeight: 'bold', fontSize: '1rem', color: tx.type === 'INCOME' ? '#22c55e' : '#ef4444' }}>
+                        <span style={{ fontWeight: '750', fontSize: isMobile ? '0.9rem' : '1rem', color: tx.type === 'INCOME' ? '#10b981' : '#ef4444' }}>
                           {tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}
                         </span>
                       </div>
-                      {tx.description && <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.5rem 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.4, background: 'var(--bg-color)', padding: '0.4rem 0.5rem', borderRadius: '4px' }}>{tx.description}</p>}
+                      {tx.description && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.5rem 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.4, background: 'rgba(0,0,0,0.15)', padding: '0.4rem 0.5rem', borderRadius: '4px' }}>{tx.description}</p>}
                     </div>
                   ))}
                 </div>
@@ -1395,23 +1652,23 @@ ${formattedDesc}
             </div>
             
             {fundTxModal.totalPages > 1 && (
-              <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', flexShrink: 0, background: 'var(--surface)' }}>
-                <button disabled={fundTxModal.page === 1} onClick={() => loadFundTxPage(fundTxModal.page - 1)} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', opacity: fundTxModal.page === 1 ? 0.4 : 1 }}>‹</button>
+              <div style={{ padding: isMobile ? '0.6rem 1rem' : '1rem', borderTop: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', flexShrink: 0, background: 'transparent' }}>
+                <button disabled={fundTxModal.page === 1} onClick={() => loadFundTxPage(fundTxModal.page - 1)} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', borderRadius: '9999px', opacity: fundTxModal.page === 1 ? 0.4 : 1 }}>‹</button>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Page {fundTxModal.page} of {fundTxModal.totalPages}</span>
-                <button disabled={fundTxModal.page === fundTxModal.totalPages} onClick={() => loadFundTxPage(fundTxModal.page + 1)} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', opacity: fundTxModal.page === fundTxModal.totalPages ? 0.4 : 1 }}>›</button>
+                <button disabled={fundTxModal.page === fundTxModal.totalPages} onClick={() => loadFundTxPage(fundTxModal.page + 1)} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', borderRadius: '9999px', opacity: fundTxModal.page === fundTxModal.totalPages ? 0.4 : 1 }}>›</button>
               </div>
             )}
           </div>
         </div>
       )}
-
+ 
       {/* Link User Modal */}
       {linkModal.isOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '440px' }}>
+          <div style={{ width: '100%', maxWidth: '440px', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', padding: '1.5rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-lg)' }}>
             <h3 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.25rem' }}>🔗 Link User to Roster Entry</h3>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Connecting a user ensures their exact arrears amount is emailed to their account.</p>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', padding: '0.6rem 0.85rem', marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--text-main)' }}>
+            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '0.75rem', padding: '0.6rem 0.85rem', marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--text-main)' }}>
               Roster entry: <strong>{linkModal.member?.name}</strong>
               {linkModal.member?.linkedUser && <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>(currently linked to <strong>{linkModal.member.linkedUser.displayName}</strong>)</span>}
             </div>
@@ -1423,7 +1680,7 @@ ${formattedDesc}
               onChange={e => setUserSearchQuery(e.target.value)}
               style={{ ...inputStyle, marginBottom: '0.75rem' }}
             />
-            <div style={{ minHeight: '80px', maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius)', background: 'var(--bg-color)' }}>
+            <div style={{ minHeight: '80px', maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '0.75rem', background: 'rgba(0,0,0,0.15)' }}>
               {searchingUsers ? (
                 <p style={{ padding: '1rem', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.85rem' }}>Searching…</p>
               ) : userSearchResults.length === 0 ? (
@@ -1432,46 +1689,46 @@ ${formattedDesc}
                 <button
                   key={u._id}
                   onClick={() => handleConfirmLink(u._id)}
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 0.85rem', background: 'none', border: 'none', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', textAlign: 'left' }}
+                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 0.85rem', background: 'none', border: 'none', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', textAlign: 'left', outline: 'none' }}
                 >
-                  <span style={{ color: 'var(--text-main)', fontWeight: '500', fontSize: '0.9rem' }}>{u.displayName}</span>
+                  <span style={{ color: 'var(--text-main)', fontWeight: '600', fontSize: '0.9rem' }}>{u.displayName}</span>
                   <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{u.role}</span>
                 </button>
               ))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-              <button onClick={closeLinkModal} className="btn btn-secondary">Cancel</button>
+              <button onClick={closeLinkModal} className="btn btn-secondary" style={{ borderRadius: '9999px' }}>Cancel</button>
             </div>
           </div>
         </div>
       )}
-
+ 
       {/* Alert Modal */}
       {alertDialog.isOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+          <div style={{ width: '100%', maxWidth: '400px', textAlign: 'center', padding: '2rem', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-lg)' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.75rem' }}>{alertDialog.title}</h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>{alertDialog.message}</p>
-            <button onClick={() => setAlertDialog({ ...alertDialog, isOpen: false })} className="btn btn-primary" style={{ width: '100%' }}>OK</button>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5', fontSize: '0.9rem' }}>{alertDialog.message}</p>
+            <button onClick={() => setAlertDialog({ ...alertDialog, isOpen: false })} className="btn btn-primary" style={{ width: '100%', borderRadius: '9999px' }}>OK</button>
           </div>
         </div>
       )}
-
+ 
       {/* Confirm Modal */}
       {confirmDialog.isOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-          <div className="card" style={{ width: '100%', maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+          <div style={{ width: '100%', maxWidth: '400px', textAlign: 'center', padding: '2rem', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-lg)' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.75rem' }}>{confirmDialog.title}</h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5' }}>{confirmDialog.message}</p>
+            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5', fontSize: '0.9rem' }}>{confirmDialog.message}</p>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button onClick={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
+              <button onClick={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} className="btn btn-secondary" style={{ flex: 1, borderRadius: '9999px' }}>Cancel</button>
               <button 
                 onClick={() => {
                   if (confirmDialog.onConfirm) confirmDialog.onConfirm();
                   setConfirmDialog({ ...confirmDialog, isOpen: false });
                 }} 
                 className="btn btn-primary" 
-                style={{ flex: 1, backgroundColor: '#ef4444' }}
+                style={{ flex: 1, backgroundColor: '#ef4444', borderRadius: '9999px' }}
               >
                 Confirm
               </button>

@@ -1,14 +1,97 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library, Gamepad2, BookHeart } from 'lucide-react';
+import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library, Gamepad2, BookHeart, Flame } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import api from '../api';
+
+const dailyVerses = [
+  { text: "Trust in the Lord with all your heart and lean not on your own understanding.", ref: "Proverbs 3:5" },
+  { text: "For I know the plans I have for you, declares the Lord, plans to prosper you and not to harm you.", ref: "Jeremiah 29:11" },
+  { text: "I can do all things through Christ who strengthens me.", ref: "Philippians 4:13" },
+  { text: "The Lord is my shepherd; I shall not want.", ref: "Psalm 23:1" },
+  { text: "Be strong and courageous. Do not be afraid; do not be discouraged.", ref: "Joshua 1:9" },
+  { text: "Cast all your anxiety on Him because He cares for you.", ref: "1 Peter 5:7" },
+  { text: "The joy of the Lord is your strength.", ref: "Nehemiah 8:10" },
+  { text: "But those who hope in the Lord will renew their strength.", ref: "Isaiah 40:31" },
+  { text: "And we know that in all things God works for the good of those who love Him.", ref: "Romans 8:28" },
+  { text: "The Lord is close to the brokenhearted and saves those who are crushed in spirit.", ref: "Psalm 34:18" },
+  { text: "Do not be anxious about anything, but in every situation, by prayer and petition, present your requests to God.", ref: "Philippians 4:6" },
+  { text: "Come to me, all you who are weary and burdened, and I will give you rest.", ref: "Matthew 11:28" },
+  { text: "For God so loved the world that He gave His one and only Son.", ref: "John 3:16" },
+  { text: "The Lord is my light and my salvation — whom shall I fear?", ref: "Psalm 27:1" },
+  { text: "His mercies are new every morning; great is Your faithfulness.", ref: "Lamentations 3:23" },
+  { text: "Delight yourself in the Lord, and He will give you the desires of your heart.", ref: "Psalm 37:4" },
+  { text: "Be still, and know that I am God.", ref: "Psalm 46:10" },
+  { text: "God is our refuge and strength, an ever-present help in trouble.", ref: "Psalm 46:1" },
+  { text: "The Lord your God is with you, the Mighty Warrior who saves.", ref: "Zephaniah 3:17" },
+  { text: "He has made everything beautiful in its time.", ref: "Ecclesiastes 3:11" },
+  { text: "Let us not become weary in doing good, for at the proper time we will reap a harvest.", ref: "Galatians 6:9" },
+  { text: "If God is for us, who can be against us?", ref: "Romans 8:31" },
+  { text: "The name of the Lord is a fortified tower; the righteous run to it and are safe.", ref: "Proverbs 18:10" },
+  { text: "Wait for the Lord; be strong and take heart and wait for the Lord.", ref: "Psalm 27:14" },
+  { text: "You are the light of the world. A town built on a hill cannot be hidden.", ref: "Matthew 5:14" },
+  { text: "Create in me a pure heart, O God, and renew a steadfast spirit within me.", ref: "Psalm 51:10" },
+  { text: "For where two or three gather in my name, there am I with them.", ref: "Matthew 18:20" },
+  { text: "Every good and perfect gift is from above, coming down from the Father of lights.", ref: "James 1:17" },
+  { text: "Love is patient, love is kind. It does not envy, it does not boast.", ref: "1 Corinthians 13:4" },
+  { text: "This is the day the Lord has made; let us rejoice and be glad in it.", ref: "Psalm 118:24" },
+  { text: "Draw near to God, and He will draw near to you.", ref: "James 4:8" },
+];
+
+function getDailyVerse() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now - start) / 86400000);
+  return dailyVerses[dayOfYear % dailyVerses.length];
+}
 
 const PortalDashboard = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
+  const [stats, setStats] = useState(null);
+  const verse = getDailyVerse();
+
+  useEffect(() => {
+    api.get('/users/me/dashboard-stats')
+      .then(res => setStats(res.data))
+      .catch(err => console.error('Failed to load dashboard stats:', err));
+  }, []);
 
   const modules = [
+    {
+      id: 'fund_tracker',
+      title: t('fund_tracker'),
+      desc: t('fund_desc'),
+      Icon: Wallet,
+      docsPath: '/docs/fund-tracker',
+      openPath: '/funds',
+      OpenIcon: Wallet,
+      docsTitle: t('read_docs'),
+      openTitle: t('open_module')
+    },
+    {
+      id: 'devotional_tracker',
+      title: t('devo_title'),
+      desc: t('devo_desc'),
+      Icon: BookHeart,
+      docsPath: '/docs/devotional-tracker',
+      openPath: '/devotionals',
+      OpenIcon: BookHeart,
+      docsTitle: t('read_docs'),
+      openTitle: t('open_module')
+    },
+    {
+      id: 'resource_center',
+      title: t('resource_center'),
+      desc: t('resource_center_desc'),
+      Icon: Library,
+      docsPath: '/docs/resource-center',
+      openPath: '/resources',
+      OpenIcon: Library,
+      docsTitle: t('read_docs'),
+      openTitle: t('open_module')
+    },
     {
       id: 'gentle_mirror',
       title: 'Gentle Mirror',
@@ -32,28 +115,6 @@ const PortalDashboard = () => {
       openTitle: t('sl_open_module')
     },
     {
-      id: 'fund_tracker',
-      title: t('fund_tracker'),
-      desc: t('fund_desc'),
-      Icon: Wallet,
-      docsPath: '/docs/fund-tracker',
-      openPath: '/funds',
-      OpenIcon: Wallet,
-      docsTitle: t('read_docs'),
-      openTitle: t('open_module')
-    },
-    {
-      id: 'resource_center',
-      title: t('resource_center'),
-      desc: t('resource_center_desc'),
-      Icon: Library,
-      docsPath: '/docs/resource-center',
-      openPath: '/resources',
-      OpenIcon: Library,
-      docsTitle: t('read_docs'),
-      openTitle: t('open_module')
-    },
-    {
       id: 'games',
       title: t('games'),
       desc: t('games_desc'),
@@ -61,17 +122,6 @@ const PortalDashboard = () => {
       docsPath: '/docs/games',
       openPath: '/games',
       OpenIcon: Gamepad2,
-      docsTitle: t('read_docs'),
-      openTitle: t('open_module')
-    },
-    {
-      id: 'devotional_tracker',
-      title: t('devo_title'),
-      desc: t('devo_desc'),
-      Icon: BookHeart,
-      docsPath: '/docs/devotional-tracker',
-      openPath: '/devotionals',
-      OpenIcon: BookHeart,
       docsTitle: t('read_docs'),
       openTitle: t('open_module')
     },
@@ -88,45 +138,67 @@ const PortalDashboard = () => {
     }
   ];
 
-  // Sort modules: Ensure 'system_requests' is always the last item
-  const sortedModules = [...modules].sort((a, b) => {
-    if (a.id === 'system_requests') return 1;
-    if (b.id === 'system_requests') return -1;
-    return 0;
-  });
+  const statPills = [
+    { icon: MessageCircle, value: stats?.activeMirrors ?? '—', label: 'Mirrors' },
+    { icon: Sun, value: stats?.receivedLights ?? '—', label: 'Lights' },
+    { icon: Wallet, value: stats ? `₱${stats.fundBalance.toLocaleString()}` : '—', label: 'Fund' },
+    { icon: Flame, value: stats?.devotionStreak ?? '—', label: 'Streak' },
+  ];
 
   return (
-    <div className="container" style={{ maxWidth: '1000px', padding: '2rem 1rem' }}>
-      <div style={{ marginBottom: '2.5rem', textAlign: 'center' }}>
-        <h1 style={{ fontSize: '2.5rem', color: 'var(--text-main)', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-          {t('welcome_back_name')} <span style={{ color: 'var(--primary)' }}>{user?.displayName || user?.email || 'User'}</span>
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>
-          {t('select_module')}
-        </p>
+    <div className="container" style={{ maxWidth: '1100px', padding: '2rem 1rem' }}>
+      {/* ── Hero Row: Welcome + Verse ── */}
+      <div className="dashboard-hero-row animate-stagger" style={{ animationDelay: '0s' }}>
+        <div className="dashboard-hero-card">
+          <h1 className="dashboard-hero-title">
+            {t('welcome_back_name')} <span className="text-gradient">{user?.displayName || user?.email || 'User'}</span>
+          </h1>
+          <p className="dashboard-hero-subtitle">
+            {t('select_module')}
+          </p>
+        </div>
+        <div className="dashboard-verse-card">
+          <p className="verse-text">"{verse.text}"</p>
+          <span className="verse-ref">— {verse.ref}</span>
+        </div>
       </div>
 
+      {/* ── Quick Stats Pills ── */}
+      <div className="quick-stats-grid animate-stagger" style={{ animationDelay: '0.1s' }}>
+        {statPills.map(({ icon: StatIcon, value, label }) => (
+          <div key={label} className="stat-pill">
+            <StatIcon size={14} className="stat-pill-icon" />
+            <span className="stat-pill-value">{value}</span>
+            <span className="stat-pill-label">{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Modules Grid ── */}
+      <h2 className="dashboard-section-title animate-stagger" style={{ animationDelay: '0.2s' }}>
+        <Compass size={24} style={{ color: 'var(--primary)' }} />
+        Explore Modules
+      </h2>
+      
       <div className="dashboard-modules-grid">
-        {sortedModules.map(({ id, title, desc, Icon, docsPath, openPath, OpenIcon, docsTitle, openTitle }) => (
-          <div key={id} style={{ textDecoration: 'none' }}>
-            <div className="card module-card">
-              <div className="module-card-header">
-                <div className="module-card-icon" style={{ backgroundColor: 'rgba(var(--primary-rgb, 2, 132, 199), 0.15)' }}>
-                  <Icon className="module-card-icon-svg" style={{ color: 'var(--primary)' }} />
-                </div>
-                <h2 className="module-card-title">{title}</h2>
+        {modules.map(({ id, title, desc, Icon, docsPath, openPath, OpenIcon, docsTitle, openTitle }, index) => (
+          <div key={id} className="module-card animate-stagger" style={{ animationDelay: `${0.25 + (index * 0.05)}s` }}>
+            <div className="module-card-header">
+              <div className="module-card-icon">
+                <Icon className="module-card-icon-svg" />
               </div>
-              <p className="module-card-desc" style={{ marginBottom: '1rem' }}>
-                {desc}
-              </p>
-              <div className="module-card-actions" style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
-                <Link to={docsPath} className="btn btn-secondary" title={docsTitle} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <BookOpen size={20} />
-                </Link>
-                <Link to={openPath} className="btn btn-primary" title={openTitle} style={{ flex: 1, padding: '0.5rem', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <OpenIcon size={20} />
-                </Link>
-              </div>
+              <h2 className="module-card-title">{title}</h2>
+            </div>
+            <p className="module-card-desc">
+              {desc}
+            </p>
+            <div className="module-card-actions">
+              <Link to={docsPath} className="module-action-btn action-docs" title={docsTitle}>
+                <BookOpen size={18} />
+              </Link>
+              <Link to={openPath} className="module-action-btn action-open" title={openTitle}>
+                <OpenIcon size={18} />
+              </Link>
             </div>
           </div>
         ))}

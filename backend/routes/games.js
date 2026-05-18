@@ -4,10 +4,10 @@ const QuizSet = require('../models/QuizSet');
 const QuizAttempt = require('../models/QuizAttempt');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 
-// ── Helper: strip correctIndex from questions for the player ────────────────
+// ── Helper: strip correctIndex and explanations from questions for the player ────────────────
 const sanitizeQuiz = (quiz) => {
   const obj = quiz.toObject();
-  obj.questions = obj.questions.map(({ correctIndex, ...rest }) => rest);
+  obj.questions = obj.questions.map(({ correctIndex, explanations, ...rest }) => rest);
   return obj;
 };
 
@@ -89,6 +89,15 @@ router.post('/quizzes', requireAuth, requireRole(['ADMIN']), async (req, res) =>
           return res.status(400).json({ message: `Question ${i + 1} has an invalid correct answer index.` });
         }
       }
+      // Populate explanations parallel to options length
+      if (!q.explanations) {
+        q.explanations = new Array(q.options.length).fill('');
+      } else {
+        while (q.explanations.length < q.options.length) {
+          q.explanations.push('');
+        }
+        q.explanations = q.explanations.slice(0, q.options.length);
+      }
     }
     
     const quiz = new QuizSet({
@@ -128,10 +137,18 @@ router.put('/quizzes/:id', requireAuth, requireRole(['ADMIN']), async (req, res)
       if (questions.length === 0) {
         return res.status(400).json({ message: 'A quiz must have at least one question.' });
       }
-      // Normalize true/false options
+      // Normalize true/false options and populate explanations parallel to options length
       for (const q of questions) {
         if (q.questionType === 'true_false') {
           q.options = ['True', 'False'];
+        }
+        if (!q.explanations) {
+          q.explanations = new Array(q.options.length).fill('');
+        } else {
+          while (q.explanations.length < q.options.length) {
+            q.explanations.push('');
+          }
+          q.explanations = q.explanations.slice(0, q.options.length);
         }
       }
       quiz.questions = questions;
@@ -218,6 +235,7 @@ router.post('/quizzes/:id/submit', requireAuth, async (req, res) => {
       questionText: q.questionText,
       questionType: q.questionType,
       options: q.options,
+      explanations: q.explanations || [],
       correctIndex: q.correctIndex,
       selectedIndex: gradedAnswers[i].selectedIndex,
       isCorrect: gradedAnswers[i].isCorrect

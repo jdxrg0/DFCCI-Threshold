@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
-import { Send, ArrowLeft } from 'lucide-react';
+import { Send, ChevronLeft, ArrowLeft } from 'lucide-react';
 import api from '../api';
 
 const CreateTicket = () => {
@@ -45,82 +45,84 @@ const CreateTicket = () => {
 
   return (
     <div className="container" style={{ maxWidth: '600px', padding: '2rem 1rem' }}>
-      <button 
-        onClick={() => navigate('/tickets/dashboard')} 
-        className="btn btn-secondary"
-        style={{ marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 1rem' }}
-      >
-        <ArrowLeft size={16} /> {t('back')}
-      </button>
+      <div className="btn-back-wrapper">
+        <button 
+          onClick={() => navigate('/tickets/dashboard')} 
+          className="btn-back-pill"
+        >
+          <ChevronLeft size={16} /> {t('back')}
+        </button>
+      </div>
 
-      <div className="card">
-        <h1 style={{ fontSize: '1.75rem', color: 'var(--text-main)', marginBottom: '0.5rem', fontWeight: 'bold' }}>
+      <div style={{ padding: 0 }} className="ticket-form-container">
+        <h1 className="ticket-form-title" style={{ fontSize: '2.1rem', color: 'var(--text-main)', marginBottom: '0.5rem', fontWeight: '850', letterSpacing: '-0.03em' }}>
           {t('create_request')}
         </h1>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
+        <p className="ticket-form-desc" style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.95rem' }}>
           {t('system_requests_desc')}
         </p>
 
         {error && (
-          <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem' }}>
+          <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid rgba(239, 68, 68, 0.2)', fontSize: '0.9rem', fontWeight: '600' }}>
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
-          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-            <label className="form-label" htmlFor="title">{t('request_title_label')}</label>
+          {/* Title input */}
+          <div className="ff-field" style={{ marginBottom: '1.5rem' }}>
             <input
               type="text"
               id="title"
               name="title"
-              className="form-input"
+              className="ticket-input-glass"
               value={formData.title}
               onChange={handleChange}
               placeholder="E.g., Cannot upload profile picture"
               required
             />
+            <label className="ticket-field-label" htmlFor="title">{t('request_title_label')}</label>
           </div>
 
-          <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-            <label className="form-label" htmlFor="type">{t('request_type_label')}</label>
+          {/* Type dropdown */}
+          <div className="ff-field" style={{ marginBottom: '1.5rem' }}>
             <select
               id="type"
               name="type"
-              className="form-input"
+              className={`ticket-input-glass ${formData.type ? 'has-value' : ''}`}
               value={formData.type}
               onChange={handleChange}
-              style={{ appearance: 'none' }}
               required
             >
               <option value="bug">{t('type_bug')}</option>
               <option value="feature">{t('type_feature')}</option>
               <option value="modification">{t('type_modification')}</option>
             </select>
+            <label className="ticket-field-label" htmlFor="type">{t('request_type_label')}</label>
           </div>
 
-          <div className="form-group" style={{ marginBottom: '2rem' }}>
-            <label className="form-label" htmlFor="description">{t('request_desc_label')}</label>
+          {/* Description textarea */}
+          <div className="ff-field ff-textarea" style={{ marginBottom: '2rem' }}>
             <textarea
               id="description"
               name="description"
-              className="form-input"
+              className="ticket-input-glass ff-textarea-el"
               value={formData.description}
               onChange={handleChange}
               placeholder="Provide details about your request..."
               rows="6"
               required
-              style={{ resize: 'vertical' }}
             />
+            <label className="ticket-field-label" htmlFor="description">{t('request_desc_label')}</label>
           </div>
 
           <button 
             type="submit" 
             className="btn btn-primary" 
             disabled={isSubmitting}
-            style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0.75rem' }}
+            style={{ width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0.85rem', borderRadius: '9999px', fontWeight: '700' }}
           >
-            {isSubmitting ? t('sending') : <><Send size={18} /> {t('submit_request')}</>}
+            {isSubmitting ? t('sending') : <><Send size={16} /> {t('submit_request')}</>}
           </button>
         </form>
       </div>
