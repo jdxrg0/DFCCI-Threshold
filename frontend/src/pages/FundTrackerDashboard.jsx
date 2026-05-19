@@ -15,7 +15,8 @@ import {
   Trash2, 
   Edit3, 
   ShieldAlert,
-  Info
+  Info,
+  Link2 as LinkIcon
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
