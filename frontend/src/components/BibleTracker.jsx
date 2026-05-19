@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { BookOpen, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react';
+import { 
+  BookOpen, ChevronDown, ChevronUp, CheckCircle2,
+  Scale, Scroll, Music, Flame, Volume2, Sparkles, Globe, Mail, Heart, Crown
+} from 'lucide-react';
 import api from '../api';
 import { BIBLE_VERSE_COUNTS } from '../data/bibleVerseCounts';
 
@@ -72,14 +75,36 @@ const BIBLE_DATA = [
   { name: 'Revelation', chapters: 22, testament: 'NT' }
 ];
 
-const BookRow = ({ book, progress = {} }) => {
+const CATEGORIES = [
+  { id: 'law_ot', name: 'Law / Pentateuch', testament: 'OT', books: ['Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy'], color: '#d97706', icon: Scale },
+  { id: 'history_ot', name: 'Old Testament History', testament: 'OT', books: ['Joshua', 'Judges', 'Ruth', '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah', 'Esther'], color: '#10b981', icon: Scroll },
+  { id: 'poetry_ot', name: 'Poetry & Wisdom', testament: 'OT', books: ['Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon'], color: '#8b5cf6', icon: Music },
+  { id: 'major_prophets_ot', name: 'Major Prophets', testament: 'OT', books: ['Isaiah', 'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel'], color: '#ef4444', icon: Flame },
+  { id: 'minor_prophets_ot', name: 'Minor Prophets', testament: 'OT', books: ['Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi'], color: '#f97316', icon: Volume2 },
+  { id: 'gospels_nt', name: 'Gospels', testament: 'NT', books: ['Matthew', 'Mark', 'Luke', 'John'], color: '#06b6d4', icon: Sparkles },
+  { id: 'history_nt', name: 'New Testament History', testament: 'NT', books: ['Acts'], color: '#3b82f6', icon: Globe },
+  { id: 'pauls_epistles_nt', name: "Paul's Epistles", testament: 'NT', books: ['Romans', '1 Corinthians', '2 Corinthians', 'Galatians', 'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon'], color: '#6366f1', icon: Mail },
+  { id: 'general_epistles_nt', name: 'General Epistles', testament: 'NT', books: ['Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude'], color: '#ec4899', icon: Heart },
+  { id: 'prophecy_nt', name: 'Prophecy', testament: 'NT', books: ['Revelation'], color: '#f43f5e', icon: Crown }
+];
+
+const getVerseCounts = (bookName) => {
+  if (BIBLE_VERSE_COUNTS[bookName]) return BIBLE_VERSE_COUNTS[bookName];
+  if (bookName === 'Psalms' && BIBLE_VERSE_COUNTS['Psalm']) return BIBLE_VERSE_COUNTS['Psalm'];
+  if (bookName === 'Psalm' && BIBLE_VERSE_COUNTS['Psalms']) return BIBLE_VERSE_COUNTS['Psalms'];
+  return null;
+};
+
+const BookRow = ({ book, progress = {}, color, icon: BookIcon }) => {
   const [expanded, setExpanded] = useState(false);
+  const [hovered, setHovered] = useState(false);
   
   // Calculate completed chapters based on ALL verses read
   const chapterKeys = Object.keys(progress);
   let fullyReadCount = 0;
+  const counts = getVerseCounts(book.name) || [];
   chapterKeys.forEach(ch => {
-    if (progress[ch] >= BIBLE_VERSE_COUNTS[book.name][ch - 1]) {
+    if (counts[ch - 1] !== undefined && progress[ch] >= counts[ch - 1]) {
       fullyReadCount++;
     }
   });
@@ -87,37 +112,47 @@ const BookRow = ({ book, progress = {} }) => {
   const isCompleted = fullyReadCount === book.chapters;
   const percentage = Math.round((fullyReadCount / book.chapters) * 100);
 
+  const themeColor = color || 'var(--primary)';
+  const IconComponent = BookIcon || BookOpen;
+
   // Generate array [1, 2, 3... chapters]
   const chaptersArray = Array.from({ length: book.chapters }, (_, i) => i + 1);
 
   return (
-    <div style={{
-      marginBottom: '0.6rem',
-      backgroundColor: 'var(--card-bg)',
-      border: `1px solid ${isCompleted ? 'var(--primary)' : 'var(--border-color)'}`,
-      borderRadius: '12px',
-      overflow: 'hidden',
-      transition: 'all 0.2s ease',
-    }}>
+    <div 
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        marginBottom: '0.6rem',
+        backgroundColor: 'var(--card-bg)',
+        border: `1px solid ${isCompleted ? themeColor : (hovered ? themeColor : 'var(--border-color)')}`,
+        borderRadius: '12px',
+        overflow: 'hidden',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        transform: hovered ? 'translateY(-1px)' : 'none',
+        boxShadow: hovered ? `0 4px 12px color-mix(in srgb, ${themeColor} 8%, transparent)` : 'none',
+      }}
+    >
       {/* Header Row */}
       <div 
         onClick={() => setExpanded(!expanded)}
         style={{
           padding: '0.8rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          cursor: 'pointer', backgroundColor: isCompleted ? 'color-mix(in srgb, var(--primary) 8%, transparent)' : 'transparent',
+          cursor: 'pointer', backgroundColor: isCompleted ? `color-mix(in srgb, ${themeColor} 8%, transparent)` : 'transparent',
+          transition: 'background-color 0.25s ease',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           <div style={{ 
             width: '32px', height: '32px', borderRadius: '8px', 
-            backgroundColor: isCompleted ? 'var(--primary)' : 'color-mix(in srgb, var(--text-muted) 15%, transparent)',
-            color: isCompleted ? '#fff' : 'var(--text-muted)',
+            backgroundColor: isCompleted ? themeColor : `color-mix(in srgb, ${themeColor} 12%, transparent)`,
+            color: isCompleted ? '#fff' : themeColor,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            {isCompleted ? <CheckCircle2 size={16} /> : <BookOpen size={16} />}
+            {isCompleted ? <CheckCircle2 size={16} /> : <IconComponent size={16} />}
           </div>
           <div>
-            <div style={{ fontSize: '0.95rem', fontWeight: '800', color: isCompleted ? 'var(--primary)' : 'var(--text-main)' }}>
+            <div style={{ fontSize: '0.95rem', fontWeight: '800', color: isCompleted ? themeColor : 'var(--text-main)' }}>
               {book.name}
             </div>
             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>
@@ -129,38 +164,186 @@ const BookRow = ({ book, progress = {} }) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           {/* Progress Bar (mini) */}
           <div style={{ width: '60px', height: '6px', backgroundColor: 'var(--border-color)', borderRadius: '3px', overflow: 'hidden' }}>
-            <div style={{ width: `${percentage}%`, height: '100%', backgroundColor: 'var(--primary)', borderRadius: '3px' }} />
+            <div style={{ width: `${percentage}%`, height: '100%', backgroundColor: themeColor, borderRadius: '3px' }} />
           </div>
-          {expanded ? <ChevronUp size={18} color="var(--text-muted)" /> : <ChevronDown size={18} color="var(--text-muted)" />}
+          <ChevronDown 
+            size={18} 
+            color="var(--text-muted)" 
+            style={{
+              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+              transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+          />
         </div>
       </div>
 
       {/* Expanded Chapters Grid */}
-      {expanded && (
-        <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid var(--border-color)' }}>
-          <div style={{ marginTop: '0.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(36px, 1fr))', gap: '0.4rem' }}>
-            {chaptersArray.map(ch => {
-              const versesRead = progress[ch] || 0;
-              const totalVerses = BIBLE_VERSE_COUNTS[book.name][ch - 1];
-              const fillPct = Math.min(100, Math.round((versesRead / totalVerses) * 100));
-              
-              return (
-                <div key={ch} style={{
-                  aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700',
-                  background: fillPct > 0 
-                    ? `linear-gradient(to top, var(--primary) ${fillPct}%, color-mix(in srgb, var(--text-muted) 10%, transparent) ${fillPct}%)` 
-                    : 'color-mix(in srgb, var(--text-muted) 10%, transparent)',
-                  color: fillPct >= 50 ? '#fff' : 'var(--text-muted)',
-                  transition: 'transform 0.1s',
-                }}>
-                  {ch}
-                </div>
-              );
-            })}
+      <div style={{
+        maxHeight: expanded ? '600px' : '0px',
+        opacity: expanded ? 1 : 0,
+        overflow: 'hidden',
+        transition: 'max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out, padding 0.3s ease',
+        padding: expanded ? '0 1rem 1rem' : '0 1rem',
+        borderTop: expanded ? '1px solid var(--border-color)' : '1px solid transparent',
+      }}>
+        <div style={{ marginTop: '0.75rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(36px, 1fr))', gap: '0.4rem' }}>
+          {chaptersArray.map(ch => {
+            const versesRead = progress[ch] || 0;
+            const totalVerses = counts[ch - 1] || 0;
+            const fillPct = totalVerses > 0 ? Math.min(100, Math.round((versesRead / totalVerses) * 100)) : 0;
+            
+            return (
+              <div key={ch} style={{
+                aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700',
+                background: fillPct > 0 
+                  ? `linear-gradient(to top, ${themeColor} ${fillPct}%, color-mix(in srgb, var(--text-muted) 10%, transparent) ${fillPct}%)` 
+                  : 'color-mix(in srgb, var(--text-muted) 10%, transparent)',
+                color: fillPct >= 50 ? '#fff' : 'var(--text-muted)',
+                transition: 'transform 0.1s',
+              }}>
+                {ch}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CategoryGroup = ({ category, progress }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const isCompleted = category.completedBooks === category.totalBooks;
+  const CategoryIcon = category.icon || BookOpen;
+
+  return (
+    <div 
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        marginBottom: '0.8rem',
+        backgroundColor: 'var(--card-bg)',
+        border: `1px solid ${isCompleted ? category.color : (hovered ? category.color : 'var(--border-color)')}`,
+        borderRadius: '14px',
+        overflow: 'hidden',
+        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+        transform: hovered ? 'translateY(-2px)' : 'none',
+        boxShadow: hovered ? `0 6px 16px color-mix(in srgb, ${category.color} 12%, transparent)` : '0 2px 6px rgba(0,0,0,0.02)',
+      }}
+    >
+      {/* Category Header */}
+      <div
+        onClick={() => setExpanded(!expanded)}
+        style={{
+          padding: '0.9rem 1.1rem',
+          display: 'flex',
+          flexDirection: 'column',
+          cursor: 'pointer',
+          backgroundColor: isCompleted 
+            ? (hovered ? `color-mix(in srgb, ${category.color} 10%, transparent)` : `color-mix(in srgb, ${category.color} 6%, transparent)`)
+            : (hovered ? `color-mix(in srgb, ${category.color} 8%, transparent)` : 'transparent'),
+          userSelect: 'none',
+          transition: 'background-color 0.25s ease',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+            <div style={{
+              width: '34px',
+              height: '34px',
+              borderRadius: '9px',
+              backgroundColor: isCompleted ? category.color : `color-mix(in srgb, ${category.color} 12%, transparent)`,
+              color: isCompleted ? '#fff' : category.color,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: '800',
+              fontSize: '0.85rem',
+              transition: 'all 0.2s',
+            }}>
+              {isCompleted ? <CheckCircle2 size={16} /> : <CategoryIcon size={16} />}
+            </div>
+            <div>
+              <div style={{
+                fontSize: '0.95rem',
+                fontWeight: '800',
+                color: isCompleted ? category.color : 'var(--text-main)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+              }}>
+                {category.name}
+              </div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600', marginTop: '0.1rem' }}>
+                {category.completedBooks} / {category.totalBooks} Books Completed ({category.readChapters} / {category.totalChapters} Ch.)
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{
+              fontSize: '0.75rem',
+              fontWeight: '800',
+              color: isCompleted ? category.color : 'var(--text-muted)',
+              backgroundColor: `color-mix(in srgb, ${category.color} 8%, transparent)`,
+              padding: '0.2rem 0.45rem',
+              borderRadius: '6px',
+            }}>
+              {category.percentage}%
+            </div>
+            <ChevronDown 
+              size={18} 
+              color="var(--text-muted)" 
+              style={{
+                transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              }}
+            />
           </div>
         </div>
-      )}
+
+        {/* Category Progress Bar */}
+        <div style={{
+          height: '5px',
+          backgroundColor: `color-mix(in srgb, ${category.color} 15%, transparent)`,
+          borderRadius: '3px',
+          overflow: 'hidden',
+          marginTop: '0.2rem',
+        }}>
+          <div style={{
+            width: `${category.percentage}%`,
+            height: '100%',
+            backgroundColor: category.color,
+            borderRadius: '3px',
+            transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+          }} />
+        </div>
+      </div>
+
+      {/* Books List Collapsible Section */}
+      <div style={{
+        maxHeight: expanded ? '2000px' : '0px',
+        opacity: expanded ? 1 : 0,
+        overflow: 'hidden',
+        transition: 'max-height 0.45s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease-out, padding 0.35s ease',
+        padding: expanded ? '0.6rem 0.9rem 0.2rem' : '0 0.9rem',
+        borderTop: expanded ? '1px solid var(--border-color)' : '1px solid transparent',
+        backgroundColor: 'color-mix(in srgb, var(--bg-color) 40%, transparent)',
+        display: 'flex',
+        flexDirection: 'column',
+      }}>
+        {category.booksList.map(book => (
+          <BookRow 
+            key={book.name} 
+            book={book} 
+            progress={progress[book.name] || {}} 
+            color={category.color}
+            icon={category.icon}
+          />
+        ))}
+      </div>
     </div>
   );
 };
@@ -189,7 +372,7 @@ const BibleTracker = ({ targetMemberId }) => {
     let count = 0;
     Object.keys(progress).forEach(bookName => {
       const bookProgress = progress[bookName];
-      const counts = BIBLE_VERSE_COUNTS[bookName];
+      const counts = getVerseCounts(bookName);
       if (!counts) return;
       Object.keys(bookProgress).forEach(ch => {
         if (bookProgress[ch] >= counts[ch - 1]) count++;
@@ -200,11 +383,60 @@ const BibleTracker = ({ targetMemberId }) => {
 
   const overallPercentage = Math.round((readChaptersCount / totalChapters) * 100);
 
-  const filteredBooks = useMemo(() => {
-    if (filter === 'OT') return BIBLE_DATA.filter(b => b.testament === 'OT');
-    if (filter === 'NT') return BIBLE_DATA.filter(b => b.testament === 'NT');
-    return BIBLE_DATA;
-  }, [filter]);
+  const filteredCategories = useMemo(() => {
+    const activeCats = CATEGORIES.filter(cat => {
+      if (filter === 'OT') return cat.testament === 'OT';
+      if (filter === 'NT') return cat.testament === 'NT';
+      return true;
+    });
+
+    return activeCats.map(cat => {
+      const catBooks = cat.books.map(bookName => BIBLE_DATA.find(b => b.name === bookName)).filter(Boolean);
+
+      let totalCategoryChapters = 0;
+      let readCategoryChapters = 0;
+      let completedBooksCount = 0;
+
+      const booksWithProgress = catBooks.map(book => {
+        const bookProg = progress[book.name] || {};
+        const chapterKeys = Object.keys(bookProg);
+        let fullyReadCount = 0;
+        
+        chapterKeys.forEach(ch => {
+          const counts = getVerseCounts(book.name);
+          if (counts && counts[ch - 1] !== undefined && bookProg[ch] >= counts[ch - 1]) {
+            fullyReadCount++;
+          }
+        });
+
+        totalCategoryChapters += book.chapters;
+        readCategoryChapters += fullyReadCount;
+        if (fullyReadCount === book.chapters) {
+          completedBooksCount++;
+        }
+
+        return {
+          ...book,
+          fullyReadCount,
+          isCompleted: fullyReadCount === book.chapters,
+        };
+      });
+
+      const percentage = totalCategoryChapters > 0
+        ? Math.round((readCategoryChapters / totalCategoryChapters) * 100)
+        : 0;
+
+      return {
+        ...cat,
+        booksList: booksWithProgress,
+        totalChapters: totalCategoryChapters,
+        readChapters: readCategoryChapters,
+        completedBooks: completedBooksCount,
+        totalBooks: catBooks.length,
+        percentage
+      };
+    });
+  }, [filter, progress]);
 
   if (loading) {
     return <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>Loading Bible tracker...</div>;
@@ -262,8 +494,8 @@ const BibleTracker = ({ targetMemberId }) => {
 
       {/* Books List */}
       <div>
-        {filteredBooks.map(book => (
-          <BookRow key={book.name} book={book} progress={progress[book.name] || {}} />
+        {filteredCategories.map(category => (
+          <CategoryGroup key={category.id} category={category} progress={progress} />
         ))}
       </div>
     </div>
