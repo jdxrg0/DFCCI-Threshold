@@ -1028,6 +1028,15 @@ a.btn-primary:hover:not(:disabled) {
     font-size: 1.4rem !important;
   }
 
+  .dashboard-hero-welcome-wrapper {
+    gap: 1rem !important;
+  }
+
+  .dashboard-hero-avatar-glow {
+    --hero-avatar-size: 48px !important;
+    padding: 2px !important;
+  }
+
   .dashboard-verse-card {
     padding: 1rem !important;
   }
@@ -1140,6 +1149,37 @@ a.btn-primary:hover:not(:disabled) {
 .dashboard-hero-subtitle {
   font-size: 1rem;
   color: var(--text-muted);
+}
+
+.dashboard-hero-welcome-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.dashboard-hero-avatar-glow {
+  position: relative;
+  border-radius: 50%;
+  padding: 3px;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+  box-shadow: 0 0 15px rgba(var(--primary-rgb, 2, 132, 199), 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+  flex-shrink: 0;
+  cursor: pointer;
+  --hero-avatar-size: 64px;
+}
+
+.dashboard-hero-avatar-glow:hover {
+  transform: scale(1.08) rotate(3deg);
+  box-shadow: 0 0 25px rgba(var(--primary-rgb, 2, 132, 199), 0.55);
+}
+
+.dashboard-hero-welcome-text {
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Verse Card ── */

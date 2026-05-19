@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookHeart, Send, BookOpen, Inbox, Users, Flame, Eye, Calendar, CheckCircle2, Clock, ChevronLeft, ChevronRight, BarChart3, User } from 'lucide-react';
+import { BookHeart, Send, BookOpen, Inbox, Users, Flame, Eye, Calendar, CheckCircle2, Clock, ChevronLeft, ChevronRight, BarChart3, User, Film } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import ThreadSkeleton from '../components/ThreadSkeleton';
 import BibleTracker from '../components/BibleTracker';
+import BibleVideos from '../components/BibleVideos';
 import { renderAvatarHelper } from '../utils/avatarHelper';
 
 // ── Stat Pill ────────────────────────────────────────────────────────────────
@@ -392,6 +393,7 @@ const DevotionalDashboard = () => {
   const tabs = [
     { key: 'my', label: t('devo_my_tab') || 'Devotionals', Icon: Inbox },
     { key: 'bible', label: 'Bible Tracker', Icon: BookOpen },
+    { key: 'videos', label: 'Why Bible?', Icon: Film },
     ...(isLeader ? [{ key: 'leader', label: t('devo_leader_tab') || 'Leader View', Icon: Users }] : []),
   ];
 
@@ -473,6 +475,62 @@ const DevotionalDashboard = () => {
       {activeTab === 'my' && (
         <div style={{ minHeight: '300px', opacity: loading ? 0.5 : 1, transition: 'opacity 0.2s', pointerEvents: loading ? 'none' : 'auto' }}>
           <StatsBar stats={stats} />
+
+          {/* Promo Banner for "Why read Bible" videos */}
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.08))',
+            border: '1px solid var(--border-color)',
+            borderRadius: '12px',
+            padding: '0.85rem 1rem',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '1rem',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.01)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{
+                backgroundColor: 'color-mix(in srgb, var(--primary) 15%, transparent)',
+                color: 'var(--primary)',
+                borderRadius: '50%',
+                width: '38px',
+                height: '38px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+              }}>
+                <Film size={18} />
+              </div>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '0.84rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                  Why read the Bible?
+                </h4>
+                <p style={{ margin: '1px 0 0', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                  Watch short, inspiring videos.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setActiveTab('videos')}
+              style={{
+                padding: '0.4rem 0.9rem',
+                fontSize: '0.72rem',
+                fontWeight: '800',
+                borderRadius: '999px',
+                border: 'none',
+                backgroundColor: 'var(--primary)',
+                color: '#fff',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px color-mix(in srgb, var(--primary) 30%, transparent)',
+                flexShrink: 0,
+              }}
+            >
+              Watch Reels
+            </button>
+          </div>
+
           <MiniCalendar year={calYear} month={calMonth} />
 
           {loading && devotionals.length === 0 ? (
@@ -510,6 +568,11 @@ const DevotionalDashboard = () => {
       {/* ── Bible Tracker ── */}
       {activeTab === 'bible' && (
         <BibleTracker />
+      )}
+
+      {/* ── Why Bible Videos (Reels) ── */}
+      {activeTab === 'videos' && (
+        <BibleVideos />
       )}
 
       {/* ── Leader View ── */}

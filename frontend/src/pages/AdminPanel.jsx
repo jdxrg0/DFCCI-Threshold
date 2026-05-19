@@ -24,7 +24,15 @@ import {
   ShieldAlert,
   UserCheck,
   Search,
-  X
+  X,
+  HardDrive,
+  Database,
+  Image,
+  Cloud,
+  Cpu,
+  Zap,
+  GitBranch,
+  Info
 } from 'lucide-react';
 
 const AdminPanel = () => {
@@ -50,6 +58,11 @@ const AdminPanel = () => {
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [emailPreview, setEmailPreview] = useState(null);
   const [resendingId, setResendingId] = useState(null);
+  
+  // Platform Limits State
+  const [limitsData, setLimitsData] = useState(null);
+  const [limitsLoading, setLimitsLoading] = useState(false);
+  const [limitsError, setLimitsError] = useState('');
 
   const [popup, setPopup] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false, isPrompt: false, promptValue: '' });
 
@@ -72,7 +85,8 @@ const AdminPanel = () => {
     { id: 'restore-requests', label: 'Restore', icon: RotateCcw },
     { id: 'recently-deleted', label: 'History', icon: History },
     { id: 'tickets', label: 'Requests', icon: MessageSquare },
-    { id: 'emails', label: t('admin_emails_tab') || 'Emails', icon: Mail }
+    { id: 'emails', label: t('admin_emails_tab') || 'Emails', icon: Mail },
+    { id: 'limits', label: 'Platform Limits', icon: HardDrive }
   ];
 
   const getBadgeCount = (id) => {
@@ -117,7 +131,22 @@ const AdminPanel = () => {
     if (activeTab === 'recently-deleted') fetchRecentlyDeleted();
     if (activeTab === 'tickets') fetchTickets();
     if (activeTab === 'emails') fetchEmails();
+    if (activeTab === 'limits') fetchPlatformLimits();
   }, [activeTab, emailsSearch, emailsStatus, emailsPage]);
+
+  const fetchPlatformLimits = async () => {
+    try {
+      setLimitsLoading(true);
+      setLimitsError('');
+      const res = await api.get('/users/admin/platform-limits');
+      setLimitsData(res.data);
+    } catch (err) {
+      setLimitsError('Failed to fetch platform limits data');
+      console.error(err);
+    } finally {
+      setLimitsLoading(false);
+    }
+  };
 
   const fetchEmails = async () => {
     try {
@@ -1343,6 +1372,24 @@ const AdminPanel = () => {
                 <option value="sent">🟢 {t('email_status_sent')}</option>
                 <option value="failed">🔴 {t('email_status_failed')}</option>
               </select>
+
+              {/* Total Count Badge */}
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                background: 'var(--primary-glow)',
+                border: '1px solid rgba(59, 130, 246, 0.15)',
+                color: 'var(--primary)',
+                padding: '0.65rem 1rem',
+                borderRadius: '0.75rem',
+                fontSize: '0.88rem',
+                fontWeight: '700',
+                whiteSpace: 'nowrap'
+              }}>
+                <Mail size={14} />
+                <span>Total: {emailsTotalCount}</span>
+              </div>
             </div>
 
             {/* Desktop Table View */}
@@ -1576,6 +1623,533 @@ const AdminPanel = () => {
             )}
           </>
         )}
+
+        {activeTab === 'limits' && (() => {
+          if (limitsLoading) {
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', gap: '1rem' }}>
+                <RefreshCw size={32} className="spin" style={{ color: 'var(--primary)' }} />
+                <span style={{ color: 'var(--text-muted)', fontWeight: '600', fontSize: '1rem' }}>Fetching live platform statistics...</span>
+              </div>
+            );
+          }
+
+          if (limitsError) {
+            return (
+              <div className="card text-center" style={{ padding: '3rem 2rem', color: 'var(--text-main)', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem' }}>
+                <ShieldAlert size={40} style={{ color: '#ef4444', marginBottom: '0.75rem' }} />
+                <h4 style={{ margin: '0 0 0.25rem', fontWeight: '700' }}>Failed to Load Resource Stats</h4>
+                <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{limitsError}</p>
+                <button onClick={fetchPlatformLimits} className="btn btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '0.75rem' }}>
+                  Retry Fetch
+                </button>
+              </div>
+            );
+          }
+
+          if (!limitsData) return null;
+
+          const { database, emails, cloudinary } = limitsData;
+
+          const formatBytes = (bytes) => {
+            if (!bytes || bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+          };
+
+          // Mongo Percent
+          const mongoLimit = database.limitBytes || (512 * 1024 * 1024);
+          const mongoPercent = Math.min(100, Math.max(0.1, (database.dataSize / mongoLimit) * 100));
+
+          // Gmail Percent
+          const emailLimit = emails.limit || 500;
+          const emailPercent = Math.min(100, Math.max(0.1, (emails.sentLast24h / emailLimit) * 100));
+
+          const getProgressColor = (percent) => {
+            if (percent > 85) return 'linear-gradient(90deg, #ef4444 0%, #b91c1c 100%)';
+            if (percent > 60) return 'linear-gradient(90deg, #fbbf24 0%, #d97706 100%)';
+            return 'linear-gradient(90deg, #34d399 0%, #059669 100%)';
+          };
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', animation: 'fadeIn 0.3s ease-out' }}>
+              
+              {/* Summary Metrics Cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+                
+                {/* DB card */}
+                <div style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--surface-border)',
+                  borderRadius: '1rem',
+                  padding: '1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <div style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '0.75rem',
+                    background: 'rgba(52, 211, 153, 0.1)',
+                    color: '#34d399',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <Database size={22} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Database Storage</span>
+                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                      {formatBytes(database.dataSize)}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {mongoPercent.toFixed(2)}% of 512 MB Free Tier
+                    </span>
+                  </div>
+                </div>
+
+                {/* Cloudinary card */}
+                <div style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--surface-border)',
+                  borderRadius: '1rem',
+                  padding: '1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <div style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '0.75rem',
+                    background: 'rgba(59, 130, 246, 0.1)',
+                    color: '#3b82f6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <Cloud size={22} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Cloudinary Credits</span>
+                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                      {cloudinary?.credits ? `${(cloudinary.credits.usage || 0).toFixed(2)} / ${cloudinary.credits.limit || 25}` : 'N/A'}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {cloudinary?.credits ? `${(cloudinary.credits.usedPercent || 0).toFixed(1)}% Credit usage` : 'Free Plan Limits (25 Credits)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Gmail SMTP card */}
+                <div style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--surface-border)',
+                  borderRadius: '1rem',
+                  padding: '1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '1rem',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <div style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '0.75rem',
+                    background: 'rgba(139, 92, 246, 0.1)',
+                    color: '#8b5cf6',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    <Mail size={22} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Daily Emails</span>
+                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                      {emails.sentLast24h} / {emailLimit}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {emailPercent.toFixed(1)}% of 24h limit
+                    </span>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Main Platforms Details Section */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+                
+                {/* MongoDB Atlas Details */}
+                <div className="card" style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--surface-border)',
+                  borderRadius: '1.25rem',
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Database size={18} style={{ color: '#10b981' }} />
+                      <h4 style={{ margin: 0, fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-main)' }}>MongoDB Atlas (Hobby M0)</h4>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.2rem 0.5rem', borderRadius: '9999px', textTransform: 'uppercase' }}>
+                      Database
+                    </span>
+                  </div>
+
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                    MongoDB Atlas provides a <strong>512 MB</strong> storage limit for its shared M0 free cluster.
+                    Exceeding this cap will lock the database, blocking signups, threads, and transactions.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: '700' }}>
+                      <span style={{ color: 'var(--text-main)' }}>Storage Consumption</span>
+                      <span style={{ color: mongoPercent > 80 ? '#ef4444' : 'var(--text-muted)' }}>
+                        {formatBytes(database.dataSize)} / 512 MB
+                      </span>
+                    </div>
+                    {/* Progress Bar */}
+                    <div style={{ width: '100%', height: '8px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${mongoPercent}%`,
+                        height: '100%',
+                        background: getProgressColor(mongoPercent),
+                        borderRadius: '9999px',
+                        transition: 'width 0.4s'
+                      }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                      <span>Logical Size: {formatBytes(database.dataSize)}</span>
+                      <span>Allocated Size: {formatBytes(database.storageSize)}</span>
+                    </div>
+                  </div>
+
+                  <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: 0 }} />
+
+                  {/* Collections Breakdown */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.78rem', fontWeight: '800', color: 'var(--text-main)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                      Collection Sizes Breakdown ({database.collections.length})
+                    </span>
+                    
+                    <div style={{
+                      maxHeight: '220px',
+                      overflowY: 'auto',
+                      borderRadius: '0.5rem',
+                      border: '1px solid var(--border-color)',
+                      background: 'rgba(0,0,0,0.1)'
+                    }}>
+                      <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                        <thead>
+                          <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)' }}>
+                            <th style={{ padding: '0.5rem 0.75rem', fontWeight: '700', color: 'var(--text-muted)' }}>Collection</th>
+                            <th style={{ padding: '0.5rem 0.75rem', fontWeight: '700', color: 'var(--text-muted)', textAlign: 'right' }}>Docs</th>
+                            <th style={{ padding: '0.5rem 0.75rem', fontWeight: '700', color: 'var(--text-muted)', textAlign: 'right' }}>Size</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {database.collections.map(col => (
+                            <tr key={col.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                              <td style={{ padding: '0.5rem 0.75rem', fontWeight: '600', color: 'var(--text-main)' }}>{col.name}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>{col.count}</td>
+                              <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>
+                                {col.size > 0 ? formatBytes(col.size) : '< 1 KB'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cloudinary Details */}
+                <div className="card" style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--surface-border)',
+                  borderRadius: '1.25rem',
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Cloud size={18} style={{ color: '#3b82f6' }} />
+                      <h4 style={{ margin: 0, fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-main)' }}>Cloudinary Media Hosting</h4>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', padding: '0.2rem 0.5rem', borderRadius: '9999px', textTransform: 'uppercase' }}>
+                      Media
+                    </span>
+                  </div>
+
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                    Cloudinary hosts profile pictures and resource cover images. The free tier gives <strong>25 monthly Credits</strong>.
+                    1 Credit = 1 GB storage OR 1 GB bandwidth OR 1,000 image transformations.
+                  </p>
+
+                  {cloudinary ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      
+                      {/* Credits Progress */}
+                      {cloudinary.credits && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: '700' }}>
+                            <span style={{ color: 'var(--text-main)' }}>Total Monthly Credits</span>
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              {(cloudinary.credits.usage || 0).toFixed(2)} / {cloudinary.credits.limit || 25}
+                            </span>
+                          </div>
+                          <div style={{ width: '100%', height: '6px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${cloudinary.credits.usedPercent || 0}%`,
+                              height: '100%',
+                              background: getProgressColor(cloudinary.credits.usedPercent || 0),
+                              borderRadius: '9999px',
+                              transition: 'width 0.4s'
+                            }} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Storage Progress */}
+                      {cloudinary.storage && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: '700' }}>
+                            <span style={{ color: 'var(--text-main)' }}>Media Storage Size</span>
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              {formatBytes(cloudinary.storage.usage)} / {formatBytes(cloudinary.storage.limit)}
+                            </span>
+                          </div>
+                          <div style={{ width: '100%', height: '6px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${cloudinary.storage.usedPercent}%`,
+                              height: '100%',
+                              background: getProgressColor(cloudinary.storage.usedPercent),
+                              borderRadius: '9999px',
+                              transition: 'width 0.4s'
+                            }} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Transformations Progress */}
+                      {cloudinary.transformations && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: '700' }}>
+                            <span style={{ color: 'var(--text-main)' }}>Image Transformations</span>
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              {(cloudinary.transformations.usage || 0).toLocaleString()} / {(cloudinary.transformations.limit || 25000).toLocaleString()}
+                            </span>
+                          </div>
+                          <div style={{ width: '100%', height: '6px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${cloudinary.transformations.usedPercent}%`,
+                              height: '100%',
+                              background: getProgressColor(cloudinary.transformations.usedPercent),
+                              borderRadius: '9999px',
+                              transition: 'width 0.4s'
+                            }} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bandwidth Progress */}
+                      {cloudinary.bandwidth && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: '700' }}>
+                            <span style={{ color: 'var(--text-main)' }}>Media Delivery Bandwidth</span>
+                            <span style={{ color: 'var(--text-muted)' }}>
+                              {formatBytes(cloudinary.bandwidth.usage)} / {formatBytes(cloudinary.bandwidth.limit)}
+                            </span>
+                          </div>
+                          <div style={{ width: '100%', height: '6px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${cloudinary.bandwidth.usedPercent}%`,
+                              height: '100%',
+                              background: getProgressColor(cloudinary.bandwidth.usedPercent),
+                              borderRadius: '9999px',
+                              transition: 'width 0.4s'
+                            }} />
+                          </div>
+                        </div>
+                      )}
+
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'right' }}>
+                        Cloudinary Plan: {cloudinary.plan} (Live stats fetched)
+                      </span>
+                    </div>
+                  ) : (
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      border: '1px dashed var(--border-color)',
+                      padding: '1rem',
+                      borderRadius: '0.75rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.8rem'
+                    }}>
+                      <Info size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                      <span>Live usage statistics currently unavailable. Running on standard Cloudinary Free tier limits (25 Credits/month).</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Gmail & SMTP Limits */}
+                <div className="card" style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--surface-border)',
+                  borderRadius: '1.25rem',
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Mail size={18} style={{ color: '#8b5cf6' }} />
+                      <h4 style={{ margin: 0, fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-main)' }}>Gmail Outgoing SMTP</h4>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', padding: '0.2rem 0.5rem', borderRadius: '9999px', textTransform: 'uppercase' }}>
+                      Emails
+                    </span>
+                  </div>
+
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                    Automated youth notices, verification OTPs, and dues reminders are sent using SMTP. Gmail free SMTP has a strict daily cap of <strong>500 emails</strong>.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: '700' }}>
+                      <span style={{ color: 'var(--text-main)' }}>Emails Sent (Last 24 Hours)</span>
+                      <span style={{ color: emailPercent > 80 ? '#ef4444' : 'var(--text-muted)' }}>
+                        {emails.sentLast24h} / 500
+                      </span>
+                    </div>
+                    <div style={{ width: '100%', height: '8px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${emailPercent}%`,
+                        height: '100%',
+                        background: getProgressColor(emailPercent),
+                        borderRadius: '9999px',
+                        transition: 'width 0.4s'
+                      }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
+                      <span>Remaining Capacity: {Math.max(0, 500 - emails.sentLast24h)} emails</span>
+                      <span>Refreshes dynamically in a rolling window</span>
+                    </div>
+                  </div>
+
+                  <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: 0 }} />
+
+                  <div style={{
+                    background: 'rgba(139, 92, 246, 0.05)',
+                    border: '1px solid rgba(139, 92, 246, 0.15)',
+                    padding: '0.75rem',
+                    borderRadius: '0.75rem',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '0.5rem',
+                    fontSize: '0.78rem',
+                    color: 'var(--text-main)'
+                  }}>
+                    <Info size={14} style={{ color: '#8b5cf6', flexShrink: 0, marginTop: '0.1rem' }} />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                      <span style={{ fontWeight: '700' }}>Admin Recommendation:</span>
+                      <span style={{ color: 'var(--text-muted)', lineHeight: '1.3' }}>
+                        Ensure members only request name updates or email changes when necessary. Bulk email notifications should be scheduled responsibly to avoid hitting SMTP limits.
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vercel & Render & GitHub Info Cards */}
+                <div className="card" style={{
+                  background: 'var(--surface)',
+                  border: '1px solid var(--surface-border)',
+                  borderRadius: '1.25rem',
+                  padding: '1.5rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.25rem',
+                  boxShadow: 'var(--shadow-sm)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <Cpu size={18} style={{ color: '#fbbf24' }} />
+                      <h4 style={{ margin: 0, fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-main)' }}>Compute & Deployment Limits</h4>
+                    </div>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', padding: '0.2rem 0.5rem', borderRadius: '9999px', textTransform: 'uppercase' }}>
+                      Infrastructure
+                    </span>
+                  </div>
+
+                  {/* Vercel */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span style={{ fontWeight: '800', fontSize: '0.85rem', color: 'var(--text-main)' }}>▲ Vercel (Frontend Hobby Plan)</span>
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                      <li><strong>Bandwidth:</strong> 100 GB / month limit.</li>
+                      <li><strong>Serverless Execution:</strong> Capped at 100 GB-Hours / month.</li>
+                      <li><strong>Function Timeout:</strong> Max 10 seconds execution limit.</li>
+                    </ul>
+                  </div>
+
+                  {/* Render */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: '800', fontSize: '0.85rem', color: 'var(--text-main)' }}>⬡ Render (Backend Web Service)</span>
+                      <span style={{ fontSize: '0.65rem', fontWeight: '800', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
+                        Ping Active
+                      </span>
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                      <li><strong>Compute Limit:</strong> 750 free instance hours / month.</li>
+                      <li><strong>Sleep Behavior:</strong> Spins down after 15 minutes of inactivity.</li>
+                      <li><strong>Anti-Sleep:</strong> A self-ping runs every 14 minutes in production to prevent sleeping.</li>
+                    </ul>
+                  </div>
+
+                  {/* GitHub */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <GitBranch size={14} style={{ color: 'var(--text-main)' }} />
+                      <span style={{ fontWeight: '800', fontSize: '0.85rem', color: 'var(--text-main)' }}>GitHub (Actions & LFS)</span>
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                      <li><strong>Actions CI/CD:</strong> 2,000 build minutes / month limit.</li>
+                      <li><strong>Git LFS Storage:</strong> 1 GB limit for large files.</li>
+                      <li><strong>Git LFS Bandwidth:</strong> 1 GB monthly transfer capacity.</li>
+                    </ul>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+          );
+        })()}
           </div>
         </div>
       </div>

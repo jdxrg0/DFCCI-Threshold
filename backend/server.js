@@ -19,6 +19,7 @@ const resourceRoutes = require('./routes/resources');
 const gameRoutes = require('./routes/games');
 const devotionalRoutes = require('./routes/devotionals');
 const emailRoutes = require('./routes/emails');
+const bibleVideoRoutes = require('./routes/bibleVideos');
 const { initReminderScheduler } = require('./utils/reminderScheduler');
 
 
@@ -71,6 +72,7 @@ app.use('/api/resources', resourceRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/devotionals', devotionalRoutes);
 app.use('/api/emails', emailRoutes);
+app.use('/api/bible-videos', bibleVideoRoutes);
 
 
 // Ping route for uptime monitoring

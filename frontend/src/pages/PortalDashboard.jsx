@@ -4,6 +4,8 @@ import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library, Gamepad
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../api';
+import { renderAvatarHelper } from '../utils/avatarHelper';
+
 
 const dailyVerses = [
   { text: "Trust in the Lord with all your heart and lean not on your own understanding.", ref: "Proverbs 3:5" },
@@ -51,6 +53,16 @@ const PortalDashboard = () => {
   const { t } = useLanguage();
   const [stats, setStats] = useState(null);
   const verse = getDailyVerse();
+
+  const getFirstName = () => {
+    const name = user?.displayName || user?.email || '';
+    if (!name) return 'User';
+    if (name.includes('@')) {
+      return name.split('@')[0];
+    }
+    return name.trim().split(/\s+/)[0];
+  };
+
 
   useEffect(() => {
     api.get('/users/me/dashboard-stats')
@@ -148,12 +160,23 @@ const PortalDashboard = () => {
       {/* ── Hero Row: Welcome + Verse ── */}
       <div className="dashboard-hero-row animate-stagger" style={{ animationDelay: '0s' }}>
         <div className="dashboard-hero-card">
-          <h1 className="dashboard-hero-title">
-            {t('welcome_back_name')} <span className="text-gradient">{user?.displayName || user?.email || 'User'}</span>
-          </h1>
-          <p className="dashboard-hero-subtitle">
-            {t('select_module')}
-          </p>
+          <div className="dashboard-hero-welcome-wrapper">
+            <Link to="/settings" className="dashboard-hero-avatar-glow" title={t('profile_settings')}>
+              {renderAvatarHelper(user, 64, {
+                width: 'var(--hero-avatar-size, 64px)',
+                height: 'var(--hero-avatar-size, 64px)',
+                fontSize: 'calc(var(--hero-avatar-size, 64px) * 0.45)'
+              })}
+            </Link>
+            <div className="dashboard-hero-welcome-text">
+              <h1 className="dashboard-hero-title">
+                {t('welcome_back_name')} <span className="text-gradient">{getFirstName()}</span>
+              </h1>
+              <p className="dashboard-hero-subtitle">
+                {t('select_module')}
+              </p>
+            </div>
+          </div>
         </div>
         <div className="dashboard-verse-card">
           <p className="verse-text">"{verse.text}"</p>
