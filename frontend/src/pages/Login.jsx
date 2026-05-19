@@ -82,136 +82,143 @@ const Login = () => {
   };
 
   return (
-    <div className="container" style={{ maxWidth: '420px', marginTop: '2rem' }}>
-      <div style={{ textAlign: 'center', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <img src={logo} alt="DFCCI Logo" style={{ height: '60px', marginBottom: '0.5rem' }} />
-        <h1 className="text-gradient text-hero" style={{ fontSize: '2.5rem', margin: 0 }}>
-          DFCCI Threshold
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem', marginBottom: 0 }}>
-          Truth, held gently.
-        </p>
-      </div>
-      <div className="fun-card">
-        <h2 className="fun-title">
-          {requireNameConfirmation ? t('google_name_confirm_title') : t('welcome_back')}
-        </h2>
+    <div className="auth-page">
+      <div className="auth-card">
+        {/* Brand */}
+        <div className="auth-logo-section">
+          <div className="auth-logo-ring">
+            <img src={logo} alt="DFCCI Logo" />
+          </div>
+          <div className="auth-brand-stack">
+            <span className="auth-brand-label">DFCCI</span>
+            <h1 className="auth-brand-hero">Threshold</h1>
+          </div>
+          <div className="auth-brand-divider" />
+          <p className="auth-tagline">Truth, held gently.</p>
+        </div>
 
-        {error && <div className="ff-alert ff-alert-error">{error}</div>}
+        {/* Glass Card */}
+        <div className="auth-glass-card">
+          <h2 className="fun-title">
+            {requireNameConfirmation ? t('google_name_confirm_title') : t('welcome_back')}
+          </h2>
 
-        {requireNameConfirmation ? (
-          <form onSubmit={handleGoogleConfirmSubmit}>
-            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-              {t('google_name_confirm_desc')}
-            </p>
+          {error && <div className="ff-alert ff-alert-error">{error}</div>}
 
-            <div className="ff-field">
-              <input
-                id="confirm-name"
-                type="text"
-                className="ff-input"
-                placeholder={t('display_name')}
-                value={confirmedName}
-                onChange={(e) => setConfirmedName(e.target.value)}
-                required
-                autoComplete="name"
-              />
-              <label htmlFor="confirm-name">{t('display_name')}</label>
-            </div>
+          {requireNameConfirmation ? (
+            <form onSubmit={handleGoogleConfirmSubmit}>
+              <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                {t('google_name_confirm_desc')}
+              </p>
 
-            <button
-              type="submit"
-              className="ff-btn ff-btn-primary"
-              disabled={loading}
-              id="confirm-name-submit"
-            >
-              {loading ? (
-                <><span className="ff-btn-spinner" /> {t('creating_account')}</>
-              ) : (
-                <><LogIn size={18} /> {t('confirm_name_btn')}</>
-              )}
-            </button>
-          </form>
-        ) : (
-          <>
-            <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-              <GoogleLogin
-                key={lang}
-                onSuccess={handleGoogleSuccess}
-                onError={() => setError('Google login failed')}
-                locale={lang === 'fil' ? 'tl' : 'en_US'}
-              />
-            </div>
-
-            {!showEmailLogin ? (
-              <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-                <button 
-                  type="button"
-                  onClick={() => setShowEmailLogin(true)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.875rem', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  {t('continue_with_email')}
-                </button>
+              <div className="ff-field">
+                <input
+                  id="confirm-name"
+                  type="text"
+                  className="ff-input"
+                  placeholder={t('display_name')}
+                  value={confirmedName}
+                  onChange={(e) => setConfirmedName(e.target.value)}
+                  required
+                  autoComplete="name"
+                />
+                <label htmlFor="confirm-name">{t('display_name')}</label>
               </div>
-            ) : (
-              <>
-                <div className="ff-divider" style={{ marginBottom: '1.5rem' }}>or</div>
 
-                <form onSubmit={handleSubmit}>
-                  <div className="ff-field">
-                    <input
-                      id="login-email"
-                      type="email"
-                      className="ff-input"
-                      placeholder={t('email')}
-                      value={email}
-                      onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      required
-                      autoComplete="email"
-                    />
-                    <label htmlFor="login-email">{t('email')}</label>
-                  </div>
+              <button
+                type="submit"
+                className="ff-btn ff-btn-primary"
+                disabled={loading}
+                id="confirm-name-submit"
+              >
+                {loading ? (
+                  <><span className="ff-btn-spinner" /> {t('creating_account')}</>
+                ) : (
+                  <><LogIn size={18} /> {t('confirm_name_btn')}</>
+                )}
+              </button>
+            </form>
+          ) : (
+            <>
+              <div className="auth-google-wrapper">
+                <GoogleLogin
+                  key={lang}
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError('Google login failed')}
+                  locale={lang === 'fil' ? 'tl' : 'en_US'}
+                />
+              </div>
 
-                  <div className="ff-field">
-                    <input
-                      id="login-password"
-                      type="password"
-                      className="ff-input"
-                      placeholder={t('password')}
-                      value={password}
-                      onChange={(e) => setForm({ ...form, password: e.target.value })}
-                      required
-                      autoComplete="current-password"
-                    />
-                    <label htmlFor="login-password">{t('password')}</label>
-                  </div>
-
+              {!showEmailLogin ? (
+                <div style={{ textAlign: 'center', marginTop: '0.75rem' }}>
                   <button
-                    type="submit"
-                    className="ff-btn ff-btn-primary"
-                    disabled={loading}
-                    id="login-submit"
+                    type="button"
+                    onClick={() => setShowEmailLogin(true)}
+                    className="auth-email-toggle"
                   >
-                    {loading ? (
-                      <><span className="ff-btn-spinner" /> {t('logging_in')}</>
-                    ) : (
-                      <><LogIn size={18} /> {t('login_btn')}</>
-                    )}
+                    {t('continue_with_email')}
                   </button>
-                </form>
+                </div>
+              ) : (
+                <>
+                  <div className="ff-divider" style={{ marginBottom: '1.5rem' }}>or</div>
 
-                <p className="text-center" style={{ fontSize: '0.875rem', marginTop: '0.75rem' }}>
-                  <Link to="/forgot-password" style={{ color: 'var(--text-muted)' }}>{t('forgot_password')}</Link>
-                </p>
-              </>
-            )}
+                  <form onSubmit={handleSubmit}>
+                    <div className="ff-field">
+                      <input
+                        id="login-email"
+                        type="email"
+                        className="ff-input"
+                        placeholder={t('email')}
+                        value={email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                        required
+                        autoComplete="email"
+                      />
+                      <label htmlFor="login-email">{t('email')}</label>
+                    </div>
 
-            <p className="text-center" style={{ fontSize: '0.875rem', marginTop: '1.5rem' }}>
-              {t('no_account')}{' '}
-              <Link to="/signup" style={{ fontWeight: 600 }}>{t('sign_up')}</Link>
-            </p>
-          </>
-        )}
+                    <div className="ff-field">
+                      <input
+                        id="login-password"
+                        type="password"
+                        className="ff-input"
+                        placeholder={t('password')}
+                        value={password}
+                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                        required
+                        autoComplete="current-password"
+                      />
+                      <label htmlFor="login-password">{t('password')}</label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="ff-btn ff-btn-primary"
+                      disabled={loading}
+                      id="login-submit"
+                    >
+                      {loading ? (
+                        <><span className="ff-btn-spinner" /> {t('logging_in')}</>
+                      ) : (
+                        <><LogIn size={18} /> {t('login_btn')}</>
+                      )}
+                    </button>
+                  </form>
+
+                  <p className="text-center" style={{ fontSize: '0.85rem', marginTop: '0.75rem' }}>
+                    <Link to="/forgot-password">{t('forgot_password')}</Link>
+                  </p>
+                </>
+              )}
+
+              <div className="auth-footer-row">
+                {t('no_account')}{' '}
+                <Link to="/signup">{t('sign_up')}</Link>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -139,10 +139,8 @@ const PortalDashboard = () => {
   ];
 
   const statPills = [
-    { icon: MessageCircle, value: stats?.activeMirrors ?? '—', label: 'Mirrors' },
-    { icon: Sun, value: stats?.receivedLights ?? '—', label: 'Lights' },
     { icon: Wallet, value: stats ? `₱${stats.fundBalance.toLocaleString()}` : '—', label: 'Fund' },
-    { icon: Flame, value: stats?.devotionStreak ?? '—', label: 'Streak' },
+    { icon: Flame, value: stats?.devotionStreak ?? '—', label: 'Devotion Streak' },
   ];
 
   return (

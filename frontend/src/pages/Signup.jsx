@@ -145,201 +145,208 @@ const Signup = () => {
   };
 
   return (
-    <div className="container" style={{ maxWidth: '420px', marginTop: '2rem' }}>
-      <div style={{ textAlign: 'center', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <img src={logo} alt="DFCCI Logo" style={{ height: '60px', marginBottom: '0.5rem' }} />
-        <h1 className="text-gradient text-hero" style={{ fontSize: '2.5rem', margin: 0 }}>
-          DFCCI Threshold
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.25rem', marginBottom: 0 }}>
-          Truth, held gently.
-        </p>
-      </div>
-      <div className="fun-card">
-        {/* Step dots */}
-        <div className="ff-steps">
-          <div className={`ff-step-dot ${step === 1 ? 'active' : ''}`} />
-          <div className={`ff-step-dot ${step === 2 ? 'active' : ''}`} />
+    <div className="auth-page">
+      <div className="auth-card">
+        {/* Brand */}
+        <div className="auth-logo-section">
+          <div className="auth-logo-ring">
+            <img src={logo} alt="DFCCI Logo" />
+          </div>
+          <div className="auth-brand-stack">
+            <span className="auth-brand-label">DFCCI</span>
+            <h1 className="auth-brand-hero">Threshold</h1>
+          </div>
+          <div className="auth-brand-divider" />
+          <p className="auth-tagline">Truth, held gently.</p>
         </div>
 
-        <h2 className="fun-title">
-          {step === 1 && t('join_community')}
-          {step === 2 && t('check_email')}
-          {step === 3 && t('google_name_confirm_title')}
-        </h2>
-
-        {error && <div className="ff-alert ff-alert-error">{error}</div>}
-        {msg   && <div className="ff-alert ff-alert-success">{msg}</div>}
-
-        {step === 1 ? (
-          <div>
-            <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'center' }}>
-              <GoogleLogin
-                key={lang}
-                text="signup_with"
-                onSuccess={handleGoogleSuccess}
-                onError={() => setError('Google signup failed')}
-                locale={lang === 'fil' ? 'tl' : 'en_US'}
-              />
-            </div>
-
-            {!showEmailSignup ? (
-              <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-                <button 
-                  type="button"
-                  onClick={() => setShowEmailSignup(true)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.875rem', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  {t('continue_with_email')}
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="ff-divider" style={{ marginBottom: '1.5rem' }}>or</div>
-
-                <form onSubmit={handleSignupSubmit}>
-                  <div className="ff-field">
-                    <input
-                      id="signup-name"
-                      type="text"
-                      className="ff-input"
-                      placeholder={t('display_name')}
-                      value={formData.displayName}
-                      onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                      required
-                      autoComplete="name"
-                    />
-                    <label htmlFor="signup-name">{t('display_name')}</label>
-                  </div>
-
-                  <div className="ff-field">
-                    <input
-                      id="signup-email"
-                      type="email"
-                      className="ff-input"
-                      placeholder={t('email')}
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      required
-                      autoComplete="email"
-                    />
-                    <label htmlFor="signup-email">{t('email')}</label>
-                  </div>
-
-                  <div className="ff-field">
-                    <input
-                      id="signup-password"
-                      type="password"
-                      className="ff-input"
-                      placeholder={t('password')}
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      required
-                      autoComplete="new-password"
-                    />
-                    <label htmlFor="signup-password">{t('password')}</label>
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="ff-btn ff-btn-primary"
-                    disabled={loading}
-                    id="signup-submit"
-                  >
-                    {loading ? (
-                      <><span className="ff-btn-spinner" /> {t('creating_account')}</>
-                    ) : (
-                      <><UserPlus size={18} /> {t('create_account')}</>
-                    )}
-                  </button>
-                </form>
-              </>
-            )}
-
-            <div className="ff-divider" style={{ marginTop: '2.5rem' }}>{t('already_member')}</div>
-            <p className="text-center" style={{ fontSize: '0.875rem', marginTop: '0.75rem' }}>
-              <Link to="/login" style={{ fontWeight: 600 }}>{t('login_here')}</Link>
-            </p>
+        {/* Glass Card */}
+        <div className="auth-glass-card">
+          {/* Step dots */}
+          <div className="ff-steps">
+            <div className={`ff-step-dot ${step === 1 ? 'active' : ''}`} />
+            <div className={`ff-step-dot ${step === 2 ? 'active' : ''}`} />
           </div>
-        ) : step === 2 ? (
-          <form onSubmit={handleOtpSubmit}>
-            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-              {t('otp_sent')} <strong>{formData.email}</strong>
-            </p>
 
-            <div className="ff-field">
-              <input
-                id="signup-otp"
-                type="text"
-                className="ff-input ff-otp"
-                placeholder="000000"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                required
-                maxLength={6}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-              />
-              <label htmlFor="signup-otp">{t('verification_code')}</label>
-            </div>
+          <h2 className="fun-title">
+            {step === 1 && t('join_community')}
+            {step === 2 && t('check_email')}
+            {step === 3 && t('google_name_confirm_title')}
+          </h2>
 
-            <button
-              type="submit"
-              className="ff-btn ff-btn-primary"
-              disabled={loading}
-              id="otp-submit"
-              style={{ marginBottom: '0.75rem' }}
-            >
-              {loading ? (
-                <><span className="ff-btn-spinner" /> {t('verifying')}</>
+          {error && <div className="ff-alert ff-alert-error">{error}</div>}
+          {msg   && <div className="ff-alert ff-alert-success">{msg}</div>}
+
+          {step === 1 ? (
+            <div>
+              <div className="auth-google-wrapper">
+                <GoogleLogin
+                  key={lang}
+                  text="signup_with"
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => setError('Google signup failed')}
+                  locale={lang === 'fil' ? 'tl' : 'en_US'}
+                />
+              </div>
+
+              {!showEmailSignup ? (
+                <div style={{ textAlign: 'center', marginTop: '0.75rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailSignup(true)}
+                    className="auth-email-toggle"
+                  >
+                    {t('continue_with_email')}
+                  </button>
+                </div>
               ) : (
-                <><CheckCircle size={18} /> {t('verify_email')}</>
+                <>
+                  <div className="ff-divider" style={{ marginBottom: '1.5rem' }}>or</div>
+
+                  <form onSubmit={handleSignupSubmit}>
+                    <div className="ff-field">
+                      <input
+                        id="signup-name"
+                        type="text"
+                        className="ff-input"
+                        placeholder={t('display_name')}
+                        value={formData.displayName}
+                        onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                        required
+                        autoComplete="name"
+                      />
+                      <label htmlFor="signup-name">{t('display_name')}</label>
+                    </div>
+
+                    <div className="ff-field">
+                      <input
+                        id="signup-email"
+                        type="email"
+                        className="ff-input"
+                        placeholder={t('email')}
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        required
+                        autoComplete="email"
+                      />
+                      <label htmlFor="signup-email">{t('email')}</label>
+                    </div>
+
+                    <div className="ff-field">
+                      <input
+                        id="signup-password"
+                        type="password"
+                        className="ff-input"
+                        placeholder={t('password')}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        required
+                        autoComplete="new-password"
+                      />
+                      <label htmlFor="signup-password">{t('password')}</label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="ff-btn ff-btn-primary"
+                      disabled={loading}
+                      id="signup-submit"
+                    >
+                      {loading ? (
+                        <><span className="ff-btn-spinner" /> {t('creating_account')}</>
+                      ) : (
+                        <><UserPlus size={18} /> {t('create_account')}</>
+                      )}
+                    </button>
+                  </form>
+                </>
               )}
-            </button>
 
-            <button
-              type="button"
-              onClick={handleResendOtp}
-              className="ff-btn ff-btn-secondary"
-              id="otp-resend"
-            >
-              <RefreshCw size={16} /> {t('resend_code')}
-            </button>
-          </form>
-        ) : step === 3 ? (
-          <form onSubmit={handleGoogleConfirmSubmit}>
-            <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-              {t('google_name_confirm_desc')}
-            </p>
-
-            <div className="ff-field">
-              <input
-                id="confirm-name"
-                type="text"
-                className="ff-input"
-                placeholder={t('display_name')}
-                value={confirmedName}
-                onChange={(e) => setConfirmedName(e.target.value)}
-                required
-                autoComplete="name"
-              />
-              <label htmlFor="confirm-name">{t('display_name')}</label>
+              <div className="auth-footer-row">
+                {t('already_member')}{' '}
+                <Link to="/login">{t('login_here')}</Link>
+              </div>
             </div>
+          ) : step === 2 ? (
+            <form onSubmit={handleOtpSubmit}>
+              <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                {t('otp_sent')} <strong>{formData.email}</strong>
+              </p>
 
-            <button
-              type="submit"
-              className="ff-btn ff-btn-primary"
-              disabled={loading}
-              id="confirm-name-submit"
-            >
-              {loading ? (
-                <><span className="ff-btn-spinner" /> {t('creating_account')}</>
-              ) : (
-                <><UserPlus size={18} /> {t('confirm_name_btn')}</>
-              )}
-            </button>
-          </form>
-        ) : null}
+              <div className="ff-field">
+                <input
+                  id="signup-otp"
+                  type="text"
+                  className="ff-input ff-otp"
+                  placeholder="000000"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  required
+                  maxLength={6}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                />
+                <label htmlFor="signup-otp">{t('verification_code')}</label>
+              </div>
+
+              <button
+                type="submit"
+                className="ff-btn ff-btn-primary"
+                disabled={loading}
+                id="otp-submit"
+                style={{ marginBottom: '0.75rem' }}
+              >
+                {loading ? (
+                  <><span className="ff-btn-spinner" /> {t('verifying')}</>
+                ) : (
+                  <><CheckCircle size={18} /> {t('verify_email')}</>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                className="ff-btn ff-btn-secondary"
+                id="otp-resend"
+              >
+                <RefreshCw size={16} /> {t('resend_code')}
+              </button>
+            </form>
+          ) : step === 3 ? (
+            <form onSubmit={handleGoogleConfirmSubmit}>
+              <p style={{ marginBottom: '1rem', fontSize: '0.875rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                {t('google_name_confirm_desc')}
+              </p>
+
+              <div className="ff-field">
+                <input
+                  id="confirm-name"
+                  type="text"
+                  className="ff-input"
+                  placeholder={t('display_name')}
+                  value={confirmedName}
+                  onChange={(e) => setConfirmedName(e.target.value)}
+                  required
+                  autoComplete="name"
+                />
+                <label htmlFor="confirm-name">{t('display_name')}</label>
+              </div>
+
+              <button
+                type="submit"
+                className="ff-btn ff-btn-primary"
+                disabled={loading}
+                id="confirm-name-submit"
+              >
+                {loading ? (
+                  <><span className="ff-btn-spinner" /> {t('creating_account')}</>
+                ) : (
+                  <><UserPlus size={18} /> {t('confirm_name_btn')}</>
+                )}
+              </button>
+            </form>
+          ) : null}
+        </div>
       </div>
     </div>
   );
