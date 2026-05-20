@@ -12,6 +12,13 @@ const { requireAuth, requireRole, requireVerified } = require('../middleware/aut
 const { cloudinary } = require('../utils/cloudinary');
 const sendEmail = require('../utils/sendEmail');
 
+const getUTC8Today = () => {
+  const now = new Date();
+  const utc8Time = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  utc8Time.setUTCHours(0, 0, 0, 0);
+  return utc8Time;
+};
+
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
 const profileStorage = new CloudinaryStorage({
@@ -503,23 +510,23 @@ router.get('/me/dashboard-stats', requireAuth, requireVerified, async (req, res)
       const dateSet = new Set(
         devotionals.map((d) => {
           const dt = new Date(d.date);
-          return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+          return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
         })
       );
 
-      const today = new Date();
+      const today = getUTC8Today();
       // Start from today or yesterday (if no entry today yet, the streak still counts)
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const todayStr = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`;
       let cursor = new Date(today);
       if (!dateSet.has(todayStr)) {
-        cursor.setDate(cursor.getDate() - 1);
+        cursor.setUTCDate(cursor.getUTCDate() - 1);
       }
 
       for (let i = 0; i < 400; i++) {
-        const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+        const key = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}-${String(cursor.getUTCDate()).padStart(2, '0')}`;
         if (dateSet.has(key)) {
           devotionStreak++;
-          cursor.setDate(cursor.getDate() - 1);
+          cursor.setUTCDate(cursor.getUTCDate() - 1);
         } else {
           break;
         }

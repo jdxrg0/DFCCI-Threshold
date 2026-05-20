@@ -25,12 +25,15 @@ const calculateArrears = async (user) => {
     const payments = await DuesPayment.find({ member: member._id });
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
 
-    const now = new Date();
+    const nowSystem = new Date();
+    const now = new Date(nowSystem.getTime() + 8 * 60 * 60 * 1000);
+    now.setUTCHours(0, 0, 0, 0);
     let sundaysCount = 0;
-    let d = new Date(START_DATE);
+    let d = new Date(START_DATE.getTime() + 8 * 60 * 60 * 1000);
+    d.setUTCHours(0, 0, 0, 0);
     while (d <= now) {
-      if (d.getDay() === 0) sundaysCount++;
-      d.setDate(d.getDate() + 1);
+      if (d.getUTCDay() === 0) sundaysCount++;
+      d.setUTCDate(d.getUTCDate() + 1);
     }
 
     const expected = sundaysCount * 10;
@@ -95,7 +98,8 @@ const sendDuesReminders = async (timing) => {
 
     if (users.length === 0) return;
 
-    const now = new Date();
+    const nowSystem = new Date();
+    const now = new Date(nowSystem.getTime() + 8 * 60 * 60 * 1000);
     const weekNum = Math.floor((now - START_DATE) / (7 * 24 * 60 * 60 * 1000));
     
     const templates = (timing === 'Saturday Night' || timing === 'Manual') ? SATURDAY_TEMPLATES : SUNDAY_TEMPLATES;
@@ -169,8 +173,9 @@ const sendDevotionalStreakReminders = async (hoursLeft, targetMemberId = null) =
         usersAtRisk = [user];
       }
     } else {
-      // Normalize today and yesterday to midnight UTC
-      const today = new Date();
+      // Normalize today and yesterday to midnight UTC+8 representation
+      const now = new Date();
+      const today = new Date(now.getTime() + 8 * 60 * 60 * 1000);
       today.setUTCHours(0, 0, 0, 0);
 
       const yesterday = new Date(today);
@@ -247,7 +252,7 @@ const sendDevotionalStreakReminders = async (hoursLeft, targetMemberId = null) =
                             Only ${timeWord} left!
                           </p>
                           <p style="color:#94a3b8;font-size:14px;margin-top:5px;margin:0;font-family:sans-serif;">
-                            Before the next day starts (at 00:00 UTC)
+                            Before the next day starts (at 12:00 AM UTC+8)
                           </p>
                         </td>
                       </tr>
@@ -300,37 +305,36 @@ const initReminderScheduler = () => {
 
   setInterval(async () => {
     const now = new Date();
-    const day = now.getDay();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const dateStr = now.toDateString();
+    
+    // Shift current time to UTC+8
+    const utc8Time = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    const day = utc8Time.getUTCDay();
+    const hours = utc8Time.getUTCHours();
+    const minutes = utc8Time.getUTCMinutes();
+    const dateStr = utc8Time.toISOString().slice(0, 10);
 
-    const utcHours = now.getUTCHours();
-    const utcMinutes = now.getUTCMinutes();
-    const utcDateStr = now.toUTCString().slice(0, 16);
-
-    // Saturday 9 PM
+    // Saturday 9 PM (21:00 UTC+8)
     if (day === 6 && hours === 21 && minutes === 0 && lastSentDateStr !== `${dateStr}-Sat`) {
       lastSentDateStr = `${dateStr}-Sat`;
       await sendDuesReminders('Saturday Night');
     }
 
-    // Sunday 6 AM
+    // Sunday 6 AM (06:00 UTC+8)
     if (day === 0 && hours === 6 && minutes === 0 && lastSentDateStr !== `${dateStr}-Sun`) {
       lastSentDateStr = `${dateStr}-Sun`;
       await sendDuesReminders('Sunday Morning');
     }
 
-    // Devotional Streak Reminders (UTC-based)
-    // 3 hours before next day (21:00 UTC)
-    if (utcHours === 21 && utcMinutes === 0 && lastSentDevotionalDateStr !== `${utcDateStr}-3h`) {
-      lastSentDevotionalDateStr = `${utcDateStr}-3h`;
+    // Devotional Streak Reminders (UTC+8 based)
+    // 3 hours before next day (21:00 UTC+8)
+    if (hours === 21 && minutes === 0 && lastSentDevotionalDateStr !== `${dateStr}-3h`) {
+      lastSentDevotionalDateStr = `${dateStr}-3h`;
       await sendDevotionalStreakReminders(3);
     }
 
-    // 1 hour before next day (23:00 UTC)
-    if (utcHours === 23 && utcMinutes === 0 && lastSentDevotionalDateStr !== `${utcDateStr}-1h`) {
-      lastSentDevotionalDateStr = `${utcDateStr}-1h`;
+    // 1 hour before next day (23:00 UTC+8)
+    if (hours === 23 && minutes === 0 && lastSentDevotionalDateStr !== `${dateStr}-1h`) {
+      lastSentDevotionalDateStr = `${dateStr}-1h`;
       await sendDevotionalStreakReminders(1);
     }
   }, 60000);

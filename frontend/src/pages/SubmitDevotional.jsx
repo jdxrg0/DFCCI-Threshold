@@ -144,9 +144,15 @@ const BIBLE_BOOKS = [
   "Matthew", "Mark", "Luke", "John", "Acts", "Romans", "1 Corinthians", "2 Corinthians", "Galatians", "Ephesians", "Philippians", "Colossians", "1 Thessalonians", "2 Thessalonians", "1 Timothy", "2 Timothy", "Titus", "Philemon", "Hebrews", "James", "1 Peter", "2 Peter", "1 John", "2 John", "3 John", "Jude", "Revelation"
 ];
 
+const getUTC8TodayString = () => {
+  const now = new Date();
+  const utc8Time = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return utc8Time.toISOString().slice(0, 10);
+};
+
 const SubmitDevotional = () => {
   const [form, setForm, clearSavedForm] = useFormPersist('devo_draft', {
-    date: new Date().toISOString().slice(0, 10),
+    date: getUTC8TodayString(),
     book: '',
     passageStr: '',
     summary: '',
@@ -164,18 +170,19 @@ const SubmitDevotional = () => {
 
   // Build the 3 allowed dates: 2 days ago, yesterday, today
   const datePills = useMemo(() => {
-    const today = new Date();
+    const now = new Date();
+    const utc8Time = new Date(now.getTime() + 8 * 60 * 60 * 1000);
     return [-2, -1, 0].map(offset => {
-      const d = new Date(today);
-      d.setDate(d.getDate() + offset);
+      const d = new Date(utc8Time);
+      d.setUTCDate(d.getUTCDate() + offset);
       const iso = d.toISOString().slice(0, 10);
       const label = offset === -2 ? '2 Days Ago' : offset === -1 ? 'Yesterday' : 'Today';
       return {
         iso,
         label,
-        dayName: DAY_NAMES_SHORT[d.getDay()],
-        dayNum: d.getDate(),
-        month: MONTH_NAMES_SHORT[d.getMonth()],
+        dayName: DAY_NAMES_SHORT[d.getUTCDay()],
+        dayNum: d.getUTCDate(),
+        month: MONTH_NAMES_SHORT[d.getUTCMonth()],
       };
     });
   }, []);

@@ -15,6 +15,13 @@ const toDateOnly = (d) => {
   return dt;
 };
 
+const getUTC8Today = () => {
+  const now = new Date();
+  const utc8Time = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  utc8Time.setUTCHours(0, 0, 0, 0);
+  return utc8Time;
+};
+
 // ─── GET own devotionals (paginated, filterable) ────────────────────────────
 router.get('/', requireAuth, requireVerified, async (req, res) => {
   try {
@@ -69,8 +76,7 @@ router.get('/stats', requireAuth, requireVerified, async (req, res) => {
     const sortedDates = [...dateSet].sort().reverse(); // most recent first
 
     // Current streak: count consecutive days from today backwards
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    const today = getUTC8Today();
     let currentStreak = 0;
     let checkDate = new Date(today);
 
@@ -102,9 +108,9 @@ router.get('/stats', requireAuth, requireVerified, async (req, res) => {
     longestStreak = Math.max(longestStreak, tempStreak);
 
     // This month count
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const todayStr = getUTC8Today();
+    const monthStart = new Date(Date.UTC(todayStr.getUTCFullYear(), todayStr.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(todayStr.getUTCFullYear(), todayStr.getUTCMonth() + 1, 1));
     const thisMonth = await Devotional.countDocuments({
       member: req.user._id,
       date: { $gte: monthStart, $lt: monthEnd },
@@ -194,11 +200,10 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
 
     const passage = `${book.trim()} ${passageStr.trim()}`;
 
-    const devotionDate = toDateOnly(date || new Date());
+    const devotionDate = date ? toDateOnly(date) : getUTC8Today();
 
     // Restrict to 2 days ago / yesterday / today only
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0);
+    const today = getUTC8Today();
     
     const twoDaysAgo = new Date(today);
     twoDaysAgo.setUTCDate(twoDaysAgo.getUTCDate() - 2);
@@ -386,9 +391,9 @@ router.get('/leader/folders', requireAuth, requireVerified, requireRole(['ADMIN'
 // ─── GET leader-level stats overview ────────────────────────────────────────
 router.get('/leader/stats', requireAuth, requireVerified, requireRole(['ADMIN', 'COUNSELOR']), async (req, res) => {
   try {
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const today = getUTC8Today();
+    const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1));
 
     const [totalThisMonth, pending, acknowledged] = await Promise.all([
       Devotional.countDocuments({ date: { $gte: monthStart, $lt: monthEnd } }),

@@ -18,13 +18,16 @@ async function calcMemberArrears(memberId) {
   const payments = await DuesPayment.find({ member: memberId });
   const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
 
-  const now = new Date();
-  let d = new Date(DUES_START_DATE);
-  d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); // first Sunday on/after start
+  const nowSystem = new Date();
+  const now = new Date(nowSystem.getTime() + 8 * 60 * 60 * 1000);
+  now.setUTCHours(0, 0, 0, 0);
+  let d = new Date(DUES_START_DATE.getTime() + 8 * 60 * 60 * 1000);
+  d.setUTCHours(0, 0, 0, 0);
+  d.setUTCDate(d.getUTCDate() + ((7 - d.getUTCDay()) % 7)); // first Sunday on/after start
   let sundaysCount = 0;
   while (d <= now) {
     sundaysCount++;
-    d.setDate(d.getDate() + 7);
+    d.setUTCDate(d.getUTCDate() + 7);
   }
   const expected = sundaysCount * 10;
   return expected - totalPaid;

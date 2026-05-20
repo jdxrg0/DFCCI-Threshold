@@ -51,6 +51,12 @@ const StatsBar = ({ stats }) => {
   );
 };
 
+const getUTC8TodayString = () => {
+  const now = new Date();
+  const utc8Time = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return utc8Time.toISOString().slice(0, 10);
+};
+
 // ── Mini Calendar Heatmap ────────────────────────────────────────────────────
 const MiniCalendar = ({ year, month }) => {
   const [days, setDays] = useState([]);
@@ -74,7 +80,7 @@ const MiniCalendar = ({ year, month }) => {
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const startDow = firstDay.getUTCDay();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getUTC8TodayString();
 
   const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const cells = [];
