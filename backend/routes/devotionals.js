@@ -61,7 +61,7 @@ router.get('/', requireAuth, requireVerified, async (req, res) => {
 router.get('/stats', requireAuth, requireVerified, async (req, res) => {
   try {
     // All distinct dates the member submitted a devotional, sorted descending
-    const entries = await Devotional.find({ member: req.user._id })
+    const entries = await Devotional.find({ member: req.user._id, status: { $ne: 'Missed' } })
       .select('date')
       .sort({ date: -1 })
       .lean();
@@ -114,6 +114,7 @@ router.get('/stats', requireAuth, requireVerified, async (req, res) => {
     const thisMonth = await Devotional.countDocuments({
       member: req.user._id,
       date: { $gte: monthStart, $lt: monthEnd },
+      status: { $ne: 'Missed' },
     });
 
     // Acknowledged count
@@ -132,8 +133,13 @@ router.get('/stats', requireAuth, requireVerified, async (req, res) => {
 // ─── GET calendar data (dates with entries for a given month) ────────────────
 router.get('/calendar', requireAuth, requireVerified, async (req, res) => {
   try {
-    const { year, month } = req.query;
+    const { year, month, memberId } = req.query;
     if (!year || !month) return res.status(400).json({ message: 'year and month are required' });
+
+    let targetUserId = req.user._id;
+    if (memberId && ['ADMIN', 'COUNSELOR'].includes(req.user.role)) {
+      targetUserId = memberId;
+    }
 
     const y = parseInt(year, 10);
     const m = parseInt(month, 10) - 1;
@@ -141,7 +147,7 @@ router.get('/calendar', requireAuth, requireVerified, async (req, res) => {
     const end = new Date(Date.UTC(y, m + 1, 1));
 
     const entries = await Devotional.find({
-      member: req.user._id,
+      member: targetUserId,
       date: { $gte: start, $lt: end },
     }).select('date status').lean();
 
@@ -251,6 +257,49 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
   }
 });
 
+// ─── POST confess did not devotion (mark date as Missed) ────────────────────
+router.post('/missed', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { date } = req.body;
+    if (!date) return res.status(400).json({ message: 'Date is required.' });
+
+    const devotionDate = toDateOnly(date);
+
+    // Restrict to 2 days ago / yesterday / today only
+    const today = getUTC8Today();
+    const twoDaysAgo = new Date(today);
+    twoDaysAgo.setUTCDate(twoDaysAgo.getUTCDate() - 2);
+
+    const tomorrow = new Date(today);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+
+    if (devotionDate < twoDaysAgo || devotionDate >= tomorrow) {
+      return res.status(400).json({ message: 'You can only mark dates for today, yesterday, or 2 days ago.' });
+    }
+
+    // Prevent duplicate entry for the same date
+    const existing = await Devotional.findOne({ member: req.user._id, date: devotionDate });
+    if (existing) {
+      return res.status(400).json({ message: 'You already submitted an entry for this date.' });
+    }
+
+    const devotional = await Devotional.create({
+      member: req.user._id,
+      date: devotionDate,
+      book: 'None',
+      passage: 'None (Confessed)',
+      summary: 'Confessed did not devotion.',
+      application: 'Confessed did not devotion.',
+      status: 'Missed',
+    });
+
+    res.status(201).json({ message: 'Marked as missed successfully', devotional });
+  } catch (error) {
+    console.error('Error marking date as missed:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // ─── PUT edit own devotional (only if not yet acknowledged) ─────────────────
 router.put('/:id', requireAuth, requireVerified, async (req, res) => {
   try {
@@ -346,7 +395,7 @@ router.get('/leader/folders', requireAuth, requireVerified, requireRole(['ADMIN'
       .select('displayName profilePicture role')
       .lean();
 
-    // Fetch counts from Devotionals
+    // Fetch counts and latest entry date from Devotionals
     const stats = await Devotional.aggregate([
       {
         $group: {
@@ -354,7 +403,8 @@ router.get('/leader/folders', requireAuth, requireVerified, requireRole(['ADMIN'
           total: { $sum: 1 },
           pending: {
             $sum: { $cond: [{ $eq: ['$status', 'Submitted'] }, 1, 0] }
-          }
+          },
+          lastEntryDate: { $max: '$date' }
         }
       }
     ]);
@@ -362,7 +412,11 @@ router.get('/leader/folders', requireAuth, requireVerified, requireRole(['ADMIN'
     // Map stats to users
     const statsMap = {};
     stats.forEach(s => {
-      statsMap[s._id.toString()] = { total: s.total, pending: s.pending };
+      statsMap[s._id.toString()] = { 
+        total: s.total, 
+        pending: s.pending,
+        lastEntryDate: s.lastEntryDate
+      };
     });
 
     const folders = users.map(u => ({
@@ -371,13 +425,18 @@ router.get('/leader/folders', requireAuth, requireVerified, requireRole(['ADMIN'
       profilePicture: u.profilePicture,
       role: u.role,
       total: statsMap[u._id.toString()]?.total || 0,
-      pending: statsMap[u._id.toString()]?.pending || 0
+      pending: statsMap[u._id.toString()]?.pending || 0,
+      lastEntryDate: statsMap[u._id.toString()]?.lastEntryDate || null
     }));
 
-    // Sort by pending count (desc), then total count (desc), then name
+    // Sort by pending count (desc), then latest entry date (desc), then name
     folders.sort((a, b) => {
       if (b.pending !== a.pending) return b.pending - a.pending;
-      if (b.total !== a.total) return b.total - a.total;
+      
+      const dateA = a.lastEntryDate ? new Date(a.lastEntryDate) : new Date(0);
+      const dateB = b.lastEntryDate ? new Date(b.lastEntryDate) : new Date(0);
+      if (dateB.getTime() !== dateA.getTime()) return dateB.getTime() - dateA.getTime();
+
       return a.displayName.localeCompare(b.displayName);
     });
 
@@ -396,7 +455,7 @@ router.get('/leader/stats', requireAuth, requireVerified, requireRole(['ADMIN', 
     const monthEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1));
 
     const [totalThisMonth, pending, acknowledged] = await Promise.all([
-      Devotional.countDocuments({ date: { $gte: monthStart, $lt: monthEnd } }),
+      Devotional.countDocuments({ date: { $gte: monthStart, $lt: monthEnd }, status: { $ne: 'Missed' } }),
       Devotional.countDocuments({ status: 'Submitted' }),
       Devotional.countDocuments({ status: 'Acknowledged', date: { $gte: monthStart, $lt: monthEnd } }),
     ]);
@@ -417,6 +476,10 @@ router.put('/:id/acknowledge', requireAuth, requireVerified, requireRole(['ADMIN
 
     if (devotional.status === 'Acknowledged') {
       return res.status(400).json({ message: 'Already acknowledged.' });
+    }
+
+    if (devotional.status === 'Missed') {
+      return res.status(400).json({ message: 'Cannot acknowledge a missed entry.' });
     }
 
     const { note } = req.body;
@@ -466,7 +529,7 @@ router.get('/bible-progress/all', requireAuth, requireVerified, async (req, res)
       targetUserId = req.query.memberId;
     }
 
-    const entries = await Devotional.find({ member: targetUserId })
+    const entries = await Devotional.find({ member: targetUserId, status: { $ne: 'Missed' } })
       .select('book parsedPassages')
       .lean();
     

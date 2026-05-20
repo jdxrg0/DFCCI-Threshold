@@ -30,7 +30,9 @@ const PopupModal = ({ isOpen, onClose, title, message, onConfirm, confirmText, c
         padding: '1.5rem',
         position: 'relative',
         display: 'flex', flexDirection: 'column', gap: '1rem',
-        animation: 'scaleIn 0.2s ease-out'
+        animation: 'scaleIn 0.2s ease-out',
+        borderRadius: '16px',
+        border: '1px solid var(--border-color)',
       }}>
         <button onClick={onClose} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.2rem' }}>
           <X size={20} />
@@ -45,7 +47,7 @@ const PopupModal = ({ isOpen, onClose, title, message, onConfirm, confirmText, c
             type="text" 
             value={promptValue} 
             onChange={(e) => onPromptChange && onPromptChange(e.target.value)} 
-            style={{ width: '100%', padding: '0.6rem', borderRadius: '4px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)' }}
+            style={{ width: '100%', padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-color)', color: 'var(--text-main)' }}
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -58,11 +60,11 @@ const PopupModal = ({ isOpen, onClose, title, message, onConfirm, confirmText, c
 
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
           {!isAlert && (
-            <button onClick={onClose} className="btn btn-secondary" style={{ padding: '0.5rem 1rem' }}>
+            <button onClick={onClose} className="btn btn-secondary" style={{ padding: '0.5rem 1.2rem', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.85rem', fontWeight: '600' }}>
               {cancelText || 'Cancel'}
             </button>
           )}
-          <button onClick={() => { if (onConfirm) onConfirm(isPrompt ? promptValue : undefined); onClose(); }} className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
+          <button onClick={() => { if (onConfirm) onConfirm(isPrompt ? promptValue : undefined); onClose(); }} className="btn btn-primary" style={{ padding: '0.5rem 1.2rem', borderRadius: '8px', border: 'none', fontSize: '0.85rem', fontWeight: '600' }}>
             {confirmText || 'OK'}
           </button>
         </div>

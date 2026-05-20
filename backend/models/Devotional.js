@@ -40,7 +40,7 @@ const devotionalSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['Submitted', 'Acknowledged'],
+    enum: ['Submitted', 'Acknowledged', 'Missed'],
     default: 'Submitted',
   },
   acknowledgedBy: {

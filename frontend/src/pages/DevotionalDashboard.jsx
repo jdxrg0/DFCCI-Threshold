@@ -8,6 +8,7 @@ import { useLanguage } from '../context/LanguageContext';
 import ThreadSkeleton from '../components/ThreadSkeleton';
 import BibleTracker from '../components/BibleTracker';
 import BibleVideos from '../components/BibleVideos';
+import PopupModal from '../components/PopupModal';
 import { renderAvatarHelper } from '../utils/avatarHelper';
 
 // ── Stat Pill ────────────────────────────────────────────────────────────────
@@ -58,18 +59,34 @@ const getUTC8TodayString = () => {
 };
 
 // ── Mini Calendar Heatmap ────────────────────────────────────────────────────
-const MiniCalendar = ({ year, month }) => {
+const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefresh }) => {
+  const [year, setYear] = useState(initialYear);
+  const [month, setMonth] = useState(initialMonth);
   const [days, setDays] = useState([]);
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    isAlert: false,
+    onConfirm: null,
+  });
+
+  useEffect(() => {
+    setYear(initialYear);
+    setMonth(initialMonth);
+  }, [initialYear, initialMonth]);
 
   useEffect(() => {
     const fetchCalendar = async () => {
       try {
-        const res = await api.get('/devotionals/calendar', { params: { year, month } });
+        const params = { year, month };
+        if (memberId) params.memberId = memberId;
+        const res = await api.get('/devotionals/calendar', { params });
         setDays(res.data);
       } catch { /* silent */ }
     };
     fetchCalendar();
-  }, [year, month]);
+  }, [year, month, memberId]);
 
   const dateSet = useMemo(() => {
     const map = {};
@@ -77,48 +94,166 @@ const MiniCalendar = ({ year, month }) => {
     return map;
   }, [days]);
 
+  // Helper to calculate UTC+8 date string with an offset
+  const getUTC8DateString = (offsetDays = 0) => {
+    const now = new Date();
+    const utc8Time = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+    if (offsetDays !== 0) {
+      utc8Time.setDate(utc8Time.getDate() + offsetDays);
+    }
+    return utc8Time.toISOString().slice(0, 10);
+  };
+
+  const todayStr = getUTC8DateString(0);
+  const yesterdayStr = getUTC8DateString(-1);
+  const twoDaysAgoStr = getUTC8DateString(-2);
+
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   const startDow = firstDay.getUTCDay();
-  const today = getUTC8TodayString();
 
   const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const cells = [];
   for (let i = 0; i < startDow; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    cells.push({ day: d, status: dateSet[dateStr] || null, isToday: dateStr === today });
+    cells.push({
+      day: d,
+      status: dateSet[dateStr] || null,
+      isToday: dateStr === todayStr,
+      dateStr
+    });
   }
 
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  const handlePrevMonth = () => {
+    if (month === 1) {
+      setMonth(12);
+      setYear(y => y - 1);
+    } else {
+      setMonth(m => m - 1);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (month === 12) {
+      setMonth(1);
+      setYear(y => y + 1);
+    } else {
+      setMonth(m => m + 1);
+    }
+  };
+
+  const performMarkMissed = async (dateStr) => {
+    try {
+      await api.post('/devotionals/missed', { date: dateStr });
+      // Refresh calendar data
+      const params = { year, month };
+      if (memberId) params.memberId = memberId;
+      const res = await api.get('/devotionals/calendar', { params });
+      setDays(res.data);
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      setModalConfig({
+        isOpen: true,
+        title: 'Error',
+        message: err.response?.data?.message || 'Failed to mark date.',
+        isAlert: true,
+        onConfirm: null,
+      });
+    }
+  };
+
+  const handleCellClick = (cell) => {
+    if (!cell) return;
+    const isClickable = !memberId && !cell.status &&
+      (cell.dateStr === todayStr || cell.dateStr === yesterdayStr || cell.dateStr === twoDaysAgoStr);
+    
+    if (!isClickable) return;
+
+    const formattedDate = new Date(cell.dateStr).toLocaleDateString(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    setModalConfig({
+      isOpen: true,
+      title: 'Confess Missed Devotional',
+      message: `Did you miss your devotional on ${formattedDate}?`,
+      isAlert: false,
+      onConfirm: () => performMarkMissed(cell.dateStr),
+    });
+  };
 
   return (
     <div style={{
       backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)',
       borderRadius: '12px', padding: '0.85rem', marginBottom: '1.25rem',
     }}>
-      <h3 style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-main)', marginBottom: '0.6rem', textAlign: 'center' }}>
-        {monthNames[month - 1]} {year}
-      </h3>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+        <button
+          onClick={handlePrevMonth}
+          style={{
+            border: 'none', background: 'transparent', color: 'var(--text-muted)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '4px', borderRadius: '4px'
+          }}
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <h3 style={{ fontSize: '0.82rem', fontWeight: '800', color: 'var(--text-main)', margin: 0 }}>
+          {monthNames[month - 1]} {year}
+        </h3>
+        <button
+          onClick={handleNextMonth}
+          style={{
+            border: 'none', background: 'transparent', color: 'var(--text-muted)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '4px', borderRadius: '4px'
+          }}
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '2px', textAlign: 'center' }}>
         {dayLabels.map((l, i) => (
           <div key={i} style={{ fontSize: '0.6rem', fontWeight: '700', color: 'var(--text-muted)', paddingBottom: '0.2rem' }}>{l}</div>
         ))}
-        {cells.map((cell, i) => (
-          <div key={i} style={{
-            width: '100%', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: cell?.isToday ? '50%' : '4px', fontSize: '0.65rem', fontWeight: cell?.isToday ? '800' : '600',
-            backgroundColor: cell?.status === 'Acknowledged'
-              ? 'color-mix(in srgb, var(--primary) 35%, transparent)'
-              : cell?.status === 'Submitted'
-              ? 'color-mix(in srgb, #10B981 30%, transparent)'
-              : cell ? 'color-mix(in srgb, var(--text-muted) 8%, transparent)' : 'transparent',
-            color: cell?.status ? 'var(--text-main)' : cell ? 'var(--text-muted)' : 'transparent',
-            border: cell?.isToday ? '2px solid var(--primary)' : 'none',
-          }}>
-            {cell?.day || ''}
-          </div>
-        ))}
+        {cells.map((cell, i) => {
+          const isClickable = cell && !memberId && !cell.status &&
+            (cell.dateStr === todayStr || cell.dateStr === yesterdayStr || cell.dateStr === twoDaysAgoStr);
+
+          return (
+            <div
+              key={i}
+              onClick={() => handleCellClick(cell)}
+              title={isClickable ? 'Click to mark as "Did not devotion" (Confessed)' : undefined}
+              style={{
+                width: '100%', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: cell?.isToday ? '50%' : '4px', fontSize: '0.65rem', fontWeight: cell?.isToday ? '800' : '600',
+                backgroundColor: cell?.status === 'Acknowledged'
+                  ? 'color-mix(in srgb, var(--primary) 35%, transparent)'
+                  : cell?.status === 'Submitted'
+                  ? 'color-mix(in srgb, #10B981 30%, transparent)'
+                  : cell?.status === 'Missed'
+                  ? 'color-mix(in srgb, #EF4444 30%, transparent)'
+                  : cell ? 'color-mix(in srgb, var(--text-muted) 8%, transparent)' : 'transparent',
+                color: cell?.status ? 'var(--text-main)' : cell ? 'var(--text-muted)' : 'transparent',
+                border: cell?.isToday
+                  ? '2px solid var(--primary)'
+                  : isClickable
+                  ? '1px dashed var(--text-muted)'
+                  : 'none',
+                cursor: isClickable ? 'pointer' : 'default',
+              }}
+            >
+              {cell?.day || ''}
+            </div>
+          );
+        })}
       </div>
       {/* Legend */}
       <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', marginTop: '0.6rem', fontSize: '0.62rem', color: 'var(--text-muted)' }}>
@@ -130,7 +265,22 @@ const MiniCalendar = ({ year, month }) => {
           <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'color-mix(in srgb, var(--primary) 35%, transparent)' }}></span>
           Acknowledged
         </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '2px', backgroundColor: 'color-mix(in srgb, #EF4444 30%, transparent)' }}></span>
+          Missed
+        </span>
       </div>
+
+      <PopupModal
+        isOpen={modalConfig.isOpen}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        isAlert={modalConfig.isAlert}
+        onConfirm={modalConfig.onConfirm}
+        confirmText="Confirm"
+        cancelText="Cancel"
+      />
     </div>
   );
 };
@@ -276,36 +426,44 @@ const Pagination = ({ page, totalPages, onPrev, onNext, t }) => {
 };
 
 // ── Folder Card Component ──────────────────────────────────────────────────
-const FolderCard = ({ folder, onClick }) => (
-  <div 
-    onClick={onClick}
-    style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '1rem', backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)',
-      borderRadius: '12px', marginBottom: '0.6rem', cursor: 'pointer',
-      boxShadow: '0 2px 8px rgba(0,0,0,0.02)', transition: 'transform 0.15s ease'
-    }}
-  >
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-      {renderAvatarHelper(folder, 40)}
-      <div>
-        <div style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--text-main)' }}>{folder.displayName}</div>
-        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>
-          {folder.total} Total Entries
+const FolderCard = ({ folder, onClick }) => {
+  const latestDateStr = folder.lastEntryDate 
+    ? format(new Date(folder.lastEntryDate), 'MMM d, yyyy')
+    : 'Never';
+
+  return (
+    <div 
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '1rem', backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)',
+        borderRadius: '12px', marginBottom: '0.6rem', cursor: 'pointer',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.02)', transition: 'transform 0.15s ease'
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        {renderAvatarHelper(folder, 40)}
+        <div>
+          <div style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--text-main)' }}>{folder.displayName}</div>
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>
+            <span>{folder.total} Total Entries</span>
+            <span style={{ color: 'var(--border-color)' }}>•</span>
+            <span>Latest: {latestDateStr}</span>
+          </div>
         </div>
       </div>
+      
+      {folder.pending > 0 && (
+        <div style={{
+          backgroundColor: '#F59E0B', color: '#fff', fontSize: '0.75rem', fontWeight: '800',
+          padding: '0.2rem 0.6rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.3rem'
+        }}>
+          <Clock size={12} /> {folder.pending} New
+        </div>
+      )}
     </div>
-    
-    {folder.pending > 0 && (
-      <div style={{
-        backgroundColor: '#F59E0B', color: '#fff', fontSize: '0.75rem', fontWeight: '800',
-        padding: '0.2rem 0.6rem', borderRadius: '999px', display: 'flex', alignItems: 'center', gap: '0.3rem'
-      }}>
-        <Clock size={12} /> {folder.pending} New
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 // ── Main Dashboard ───────────────────────────────────────────────────────────
 const DevotionalDashboard = () => {
@@ -537,7 +695,7 @@ const DevotionalDashboard = () => {
             </button>
           </div>
 
-          <MiniCalendar year={calYear} month={calMonth} />
+          <MiniCalendar year={calYear} month={calMonth} onRefresh={() => { fetchMyDevotionals(page); fetchStats(); }} />
 
           {loading && devotionals.length === 0 ? (
             <ThreadSkeleton />
@@ -623,25 +781,38 @@ const DevotionalDashboard = () => {
                 <button
                   onClick={() => setLeaderSubTab('entries')}
                   style={{
-                    flex: 1, padding: '0.45rem', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                    flex: 1, padding: '0.5rem', borderRadius: '10px', border: 'none', cursor: 'pointer',
                     fontSize: '0.8rem', fontWeight: '800', fontFamily: 'inherit',
-                    backgroundColor: leaderSubTab === 'entries' ? 'var(--card-bg)' : 'transparent',
-                    color: leaderSubTab === 'entries' ? 'var(--text-main)' : 'var(--text-muted)',
-                    boxShadow: leaderSubTab === 'entries' ? '0 2px 5px rgba(0,0,0,0.05)' : 'none',
-                    transition: 'all 0.2s',
+                    backgroundColor: leaderSubTab === 'entries' ? 'var(--primary)' : 'transparent',
+                    color: leaderSubTab === 'entries' ? '#fff' : 'var(--text-muted)',
+                    boxShadow: leaderSubTab === 'entries' ? '0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent)' : 'none',
+                    transition: 'all 0.2s ease-in-out',
                   }}
                 >
                   Entries
                 </button>
                 <button
+                  onClick={() => setLeaderSubTab('calendar')}
+                  style={{
+                    flex: 1, padding: '0.5rem', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                    fontSize: '0.8rem', fontWeight: '800', fontFamily: 'inherit',
+                    backgroundColor: leaderSubTab === 'calendar' ? 'var(--primary)' : 'transparent',
+                    color: leaderSubTab === 'calendar' ? '#fff' : 'var(--text-muted)',
+                    boxShadow: leaderSubTab === 'calendar' ? '0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent)' : 'none',
+                    transition: 'all 0.2s ease-in-out',
+                  }}
+                >
+                  Calendar
+                </button>
+                <button
                   onClick={() => setLeaderSubTab('tracker')}
                   style={{
-                    flex: 1, padding: '0.45rem', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                    flex: 1, padding: '0.5rem', borderRadius: '10px', border: 'none', cursor: 'pointer',
                     fontSize: '0.8rem', fontWeight: '800', fontFamily: 'inherit',
-                    backgroundColor: leaderSubTab === 'tracker' ? 'var(--card-bg)' : 'transparent',
-                    color: leaderSubTab === 'tracker' ? 'var(--text-main)' : 'var(--text-muted)',
-                    boxShadow: leaderSubTab === 'tracker' ? '0 2px 5px rgba(0,0,0,0.05)' : 'none',
-                    transition: 'all 0.2s',
+                    backgroundColor: leaderSubTab === 'tracker' ? 'var(--primary)' : 'transparent',
+                    color: leaderSubTab === 'tracker' ? '#fff' : 'var(--text-muted)',
+                    boxShadow: leaderSubTab === 'tracker' ? '0 4px 10px color-mix(in srgb, var(--primary) 25%, transparent)' : 'none',
+                    transition: 'all 0.2s ease-in-out',
                   }}
                 >
                   Bible Tracker
@@ -684,6 +855,10 @@ const DevotionalDashboard = () => {
                     </>
                   )}
                 </>
+              ) : leaderSubTab === 'calendar' ? (
+                <div style={{ marginTop: '0.5rem' }}>
+                  <MiniCalendar year={calYear} month={calMonth} memberId={selectedFolder._id} />
+                </div>
               ) : (
                 <div style={{ marginTop: '0.5rem' }}>
                   <BibleTracker targetMemberId={selectedFolder._id} />
