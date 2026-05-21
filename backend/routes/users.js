@@ -120,6 +120,49 @@ router.put('/:id/request-name-change', requireAuth, requireRole(['ADMIN']), asyn
   }
 });
 
+// Grant/revoke temporary custom date power (Admin only)
+router.put('/:id/custom-date-power', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const { durationMinutes } = req.body;
+    
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (durationMinutes === undefined || isNaN(durationMinutes) || durationMinutes < 0) {
+      return res.status(400).json({ message: 'Invalid durationMinutes' });
+    }
+
+    if (durationMinutes === 0) {
+      user.customDatePowerExpires = null;
+    } else {
+      user.customDatePowerExpires = new Date(Date.now() + durationMinutes * 60 * 1000);
+    }
+    
+    await user.save();
+
+    res.json({
+      message: durationMinutes === 0 
+        ? `Custom date power revoked for ${user.displayName}` 
+        : `Custom date power granted to ${user.displayName} for ${durationMinutes} minutes`,
+      customDatePowerExpires: user.customDatePowerExpires,
+      user: {
+        _id: user._id,
+        displayName: user.displayName,
+        role: user.role,
+        email: user.email,
+        nameChangeRequested: user.nameChangeRequested,
+        profilePicture: user.profilePicture,
+        customDatePowerExpires: user.customDatePowerExpires
+      }
+    });
+  } catch (error) {
+    console.error('Error setting custom date power:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Update own name (Authenticated user)
 router.put('/me/update-name', requireAuth, async (req, res) => {
   try {
@@ -146,7 +189,8 @@ router.put('/me/update-name', requireAuth, async (req, res) => {
         role: user.role,
         email: user.email,
         nameChangeRequested: user.nameChangeRequested,
-        profilePicture: user.profilePicture
+        profilePicture: user.profilePicture,
+        customDatePowerExpires: user.customDatePowerExpires
       }
     });
   } catch (error) {
@@ -205,7 +249,8 @@ router.put('/me/update-profile', requireAuth, uploadProfile.single('profilePictu
         role: user.role,
         email: user.email,
         nameChangeRequested: user.nameChangeRequested,
-        profilePicture: user.profilePicture
+        profilePicture: user.profilePicture,
+        customDatePowerExpires: user.customDatePowerExpires
       }
     });
   } catch (error) {
@@ -267,6 +312,7 @@ router.put('/me/update-email', requireAuth, async (req, res) => {
         email: user.email,
         nameChangeRequested: user.nameChangeRequested,
         profilePicture: user.profilePicture,
+        customDatePowerExpires: user.customDatePowerExpires,
         pendingEmail: user.pendingEmail
       }
     });
@@ -322,7 +368,8 @@ router.post('/me/verify-email-otp', requireAuth, async (req, res) => {
         role: user.role,
         email: user.email,
         nameChangeRequested: user.nameChangeRequested,
-        profilePicture: user.profilePicture
+        profilePicture: user.profilePicture,
+        customDatePowerExpires: user.customDatePowerExpires
       }
     });
   } catch (error) {
@@ -387,6 +434,7 @@ router.post('/me/cancel-email-update', requireAuth, async (req, res) => {
         email: user.email,
         nameChangeRequested: user.nameChangeRequested,
         profilePicture: user.profilePicture,
+        customDatePowerExpires: user.customDatePowerExpires,
         pendingEmail: undefined
       }
     });
@@ -460,7 +508,8 @@ router.delete('/me/remove-profile-picture', requireAuth, async (req, res) => {
         role: user.role,
         email: user.email,
         nameChangeRequested: user.nameChangeRequested,
-        profilePicture: user.profilePicture
+        profilePicture: user.profilePicture,
+        customDatePowerExpires: user.customDatePowerExpires
       }
     });
   } catch (error) {

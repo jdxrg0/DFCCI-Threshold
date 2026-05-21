@@ -339,6 +339,31 @@ const AdminPanel = () => {
     });
   };
 
+  const handleDatePower = async (userId, currentExpiration) => {
+    const isActive = currentExpiration && new Date(currentExpiration) > new Date();
+    let message = 'Enter duration in hours to grant custom date power (e.g., 1, 2, 24). Enter 0 to revoke date power:';
+    if (isActive) {
+      const hoursLeft = Math.ceil((new Date(currentExpiration) - new Date()) / (1000 * 60 * 60));
+      message = `User currently has custom date power active (~${hoursLeft} hours remaining).\n\n${message}`;
+    }
+    showPrompt('Custom Date Power', message, async (val) => {
+      if (val === null || val === undefined || val.trim() === '') return;
+      const num = parseFloat(val);
+      if (isNaN(num) || num < 0) {
+        showAlert('Error', 'Please enter a valid positive number or 0.');
+        return;
+      }
+      try {
+        const durationMinutes = Math.round(num * 60);
+        const res = await api.put(`/users/${userId}/custom-date-power`, { durationMinutes });
+        showAlert('Success', res.data.message);
+        fetchUsers();
+      } catch (err) {
+        showAlert('Error', err.response?.data?.message || 'Failed to update custom date power');
+      }
+    });
+  };
+
   if (loading) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', gap: '1rem' }}>
       <RefreshCw size={40} className="spin" style={{ color: 'var(--primary)' }} />
@@ -636,6 +661,33 @@ const AdminPanel = () => {
                                 <UserCog size={13} />
                                 {u.nameChangeRequested ? 'Change Pending' : 'Request Rename'}
                               </button>
+
+                              {(() => {
+                                const isDatePowerActive = u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date();
+                                return (
+                                  <button 
+                                    onClick={() => handleDatePower(u._id, u.customDatePowerExpires)}
+                                    style={{ 
+                                      background: isDatePowerActive ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.03)', 
+                                      color: isDatePowerActive ? '#8b5cf6' : 'var(--text-main)',
+                                      border: `1px solid ${isDatePowerActive ? 'rgba(139,92,246,0.2)' : 'var(--border-color)'}`,
+                                      padding: '0.4rem 0.8rem',
+                                      borderRadius: '9999px',
+                                      fontSize: '0.75rem',
+                                      cursor: 'pointer',
+                                      fontWeight: '600',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '0.4rem',
+                                      transition: 'all 0.2s',
+                                      outline: 'none'
+                                    }}
+                                  >
+                                    <Zap size={13} style={{ fill: isDatePowerActive ? 'rgba(139,92,246,0.1)' : 'none' }} />
+                                    {isDatePowerActive ? 'Date Power Active' : 'Grant Date Power'}
+                                  </button>
+                                );
+                              })()}
                             </div>
                           ) : (
                             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Require Verification</span>
@@ -796,7 +848,7 @@ const AdminPanel = () => {
                       </div>
 
                       {u.isVerified && (
-                        <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
                           <button 
                             onClick={() => handleToggleReminders(u._id)}
                             style={{ 
@@ -837,6 +889,27 @@ const AdminPanel = () => {
                           >
                             <UserCog size={10} />
                             Rename
+                          </button>
+
+                          <button 
+                            onClick={() => handleDatePower(u._id, u.customDatePowerExpires)}
+                            style={{ 
+                              background: u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.03)', 
+                              color: u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? '#8b5cf6' : 'var(--text-main)',
+                              border: `1px solid ${u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? 'rgba(139,92,246,0.2)' : 'var(--border-color)'}`,
+                              padding: '0.25rem 0.45rem',
+                              borderRadius: '9999px',
+                              fontSize: '0.68rem',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.2rem',
+                              outline: 'none'
+                            }}
+                          >
+                            <Zap size={10} style={{ fill: u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? 'rgba(139,92,246,0.1)' : 'none' }} />
+                            {u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? 'Date Pow' : 'Grant Pow'}
                           </button>
                         </div>
                       )}

@@ -216,7 +216,9 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
-    if (devotionDate < twoDaysAgo || devotionDate >= tomorrow) {
+    const hasCustomDatePower = req.user.customDatePowerExpires && new Date(req.user.customDatePowerExpires) > new Date();
+
+    if (!hasCustomDatePower && (devotionDate < twoDaysAgo || devotionDate >= tomorrow)) {
       return res.status(400).json({ message: 'You can only submit devotionals for today, yesterday, or 2 days ago.' });
     }
 
@@ -260,7 +262,9 @@ router.post('/missed', requireAuth, requireVerified, async (req, res) => {
     const tomorrow = new Date(today);
     tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
 
-    if (devotionDate < twoDaysAgo || devotionDate >= tomorrow) {
+    const hasCustomDatePower = req.user.customDatePowerExpires && new Date(req.user.customDatePowerExpires) > new Date();
+
+    if (!hasCustomDatePower && (devotionDate < twoDaysAgo || devotionDate >= tomorrow)) {
       return res.status(400).json({ message: 'You can only mark dates for today, yesterday, or 2 days ago.' });
     }
 
@@ -299,6 +303,10 @@ router.put('/:id', requireAuth, requireVerified, async (req, res) => {
 
     if (devotional.status === 'Acknowledged') {
       return res.status(400).json({ message: 'Cannot edit an acknowledged devotional.' });
+    }
+
+    if (devotional.status === 'Missed') {
+      return res.status(400).json({ message: 'Cannot edit a missed entry.' });
     }
 
     const { book, passageStr, summary, application, prayerFocus } = req.body;
@@ -463,10 +471,6 @@ router.put('/:id/acknowledge', requireAuth, requireVerified, requireRole(['ADMIN
 
     if (devotional.status === 'Acknowledged') {
       return res.status(400).json({ message: 'Already acknowledged.' });
-    }
-
-    if (devotional.status === 'Missed') {
-      return res.status(400).json({ message: 'Cannot acknowledge a missed entry.' });
     }
 
     const { note } = req.body;

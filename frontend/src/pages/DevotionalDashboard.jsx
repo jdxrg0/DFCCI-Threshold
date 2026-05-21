@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookHeart, Send, BookOpen, Inbox, Users, Flame, Eye, Calendar, CheckCircle2, Clock, ChevronLeft, ChevronRight, BarChart3, User, Film } from 'lucide-react';
+import { BookHeart, Send, BookOpen, Inbox, Users, Flame, Eye, Calendar, CheckCircle2, Clock, ChevronLeft, ChevronRight, BarChart3, User, Film, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -63,6 +63,10 @@ const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefr
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
   const [days, setDays] = useState([]);
+  const { user } = useAuth();
+  const hasCustomDatePower = useMemo(() => {
+    return user?.customDatePowerExpires && new Date(user.customDatePowerExpires) > new Date();
+  }, [user]);
   const [modalConfig, setModalConfig] = useState({
     isOpen: false,
     title: '',
@@ -168,7 +172,7 @@ const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefr
   const handleCellClick = (cell) => {
     if (!cell) return;
     const isClickable = !memberId && !cell.status &&
-      (cell.dateStr === todayStr || cell.dateStr === yesterdayStr || cell.dateStr === twoDaysAgoStr);
+      (hasCustomDatePower ? cell.dateStr <= todayStr : (cell.dateStr === todayStr || cell.dateStr === yesterdayStr || cell.dateStr === twoDaysAgoStr));
     
     if (!isClickable) return;
 
@@ -224,7 +228,7 @@ const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefr
         ))}
         {cells.map((cell, i) => {
           const isClickable = cell && !memberId && !cell.status &&
-            (cell.dateStr === todayStr || cell.dateStr === yesterdayStr || cell.dateStr === twoDaysAgoStr);
+            (hasCustomDatePower ? cell.dateStr <= todayStr : (cell.dateStr === todayStr || cell.dateStr === yesterdayStr || cell.dateStr === twoDaysAgoStr));
 
           return (
             <div
@@ -289,6 +293,7 @@ const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefr
 const DevotionalCard = ({ entry, showMember = false }) => {
   const { t } = useLanguage();
   const isAck = entry.status === 'Acknowledged';
+  const isMissed = entry.status === 'Missed';
 
   return (
     <Link
@@ -307,7 +312,9 @@ const DevotionalCard = ({ entry, showMember = false }) => {
           height: '3px',
           background: isAck
             ? 'linear-gradient(90deg, var(--primary), color-mix(in srgb, var(--primary) 60%, #8B5CF6))'
-            : 'linear-gradient(90deg, #F59E0B, #FB923C)',
+            : isMissed
+              ? 'linear-gradient(90deg, #64748b, #475569)'
+              : 'linear-gradient(90deg, #F59E0B, #FB923C)',
         }} />
 
         <div style={{ padding: '0.85rem 1rem' }}>
@@ -324,12 +331,30 @@ const DevotionalCard = ({ entry, showMember = false }) => {
             <span style={{
               flexShrink: 0, fontSize: '0.65rem', fontWeight: '700',
               padding: '0.2rem 0.55rem', borderRadius: '999px',
-              backgroundColor: isAck ? 'color-mix(in srgb, var(--primary) 15%, transparent)' : 'color-mix(in srgb, #F59E0B 15%, transparent)',
-              color: isAck ? 'var(--primary)' : '#D97706',
+              backgroundColor: isAck 
+                ? 'color-mix(in srgb, var(--primary) 15%, transparent)' 
+                : isMissed 
+                  ? 'color-mix(in srgb, #64748b 15%, transparent)' 
+                  : 'color-mix(in srgb, #F59E0B 15%, transparent)',
+              color: isAck 
+                ? 'var(--primary)' 
+                : isMissed 
+                  ? '#64748b' 
+                  : '#D97706',
               display: 'flex', alignItems: 'center', gap: '0.2rem',
             }}>
-              {isAck ? <CheckCircle2 size={11} /> : <Clock size={11} />}
-              {isAck ? t('devo_status_acknowledged') : t('devo_status_submitted')}
+              {isAck ? (
+                <CheckCircle2 size={11} />
+              ) : isMissed ? (
+                <AlertTriangle size={11} />
+              ) : (
+                <Clock size={11} />
+              )}
+              {isAck 
+                ? t('devo_status_acknowledged') 
+                : isMissed 
+                  ? t('devo_status_missed') || 'Missed' 
+                  : t('devo_status_submitted')}
             </span>
           </div>
 
@@ -836,6 +861,7 @@ const DevotionalDashboard = () => {
                       <option value="all">{t('devo_filter_all')}</option>
                       <option value="Submitted">{t('devo_status_submitted')}</option>
                       <option value="Acknowledged">{t('devo_status_acknowledged')}</option>
+                      <option value="Missed">{t('devo_status_missed') || 'Missed'}</option>
                     </select>
                   </div>
 

@@ -167,6 +167,7 @@ router.post('/login', async (req, res) => {
         email: user.email,
         nameChangeRequested: user.nameChangeRequested,
         profilePicture: user.profilePicture,
+        customDatePowerExpires: user.customDatePowerExpires,
         hasPassword: true
       }
     });
@@ -232,6 +233,7 @@ router.post('/google', async (req, res) => {
         email: user.email,
         nameChangeRequested: user.nameChangeRequested,
         profilePicture: user.profilePicture,
+        customDatePowerExpires: user.customDatePowerExpires,
         hasPassword: !!user.password
       }
     });
@@ -316,6 +318,7 @@ router.get('/me', requireAuth, async (req, res) => {
         email: req.user.email,
         nameChangeRequested: req.user.nameChangeRequested,
         profilePicture: req.user.profilePicture,
+        customDatePowerExpires: req.user.customDatePowerExpires,
         hasPassword: hasPassword,
         pendingEmail: req.user.pendingEmail
       }

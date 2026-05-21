@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, BookHeart, Send, BookOpen, Flame, Target, Calendar, Heart, Info } from 'lucide-react';
+import { ChevronLeft, BookHeart, Send, BookOpen, Flame, Target, Calendar, Heart, Info, Zap } from 'lucide-react';
 import api from '../api';
 import useFormPersist from '../hooks/useFormPersist';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 
 // ─── Inline styles (mobile-first, no external CSS needed) ───────────────────
 const S = {
@@ -151,6 +152,11 @@ const getUTC8TodayString = () => {
 };
 
 const SubmitDevotional = () => {
+  const { user } = useAuth();
+  const hasCustomDatePower = useMemo(() => {
+    return user?.customDatePowerExpires && new Date(user.customDatePowerExpires) > new Date();
+  }, [user]);
+
   const [form, setForm, clearSavedForm] = useFormPersist('devo_draft', {
     date: getUTC8TodayString(),
     book: '',
@@ -192,7 +198,10 @@ const SubmitDevotional = () => {
     maxDate: datePills[2].iso,
   }), [datePills]);
 
-  const isDateValid = (d) => d >= minDate && d <= maxDate;
+  const isDateValid = (d) => {
+    if (hasCustomDatePower) return true;
+    return d >= minDate && d <= maxDate;
+  };
 
   const handleDatePick = (iso) => {
     setForm({ ...form, date: iso });
@@ -258,23 +267,59 @@ const SubmitDevotional = () => {
             <div style={S.sectionHeader}>
               <Calendar size={14} /> {t('devo_date_label')}
             </div>
-            <div style={S.datePillRow}>
-              {datePills.map(pill => {
-                const active = date === pill.iso;
-                return (
-                  <button
-                    key={pill.iso}
-                    type="button"
-                    onClick={() => handleDatePick(pill.iso)}
-                    style={S.datePill(active, false)}
-                  >
-                    <span style={S.datePillDay(active)}>{pill.label}</span>
-                    <span style={S.datePillNum(active)}>{pill.dayNum}</span>
-                    <span style={S.datePillMonth(active)}>{pill.month}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {hasCustomDatePower ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <div style={S.datePillRow}>
+                  {datePills.map(pill => {
+                    const active = date === pill.iso;
+                    return (
+                      <button
+                        key={pill.iso}
+                        type="button"
+                        onClick={() => handleDatePick(pill.iso)}
+                        style={S.datePill(active, false)}
+                      >
+                        <span style={S.datePillDay(active)}>{pill.label}</span>
+                        <span style={S.datePillNum(active)}>{pill.dayNum}</span>
+                        <span style={S.datePillMonth(active)}>{pill.month}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem', padding: '0.5rem 0.75rem', background: 'rgba(139,92,246,0.06)', borderRadius: '10px', border: '1px dashed rgba(139,92,246,0.3)' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: '700', color: '#8b5cf6', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <Zap size={14} style={{ fill: 'rgba(139,92,246,0.1)' }} /> Custom Date:
+                  </span>
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => handleDatePick(e.target.value)}
+                    style={{ ...S.input, padding: '0.35rem 0.6rem', borderRadius: '8px', border: '1.5px solid #8b5cf6', background: 'var(--card-bg)', color: 'var(--text-main)', width: 'auto', flex: 1, fontSize: '0.85rem' }}
+                  />
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#8b5cf6', fontWeight: '600', fontStyle: 'italic', paddingLeft: '0.25rem' }}>
+                  ⚡ Admin has granted you temporary power to submit for any date.
+                </span>
+              </div>
+            ) : (
+              <div style={S.datePillRow}>
+                {datePills.map(pill => {
+                  const active = date === pill.iso;
+                  return (
+                    <button
+                      key={pill.iso}
+                      type="button"
+                      onClick={() => handleDatePick(pill.iso)}
+                      style={S.datePill(active, false)}
+                    >
+                      <span style={S.datePillDay(active)}>{pill.label}</span>
+                      <span style={S.datePillNum(active)}>{pill.dayNum}</span>
+                      <span style={S.datePillMonth(active)}>{pill.month}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             {dateError && <div style={{ ...S.error, marginTop: '0.5rem' }}>{dateError}</div>}
           </div>
 

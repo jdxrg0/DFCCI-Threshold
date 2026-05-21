@@ -27,10 +27,12 @@ const S = {
     overflow: 'hidden',
     boxShadow: '0 4px 20px rgba(0,0,0,0.03)',
   },
-  heroBar: (isAck) => ({
-    background: isAck
+  heroBar: (status) => ({
+    background: status === 'Acknowledged'
       ? 'linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 65%, #8B5CF6))'
-      : 'linear-gradient(135deg, #F59E0B, #FB923C)',
+      : status === 'Missed'
+        ? 'linear-gradient(135deg, #64748b, #475569)'
+        : 'linear-gradient(135deg, #F59E0B, #FB923C)',
     padding: '1.25rem 1rem',
     display: 'flex', flexDirection: 'column',
     gap: '0.75rem', color: '#fff',
@@ -42,8 +44,8 @@ const S = {
     display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0,
     fontSize: '1.2rem', fontWeight: '900',
   },
-  heroBadge: (isAck) => ({
-    backgroundColor: isAck ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
+  heroBadge: (status) => ({
+    backgroundColor: status === 'Acknowledged' ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
     color: '#fff', fontSize: '0.7rem', fontWeight: '800',
     padding: '0.25rem 0.6rem', borderRadius: '999px',
     display: 'flex', alignItems: 'center', gap: '0.2rem',
@@ -273,7 +275,9 @@ const DevotionalView = () => {
 
   const isOwner = devotional?.member?._id === user?._id;
   const isAcknowledged = devotional?.status === 'Acknowledged';
-  const canEdit = isOwner && !isAcknowledged;
+  const isMissed = devotional?.status === 'Missed';
+  const canEdit = isOwner && !isAcknowledged && !isMissed;
+  const canDelete = isOwner && !isAcknowledged;
 
   return (
     <div style={S.page}>
@@ -287,14 +291,24 @@ const DevotionalView = () => {
 
       <div style={S.card}>
         {/* ── Gradient Hero Header ── */}
-        <div style={S.heroBar(isAcknowledged)}>
+        <div style={S.heroBar(devotional.status)}>
           <div style={S.heroHeaderRow}>
             <h2 style={S.heroTitleRow}>
               <BookHeart size={20} /> {t('devo_detail_title')}
             </h2>
-            <div style={S.heroBadge(isAcknowledged)}>
-              {isAcknowledged ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-              {isAcknowledged ? t('devo_status_acknowledged') : t('devo_status_submitted')}
+            <div style={S.heroBadge(devotional.status)}>
+              {devotional.status === 'Acknowledged' ? (
+                <CheckCircle2 size={12} />
+              ) : devotional.status === 'Missed' ? (
+                <AlertTriangle size={12} />
+              ) : (
+                <Clock size={12} />
+              )}
+              {devotional.status === 'Acknowledged'
+                ? t('devo_status_acknowledged')
+                : devotional.status === 'Missed'
+                  ? t('devo_status_missed') || 'Missed'
+                  : t('devo_status_submitted')}
             </div>
           </div>
           <div style={S.heroMeta}>
@@ -313,14 +327,18 @@ const DevotionalView = () => {
         <div style={S.body}>
           
           {/* Owner action buttons (edit / delete) */}
-          {canEdit && !editing && (
+          {(canEdit || canDelete) && !editing && (
             <div style={S.actionRow}>
-              <button onClick={startEditing} style={S.btnSecondary}>
-                <Pencil size={15} /> {t('edit')}
-              </button>
-              <button onClick={() => setShowDeleteConfirm(true)} style={S.btnDanger}>
-                <Trash2 size={15} /> {t('delete')}
-              </button>
+              {canEdit && (
+                <button onClick={startEditing} style={S.btnSecondary}>
+                  <Pencil size={15} /> {t('edit')}
+                </button>
+              )}
+              {canDelete && (
+                <button onClick={() => setShowDeleteConfirm(true)} style={S.btnDanger}>
+                  <Trash2 size={15} /> {t('delete')}
+                </button>
+              )}
             </div>
           )}
 
