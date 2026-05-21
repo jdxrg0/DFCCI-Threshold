@@ -162,6 +162,45 @@ router.get('/calendar', requireAuth, requireVerified, async (req, res) => {
   }
 });
 
+// ─── GET check gap before a submission date ──────────────────────────────────
+router.get('/check-gap', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ message: 'Date is required' });
+
+    const targetDate = toDateOnly(date);
+
+    // Find the latest entry for this member that is strictly before targetDate
+    const prevEntry = await Devotional.findOne({
+      member: req.user._id,
+      date: { $lt: targetDate }
+    }).sort({ date: -1 });
+
+    if (!prevEntry) {
+      return res.json({ hasGap: false, gapDates: [], lastEntryDate: null });
+    }
+
+    const lastEntryDate = toDateOnly(prevEntry.date);
+    const gapDates = [];
+    let current = new Date(lastEntryDate);
+    current.setUTCDate(current.getUTCDate() + 1);
+
+    while (current < targetDate) {
+      gapDates.push(current.toISOString().slice(0, 10));
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    res.json({
+      hasGap: gapDates.length > 0,
+      gapDates,
+      lastEntryDate: lastEntryDate.toISOString().slice(0, 10)
+    });
+  } catch (error) {
+    console.error('Error checking gap:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // ─── GET a single devotional ────────────────────────────────────────────────
 router.get('/:id', requireAuth, requireVerified, async (req, res) => {
   try {
@@ -189,7 +228,7 @@ router.get('/:id', requireAuth, requireVerified, async (req, res) => {
 // ─── POST submit a new devotional ──────────────────────────────────────────
 router.post('/', requireAuth, requireVerified, async (req, res) => {
   try {
-    const { date, book, passageStr, summary, application, prayerFocus } = req.body;
+    const { date, book, passageStr, summary, application, prayerFocus, markGapsAsMissed } = req.body;
 
     if (!book?.trim()) return res.status(400).json({ message: 'Book is required.' });
     if (!passageStr?.trim()) return res.status(400).json({ message: 'Chapters/Verses are required.' });
@@ -238,6 +277,39 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
       application: application.trim(),
       prayerFocus: prayerFocus?.trim() || '',
     });
+
+    if (markGapsAsMissed) {
+      try {
+        const prevEntry = await Devotional.findOne({
+          member: req.user._id,
+          date: { $lt: devotionDate }
+        }).sort({ date: -1 });
+
+        if (prevEntry) {
+          const lastEntryDate = toDateOnly(prevEntry.date);
+          let current = new Date(lastEntryDate);
+          current.setUTCDate(current.getUTCDate() + 1);
+
+          while (current < devotionDate) {
+            const exists = await Devotional.findOne({ member: req.user._id, date: current });
+            if (!exists) {
+              await Devotional.create({
+                member: req.user._id,
+                date: new Date(current),
+                book: 'None',
+                passage: 'None (Confessed)',
+                summary: 'Confessed did not devotion.',
+                application: 'Confessed did not devotion.',
+                status: 'Missed',
+              });
+            }
+            current.setUTCDate(current.getUTCDate() + 1);
+          }
+        }
+      } catch (err) {
+        console.error('Error auto-marking gaps as missed:', err);
+      }
+    }
 
     res.status(201).json({ message: 'Devotional submitted successfully', devotional });
   } catch (error) {

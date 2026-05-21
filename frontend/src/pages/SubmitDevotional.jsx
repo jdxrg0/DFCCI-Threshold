@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, BookHeart, Send, BookOpen, Flame, Target, Calendar, Heart, Info, Zap } from 'lucide-react';
+import { ChevronLeft, BookHeart, Send, BookOpen, Flame, Target, Calendar, Heart, Info, Zap, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import useFormPersist from '../hooks/useFormPersist';
 import { useLanguage } from '../context/LanguageContext';
@@ -173,6 +173,17 @@ const SubmitDevotional = () => {
   const [focusedField, setFocusedField] = useState(null);
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const [gapConfig, setGapConfig] = useState({
+    isOpen: false,
+    gapDates: [],
+    lastEntryDate: null,
+  });
+
+  const formatDateStr = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  };
 
   // Build the 3 allowed dates: 2 days ago, yesterday, today
   const datePills = useMemo(() => {
@@ -209,6 +220,27 @@ const SubmitDevotional = () => {
     setError('');
   };
 
+  const proceedSubmit = async (markGapsAsMissed) => {
+    setLoading(true);
+    try {
+      await api.post('/devotionals', {
+        date,
+        book,
+        passageStr,
+        summary,
+        application,
+        prayerFocus,
+        markGapsAsMissed
+      });
+      clearSavedForm();
+      navigate('/devotionals');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to submit devotional');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     if (loading) return;
@@ -223,12 +255,19 @@ const SubmitDevotional = () => {
 
     setLoading(true);
     try {
-      await api.post('/devotionals', { date, book, passageStr, summary, application, prayerFocus });
-      clearSavedForm();
-      navigate('/devotionals');
+      const checkRes = await api.get(`/devotionals/check-gap?date=${date}`);
+      if (checkRes.data.hasGap) {
+        setGapConfig({
+          isOpen: true,
+          gapDates: checkRes.data.gapDates,
+          lastEntryDate: checkRes.data.lastEntryDate
+        });
+        setLoading(false);
+        return;
+      }
+      await proceedSubmit(false);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to submit devotional');
-    } finally {
       setLoading(false);
     }
   };
@@ -445,6 +484,130 @@ const SubmitDevotional = () => {
           </div>
         </div>
       </div>
+
+      {gapConfig.isOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999,
+          padding: '1rem',
+          backdropFilter: 'blur(8px)',
+          animation: 'fadeIn 0.2s ease-out',
+        }}>
+          <div className="fun-card" style={{
+            backgroundColor: 'var(--surface, var(--card-bg))',
+            width: '100%', maxWidth: '420px',
+            padding: '1.75rem',
+            position: 'relative',
+            display: 'flex', flexDirection: 'column', gap: '1.25rem',
+            borderRadius: '16px',
+            border: '1px solid var(--border-color)',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+          }}>
+            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.25rem', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <AlertTriangle size={22} color="#F59E0B" /> Submission Gap Detected
+            </h3>
+            
+            <p style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.9rem', lineHeight: '1.6' }}>
+              You have a gap between your last entry on <strong>{formatDateStr(gapConfig.lastEntryDate)}</strong> and this one.
+            </p>
+
+            <div style={{
+              backgroundColor: 'color-mix(in srgb, var(--primary) 4%, var(--card-bg))',
+              border: '1px solid var(--border-color)',
+              borderRadius: '10px',
+              padding: '0.75rem',
+              maxHeight: '120px',
+              overflowY: 'auto'
+            }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: '0.4rem', letterSpacing: '0.5px' }}>
+                Gap Dates ({gapConfig.gapDates.length}):
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                {gapConfig.gapDates.map(d => (
+                  <span key={d} style={{
+                    fontSize: '0.75rem',
+                    fontWeight: '600',
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '6px',
+                    backgroundColor: 'color-mix(in srgb, #EF4444 12%, transparent)',
+                    color: '#EF4444',
+                    border: '1px solid color-mix(in srgb, #EF4444 20%, transparent)'
+                  }}>
+                    {formatDateStr(d)}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: '1.5' }}>
+              Would you like to mark these gap days as <strong>Missed</strong>?
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button
+                onClick={() => {
+                  setGapConfig({ isOpen: false, gapDates: [], lastEntryDate: null });
+                  proceedSubmit(true);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  border: 'none',
+                  fontSize: '0.88rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  backgroundColor: '#EF4444',
+                  color: '#fff',
+                  transition: 'background-color 0.2s',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)'
+                }}
+              >
+                Yes, Mark as Missed
+              </button>
+              <button
+                onClick={() => {
+                  setGapConfig({ isOpen: false, gapDates: [], lastEntryDate: null });
+                  proceedSubmit(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-color)',
+                  fontSize: '0.88rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  backgroundColor: 'var(--card-bg)',
+                  color: 'var(--text-main)',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                No, Leave as Gaps
+              </button>
+              <button
+                onClick={() => setGapConfig({ isOpen: false, gapDates: [], lastEntryDate: null })}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  borderRadius: '10px',
+                  border: 'none',
+                  fontSize: '0.82rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-muted)',
+                  transition: 'color 0.2s'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
