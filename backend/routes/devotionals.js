@@ -148,11 +148,11 @@ router.get('/calendar', requireAuth, requireVerified, async (req, res) => {
     const entries = await Devotional.find({
       member: targetUserId,
       date: { $gte: start, $lt: end },
-    }).select('date status').lean();
+    }).select('date status passage').lean();
 
     const days = entries.map(e => ({
       date: toDateOnly(e.date).toISOString().slice(0, 10),
-      status: e.status,
+      status: (e.status === 'Acknowledged' && e.passage === 'None (Confessed)') ? 'Missed' : e.status,
     }));
 
     res.json(days);
@@ -541,13 +541,15 @@ router.put('/:id/acknowledge', requireAuth, requireVerified, requireRole(['ADMIN
       .populate('member', 'displayName email');
     if (!devotional) return res.status(404).json({ message: 'Devotional not found' });
 
-    if (devotional.status === 'Acknowledged') {
+    if (devotional.status === 'Acknowledged' || (devotional.status === 'Missed' && devotional.acknowledgedBy)) {
       return res.status(400).json({ message: 'Already acknowledged.' });
     }
 
     const { note } = req.body;
 
-    devotional.status = 'Acknowledged';
+    if (devotional.status !== 'Missed') {
+      devotional.status = 'Acknowledged';
+    }
     devotional.acknowledgedBy = req.user._id;
     devotional.acknowledgedAt = new Date();
     devotional.leaderNote = note?.trim() || '';

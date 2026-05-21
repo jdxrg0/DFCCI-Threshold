@@ -276,8 +276,9 @@ const DevotionalView = () => {
   const isOwner = devotional?.member?._id === user?._id;
   const isAcknowledged = devotional?.status === 'Acknowledged';
   const isMissed = devotional?.status === 'Missed';
-  const canEdit = isOwner && !isAcknowledged && !isMissed;
-  const canDelete = isOwner && !isAcknowledged;
+  const hasBeenAcknowledged = isAcknowledged || !!devotional?.acknowledgedBy;
+  const canEdit = isOwner && !hasBeenAcknowledged && !isMissed;
+  const canDelete = isOwner && !hasBeenAcknowledged;
 
   return (
     <div style={S.page}>
@@ -483,7 +484,7 @@ const DevotionalView = () => {
           )}
 
           {/* ── Leader Note (If Acknowledged) ── */}
-          {isAcknowledged && devotional.leaderNote && (
+          {hasBeenAcknowledged && devotional.leaderNote && (
             <div style={{ marginTop: '0.5rem' }}>
               <div style={S.sectionHeader}>
                 <MessageSquare size={14} /> {t('devo_leader_note')}
@@ -502,7 +503,7 @@ const DevotionalView = () => {
           )}
 
           {/* ── Leader Action (Acknowledge) ── */}
-          {isLeader && !isAcknowledged && (
+          {isLeader && !hasBeenAcknowledged && (
             <div style={{ marginTop: '1rem', paddingTop: '1.25rem', borderTop: '1px dashed var(--border-color)' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontWeight: '800', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
                 <CheckCircle2 size={18} /> {t('devo_acknowledge_title')}
@@ -525,7 +526,7 @@ const DevotionalView = () => {
           )}
 
           {/* ── Acknowledgment receipt for owner ── */}
-          {isOwner && isAcknowledged && !devotional.leaderNote && (
+          {isOwner && hasBeenAcknowledged && !devotional.leaderNote && (
             <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem', fontWeight: '600' }}>
               {t('devo_acknowledged_by')}: <span style={{ color: 'var(--text-main)' }}>{devotional.acknowledgedBy?.displayName || 'Leader'}</span>
               {devotional.acknowledgedAt && ` • ${format(new Date(devotional.acknowledgedAt), 'MMM d, yyyy')}`}
