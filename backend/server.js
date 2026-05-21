@@ -9,7 +9,6 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const threadRoutes = require('./routes/threads');
-const notificationRoutes = require('./routes/notifications');
 const counselorRoutes = require('./routes/counselor');
 const ticketRoutes = require('./routes/tickets');
 const affirmationRoutes = require('./routes/affirmations');
@@ -61,7 +60,6 @@ mongoose.connect(process.env.MONGODB_URI)
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/notifications', notificationRoutes);
 app.use('/api/threads', threadRoutes);
 app.use('/api/counselor', counselorRoutes);
 app.use('/api/tickets', ticketRoutes);

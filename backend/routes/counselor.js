@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const Thread = require('../models/Thread');
-const Notification = require('../models/Notification');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 const sendEmail = require('../utils/sendEmail');
 
@@ -49,22 +48,6 @@ router.post('/threads/:id/request-access', requireAuth, requireRole(['COUNSELOR'
     thread.counselorConsentReceiver = 'Pending';
     thread.counselorId = req.user._id;
     await thread.save();
-
-    // Create notifications for both parties
-    await Notification.create([
-      {
-        user: thread.sender._id,
-        type: 'CounselorConsent',
-        message: 'A counselor is requesting to view your thread.',
-        thread: thread._id
-      },
-      {
-        user: thread.receiver._id,
-        type: 'CounselorConsent',
-        message: 'A counselor is requesting to view your thread.',
-        thread: thread._id
-      }
-    ]);
 
     sendEmail(
       thread.sender.email,

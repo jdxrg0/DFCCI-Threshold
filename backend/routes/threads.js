@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const Thread = require('../models/Thread');
-const Notification = require('../models/Notification');
 const sendEmail = require('../utils/sendEmail');
 const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
 const appEmitter = require('../utils/eventEmitter');
@@ -34,26 +33,12 @@ router.put('/admin/:id/approve-deletion', requireAuth, requireVerified, requireR
     thread.deletedAt = new Date();
     await thread.save();
 
-    // Notify Sender
-    await Notification.create({
-      user: thread.sender._id,
-      type: 'DeletionApproved',
-      message: 'Your thread deletion request has been approved.',
-      thread: thread._id
-    });
     sendEmail(
       thread.sender.email,
       'Thread Deletion Approved',
       '<p>Your request to delete the thread has been approved. It will be permanently removed in 60 days.</p>'
     ).catch(err => console.error('Failed to send email:', err));
 
-    // Notify Receiver
-    await Notification.create({
-      user: thread.receiver._id,
-      type: 'ThreadDeleted',
-      message: 'A thread you were part of has been deleted.',
-      thread: thread._id
-    });
     sendEmail(
       thread.receiver.email,
       'Thread Deleted',
@@ -80,13 +65,6 @@ router.put('/admin/:id/reject-deletion', requireAuth, requireVerified, requireRo
     thread.deletionRequestStatus = 'Rejected';
     await thread.save();
 
-    // Notify Sender
-    await Notification.create({
-      user: thread.sender._id,
-      type: 'DeletionRejected',
-      message: 'Your thread deletion request was rejected.',
-      thread: thread._id
-    });
     sendEmail(
       thread.sender.email,
       'Thread Deletion Rejected',
@@ -130,26 +108,12 @@ router.put('/admin/:id/approve-restore', requireAuth, requireVerified, requireRo
     thread.lastRestoredAt = new Date();
     await thread.save();
 
-    // Notify Sender
-    await Notification.create({
-      user: thread.sender._id,
-      type: 'RestoreApproved',
-      message: 'Your thread restoration request has been approved.',
-      thread: thread._id
-    });
     sendEmail(
       thread.sender.email,
       'Thread Restoration Approved',
       '<p>Your request to restore the thread has been approved. It is back in your active dashboard.</p>'
     ).catch(err => console.error('Failed to send email:', err));
 
-    // Notify Receiver
-    await Notification.create({
-      user: thread.receiver._id,
-      type: 'ThreadRestored',
-      message: 'A previously deleted thread you were part of has been restored.',
-      thread: thread._id
-    });
     sendEmail(
       thread.receiver.email,
       'Thread Restored',
@@ -176,13 +140,6 @@ router.put('/admin/:id/reject-restore', requireAuth, requireVerified, requireRol
     thread.restoreRequestStatus = 'Rejected';
     await thread.save();
 
-    // Notify Sender
-    await Notification.create({
-      user: thread.sender._id,
-      type: 'RestoreRejected',
-      message: 'Your thread restoration request was rejected.',
-      thread: thread._id
-    });
     sendEmail(
       thread.sender.email,
       'Thread Restoration Rejected',
@@ -330,14 +287,7 @@ router.get('/:id', requireAuth, requireVerified, async (req, res) => {
       return res.status(403).json({ message: 'Access denied' });
     }
 
-    // Mark related notifications as read for the viewing user conditionally
-    const unreadCount = await Notification.countDocuments({ user: req.user._id, thread: req.params.id, read: false });
-    if (unreadCount > 0) {
-      await Notification.updateMany(
-        { user: req.user._id, thread: req.params.id, read: false },
-        { $set: { read: true } }
-      );
-    }
+    // Mark message as read if it's the other party viewing it
 
     // Mark message as read if it's the other party viewing it
     let saved = false;
@@ -465,12 +415,7 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
     
     await thread.populate('receiver');
 
-    await Notification.create({
-      user: receiverId,
-      type: 'NewMirror',
-      message: 'You have received a new Gentle Mirror message.',
-      thread: thread._id
-    });
+    // Send email in background
 
     // Send email in background
     sendEmail(
@@ -547,11 +492,6 @@ router.post('/:id/reply', requireAuth, requireVerified, async (req, res) => {
     if (thread.senderRepliesUsed >= 3 && thread.receiverRepliesUsed >= 3) {
       thread.status = 'Escalated';
       
-      await Notification.insertMany([
-        { user: thread.sender._id, type: 'Escalated', message: 'Thread automatically escalated to counselor due to reply limit.', thread: thread._id },
-        { user: thread.receiver._id, type: 'Escalated', message: 'Thread automatically escalated to counselor due to reply limit.', thread: thread._id }
-      ]);
-      
       sendEmail(
         thread.sender.email,
         'Thread Escalated',
@@ -568,13 +508,6 @@ router.post('/:id/reply', requireAuth, requireVerified, async (req, res) => {
     await thread.save();
 
     const notifyUser = isSender ? thread.receiver : thread.sender;
-
-    await Notification.create({
-      user: notifyUser._id,
-      type: 'NewReply',
-      message: 'You have a new reply in your thread.',
-      thread: thread._id
-    });
 
     sendEmail(
       notifyUser.email,
@@ -609,13 +542,6 @@ router.put('/:id/resolve', requireAuth, requireVerified, async (req, res) => {
     thread.resolvedAt = new Date();
     await thread.save();
 
-    await Notification.create({
-      user: thread.receiver._id,
-      type: 'Resolved',
-      message: 'Your thread has been marked as resolved.',
-      thread: thread._id
-    });
-
     sendEmail(
       thread.receiver.email,
       'Your Gentle Mirror thread has been resolved',
@@ -648,13 +574,6 @@ router.put('/:id/accept', requireAuth, requireVerified, async (req, res) => {
     thread.status = 'Accepted';
     thread.acceptedAt = new Date();
     await thread.save();
-
-    await Notification.create({
-      user: thread.sender._id,
-      type: 'Accepted',
-      message: 'The receiver has accepted your Gentle Mirror.',
-      thread: thread._id
-    });
 
     sendEmail(
       thread.sender.email,
@@ -702,13 +621,6 @@ router.post('/:id/escalate', requireAuth, requireVerified, async (req, res) => {
 
     const notifyUser = isSender ? thread.receiver : thread.sender;
 
-    await Notification.create({
-      user: notifyUser._id,
-      type: 'EscalationConsent',
-      message: 'The other person is requesting counselor support. Do you agree?',
-      thread: thread._id
-    });
-
     sendEmail(
       notifyUser.email,
       'Counselor Support Requested',
@@ -751,12 +663,6 @@ router.put('/:id/consent-escalation', requireAuth, requireVerified, async (req, 
       thread.escalationDeclinedCount = (thread.escalationDeclinedCount || 0) + 1;
       // notify requester
       const notifyUser = isSender ? thread.receiver : thread.sender;
-      await Notification.create({
-        user: notifyUser._id,
-        type: 'EscalationConsent',
-        message: 'The other person has declined the counselor escalation request.',
-        thread: thread._id
-      });
       sendEmail(
         notifyUser.email,
         'Counselor Support Declined',

@@ -17,7 +17,6 @@ import SendMirror from './pages/SendMirror';
 import ThreadView from './pages/ThreadView';
 import AdminPanel from './pages/AdminPanel';
 import CounselorDashboard from './pages/CounselorDashboard';
-import Notifications from './pages/Notifications';
 import ModuleDocs from './pages/ModuleDocs';
 import TicketsDashboard from './pages/TicketsDashboard';
 import CreateTicket from './pages/CreateTicket';
@@ -106,7 +105,6 @@ const App = () => {
                 <Route path="/mirror/thread/:id" element={<ProtectedRoute><ThreadView /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
                 <Route path="/counselor" element={<ProtectedRoute><CounselorDashboard /></ProtectedRoute>} />
-                <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
                 
                 {/* Module Docs - Generally public but can be protected if desired */}
                 <Route path="/docs/:moduleName" element={<ProtectedRoute allowGuest><ModuleDocs /></ProtectedRoute>} />

@@ -564,7 +564,7 @@ export const moduleDocs = {
         'Authenticity pledge: Every submission requires a pledge that your reflection is a genuine product of your own quiet time, free from AI-generated text or plagiarism.',
         'Locked upon acknowledgment: You can freely edit or delete your devotional entries, but ONLY before a leader acknowledges it. Once acknowledged, the entry is locked.',
         'Streak continuity: Your active day streak is calculated by consecutive calendar days with at least one devotional entry. If you miss a day, your streak will reset to 0.',
-        'Streak reminders: Automated notifications will be sent to your email and in-app notifications 3 hours and 1 hour before the day ends (UTC time) if your streak is at risk.'
+        'Streak reminders: Automated email reminders will be sent 3 hours and 1 hour before the day ends (UTC time) if your streak is at risk.'
       ],
       templates: [
         {
@@ -601,7 +601,7 @@ export const moduleDocs = {
         'Tapat na pangako: Ang bawat submission ay nangangailangan ng tapat na pangako na ang reflection ay galing sa iyong sariling quiet time, hindi gawa ng AI o kinopya.',
         'Naka-lock kapag tinanggap na: Maaari mong i-edit o burahin ang iyong entry, ngunit kapag ito ay tinanggap na ng lider, hindi na ito pwedeng baguhin.',
         'Streak ng Araw: Ang iyong active streak ay binibilang base sa sunod-sunod na araw na may kahit isang submission. Kapag may lumipas na araw, babalik ito sa 0.',
-        'Alerto at paalala: May awtomatikong email at in-app reminder na ipapadala 3 oras at 1 oras bago matapos ang araw (UTC) kung nanganganib maputol ang iyong streak.'
+        'Alerto at paalala: May awtomatikong email reminder na ipapadala 3 oras at 1 oras bago matapos ang araw (UTC) kung nanganganib maputol ang iyong streak.'
       ],
       templates: [
         {
@@ -638,7 +638,7 @@ export const moduleDocs = {
         'Sincerity pledge: You gotta tick that pledge box to verify that this is your own genuine reflection, not AI-generated or copy-pasted.',
         'Lock on acknowledgment: You can edit or delete your entry anytime, but ONLY before a leader acknowledges it. Once they acknowledge, it\'s locked forever!',
         'Streak protection: Your streak counts consecutive calendar days. Miss a day, and it\'s back to zero. Keep the fire burning, bes!',
-        'Streak reminders: Automated notifications will slide into your email and in-app alerts 3 hours and 1 hour before the day ends (UTC) to warn you if your streak is at risk.'
+        'Streak reminders: Automated email alerts will be sent 3 hours and 1 hour before the day ends (UTC) to warn you if your streak is at risk.'
       ],
       templates: [
         {

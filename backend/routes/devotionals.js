@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const Devotional = require('../models/Devotional');
-const Notification = require('../models/Notification');
 const User = require('../models/User');
 
 const { parsePassage } = require('../utils/passageParser');
@@ -237,18 +236,6 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
       application: application.trim(),
       prayerFocus: prayerFocus?.trim() || '',
     });
-
-    // Notify all counselors and admins
-    const leaders = await User.find({ role: { $in: ['ADMIN', 'COUNSELOR'] }, isVerified: true }).select('_id');
-    const notifications = leaders.map(leader => ({
-      user: leader._id,
-      type: 'NewDevotional',
-      message: `${req.user.displayName} submitted a devotional entry.`,
-      thread: devotional._id,
-    }));
-    if (notifications.length > 0) {
-      await Notification.insertMany(notifications);
-    }
 
     res.status(201).json({ message: 'Devotional submitted successfully', devotional });
   } catch (error) {
@@ -489,14 +476,6 @@ router.put('/:id/acknowledge', requireAuth, requireVerified, requireRole(['ADMIN
     devotional.acknowledgedAt = new Date();
     devotional.leaderNote = note?.trim() || '';
     await devotional.save();
-
-    // Notify the member
-    await Notification.create({
-      user: devotional.member._id,
-      type: 'DevotionalAcknowledged',
-      message: `${req.user.displayName} acknowledged your devotional entry.`,
-      thread: devotional._id,
-    });
 
     res.json({ message: 'Devotional acknowledged', devotional });
   } catch (error) {

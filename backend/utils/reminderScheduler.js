@@ -2,7 +2,6 @@ const User = require('../models/User');
 const DuesMember = require('../models/DuesMember');
 const DuesPayment = require('../models/DuesPayment');
 const Devotional = require('../models/Devotional');
-const Notification = require('../models/Notification');
 const sendEmail = require('./sendEmail');
 
 const START_DATE = new Date('2026-05-01');
@@ -212,15 +211,7 @@ const sendDevotionalStreakReminders = async (hoursLeft, targetMemberId = null) =
     let sentCount = 0;
 
     for (const user of usersAtRisk) {
-      // Create in-app notification
       const timeWord = hoursLeft === 1 ? '1 hour' : `${hoursLeft} hours`;
-      const notificationMessage = `Your devotional streak is about to break! You have ${timeWord} left to submit today's entry and keep your streak alive. 🔥`;
-      
-      await Notification.create({
-        user: user._id,
-        type: 'DevotionalStreakReminder',
-        message: notificationMessage,
-      });
 
       // Send email reminder
       const subject = `Keep your Devotional Streak alive! (Only ${timeWord} left)`;

@@ -4,7 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-import { Bell, Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, Sun, Wallet, BookHeart, ChevronRight, Settings, Globe } from 'lucide-react';
+import { Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, Sun, Wallet, BookHeart, ChevronRight, Settings, Globe } from 'lucide-react';
 import ThemePanel, { ThemePanelContent } from './ThemePanel';
 import LanguageSwitcher from './LanguageSwitcher';
 import api from '../api';
@@ -14,7 +14,7 @@ import { renderAvatarHelper } from '../utils/avatarHelper';
 // ── Module map: route prefix → { icon, dashboardPath, label } ──────────────
 // Add a new entry here whenever a new module is introduced to the platform.
 // Routes that should NOT clear the active module context (utility/overlay pages)
-const NEUTRAL_ROUTES = ['/notifications'];
+const NEUTRAL_ROUTES = [];
 
 const MODULE_MAP = [
   {
@@ -90,7 +90,6 @@ const Navbar = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
-  const [notifications, setNotifications] = useState([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Detect which module (if any) the user is currently inside
@@ -111,49 +110,6 @@ const Navbar = () => {
       document.body.style.overflow = '';
     };
   }, [isMobileMenuOpen]);
-
-  useEffect(() => {
-    if (user) {
-      fetchNotifications();
-      const intervalId = setInterval(fetchNotifications, 15000);
-      return () => clearInterval(intervalId);
-    }
-  }, [user, location.pathname]);
-
-  const fetchNotifications = async () => {
-    try {
-      const res = await api.get('/notifications');
-      setNotifications(res.data);
-    } catch (err) {
-      console.error('Failed to fetch notifications');
-    }
-  };
-
-  const handleNotificationToggle = (e) => {
-    e.preventDefault();
-    // If the hamburger is open, just close it — the user likely wants to
-    // see the notifications page that's already behind the menu overlay.
-    if (isMobileMenuOpen) {
-      setIsMobileMenuOpen(false);
-      // If not already on notifications, navigate there too
-      if (location.pathname !== '/notifications') {
-        navigate('/notifications');
-      }
-      return;
-    }
-    // Normal toggle: go to notifications, or go back if already there
-    if (location.pathname === '/notifications') {
-      if (window.history.state && window.history.state.idx > 0) {
-        navigate(-1);
-      } else {
-        navigate('/dashboard');
-      }
-    } else {
-      navigate('/notifications');
-    }
-  };
-
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   const handleLogout = async () => {
     await logout();
@@ -250,32 +206,7 @@ const Navbar = () => {
                 </Link>
               )}
 
-              {/* Notification bell */}
-              <button
-                onClick={handleNotificationToggle}
-                className="btn btn-secondary"
-                style={{ padding: '0.5rem', position: 'relative' }}
-                title="Notifications"
-              >
-                <Bell size={20} color={location.pathname === '/notifications' ? 'var(--primary)' : 'var(--text-main)'} style={{ transition: 'color 0.2s' }} />
-                {location.pathname === '/notifications' && (
-                  <span style={{
-                    position: 'absolute',
-                    bottom: '3px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '4px',
-                    height: '4px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--primary)',
-                  }} />
-                )}
-                {unreadCount > 0 && (
-                  <span style={{ position: 'absolute', top: '-5px', right: '-5px', backgroundColor: '#EF4444', color: 'white', fontSize: '0.65rem', padding: '2px 6px', borderRadius: 'var(--radius)' }}>
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
+
 
               <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '0.5rem' }} title={t('logout')}>
                 <LogOut size={20} />
@@ -301,36 +232,7 @@ const Navbar = () => {
 
         {/* ── Mobile header row (icons + hamburger) ── */}
         <div className="mobile-header-row">
-          {user && (
-            <>
-              {/* Notification bell */}
-              <button
-                onClick={handleNotificationToggle}
-                className="mobile-only-notification-btn btn btn-secondary"
-                aria-label="Notifications"
-                style={{ position: 'relative', padding: '0.5rem', background: 'transparent', border: 'none', boxShadow: 'none' }}
-              >
-                <Bell size={24} color={(location.pathname === '/notifications' && !isMobileMenuOpen) ? 'var(--primary)' : 'var(--text-main)'} style={{ transition: 'color 0.2s' }} />
-                {(location.pathname === '/notifications' && !isMobileMenuOpen) && (
-                  <span style={{
-                    position: 'absolute',
-                    bottom: '4px',
-                    left: '50%',
-                    transform: 'translateX(-50%)',
-                    width: '4px',
-                    height: '4px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--primary)',
-                  }} />
-                )}
-                {unreadCount > 0 && (
-                  <span style={{ position: 'absolute', top: '2px', right: '2px', backgroundColor: '#EF4444', color: 'white', fontSize: '0.65rem', padding: '2px 5px', borderRadius: '50%' }}>
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-            </>
-          )}
+
 
           {/* Hamburger */}
           <button

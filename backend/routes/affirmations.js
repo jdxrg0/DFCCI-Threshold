@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const Affirmation = require('../models/Affirmation');
-const Notification = require('../models/Notification');
 const sendEmail = require('../utils/sendEmail');
 const { requireAuth, requireVerified } = require('../middleware/authMiddleware');
 
@@ -46,12 +45,6 @@ router.get('/:id', requireAuth, requireVerified, async (req, res) => {
       await affirmation.save();
     }
 
-    // Mark related notifications as read
-    await Notification.updateMany(
-      { user: req.user._id, thread: req.params.id, read: false },
-      { $set: { read: true } }
-    );
-
     res.json(affirmation);
   } catch (error) {
     console.error('Error fetching affirmation:', error);
@@ -86,15 +79,6 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
     });
 
     await affirmation.populate('receiver');
-
-    // Notify receiver
-    await Notification.create({
-      user:    receiverId,
-      type:    'NewAffirmation',
-      message: `Someone sent you a Shining Light affirmation.`,
-      // Reuse the `thread` field to store the affirmation ID for link resolution
-      thread:  affirmation._id,
-    });
 
     sendEmail(
       affirmation.receiver.email,
@@ -131,14 +115,6 @@ router.post('/:id/reply', requireAuth, requireVerified, async (req, res) => {
     affirmation.reply = { text: text.trim(), sentAt: new Date() };
     await affirmation.save();
 
-    // Notify sender
-    await Notification.create({
-      user:    affirmation.sender._id,
-      type:    'AffirmationReply',
-      message: `${affirmation.receiver.displayName} replied to your Shining Light.`,
-      thread:  affirmation._id,
-    });
-
     sendEmail(
       affirmation.sender.email,
       'Your Shining Light received a thank-you reply',
@@ -170,14 +146,6 @@ router.put('/:id/receive', requireAuth, requireVerified, async (req, res) => {
     affirmation.status     = 'Received';
     affirmation.receivedAt = new Date();
     await affirmation.save();
-
-    // Notify sender
-    await Notification.create({
-      user:    affirmation.sender._id,
-      type:    'AffirmationReceived',
-      message: 'Your Shining Light has been received with gratitude.',
-      thread:  affirmation._id,
-    });
 
     sendEmail(
       affirmation.sender.email,
