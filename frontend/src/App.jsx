@@ -16,6 +16,8 @@ import MirrorDashboard from './pages/MirrorDashboard';
 import SendMirror from './pages/SendMirror';
 import ThreadView from './pages/ThreadView';
 import AdminPanel from './pages/AdminPanel';
+import AutomationDashboard from './pages/AutomationDashboard';
+import ServingCalendar from './pages/ServingCalendar';
 import CounselorDashboard from './pages/CounselorDashboard';
 import ModuleDocs from './pages/ModuleDocs';
 import TicketsDashboard from './pages/TicketsDashboard';
@@ -104,6 +106,8 @@ const App = () => {
                 <Route path="/mirror/send" element={<ProtectedRoute><SendMirror /></ProtectedRoute>} />
                 <Route path="/mirror/thread/:id" element={<ProtectedRoute><ThreadView /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute><AdminPanel /></ProtectedRoute>} />
+                <Route path="/admin/automation" element={<ProtectedRoute><AutomationDashboard /></ProtectedRoute>} />
+                <Route path="/automation-hub/calendar" element={<ProtectedRoute><ServingCalendar /></ProtectedRoute>} />
                 <Route path="/counselor" element={<ProtectedRoute><CounselorDashboard /></ProtectedRoute>} />
                 
                 {/* Module Docs - Generally public but can be protected if desired */}

@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import PopupModal from '../components/PopupModal';
+import MessengerAutomation from '../components/MessengerAutomation';
 import { PRESETS, renderPresetSvg } from '../utils/avatarHelper';
 import { 
   ChevronLeft, 
@@ -65,6 +66,7 @@ const AdminPanel = () => {
   const [limitsError, setLimitsError] = useState('');
 
   const [popup, setPopup] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false, isPrompt: false, promptValue: '' });
+  const [hasInitialized, setHasInitialized] = useState(false);
 
   const showAlert = (title, message) => setPopup({ isOpen: true, title, message, onConfirm: null, isAlert: true, isPrompt: false, promptValue: '' });
   const showConfirm = (title, message, onConfirm) => setPopup({ isOpen: true, title, message, onConfirm, isAlert: false, isPrompt: false, promptValue: '' });
@@ -98,10 +100,13 @@ const AdminPanel = () => {
 
   // Parallel initial data load to populate counts & metrics instantly
   useEffect(() => {
+    if (hasInitialized) return;
     if (user?.role !== 'ADMIN') {
       navigate('/dashboard');
       return;
     }
+    
+    setHasInitialized(true);
     const initLoad = async () => {
       try {
         setLoading(true);
@@ -2223,6 +2228,7 @@ const AdminPanel = () => {
             </div>
           );
         })()}
+
           </div>
         </div>
       </div>

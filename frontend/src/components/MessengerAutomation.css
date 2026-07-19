@@ -1,0 +1,233 @@
+/* Messenger Automation Styles */
+
+.ma-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.text-primary {
+  color: var(--primary);
+}
+
+.text-danger {
+  color: #ef4444;
+}
+
+.ma-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 4rem 2rem;
+  gap: 1rem;
+  color: var(--text-muted);
+}
+
+.ma-empty-state h3 {
+  color: var(--text-main);
+  margin-bottom: 0;
+}
+
+.ma-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.5rem;
+}
+
+.ma-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ma-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.ma-card-title {
+  font-size: 1.15rem;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.ma-icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.ma-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-main);
+}
+:root.dark .ma-icon-btn:hover, :root.aurora .ma-icon-btn:hover, :root.ocean .ma-icon-btn:hover, :root.vaporwave .ma-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.ma-icon-btn.text-danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.ma-cron-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  background: color-mix(in srgb, var(--primary) 15%, transparent);
+  color: var(--primary);
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  width: fit-content;
+  font-weight: 600;
+}
+
+.ma-target-url {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-decoration: none;
+  word-break: break-all;
+}
+.ma-target-url:hover {
+  text-decoration: underline;
+  color: var(--primary);
+}
+
+.ma-message-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.03);
+  padding: 0.85rem;
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  color: var(--text-main);
+  border-left: 3px solid var(--primary);
+  margin-top: 0.5rem;
+}
+:root.dark .ma-message-preview, :root.aurora .ma-message-preview, :root.ocean .ma-message-preview, :root.vaporwave .ma-message-preview, :root.cyberpunk .ma-message-preview {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.ma-message-preview span {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.5;
+}
+
+/* Modal Styles */
+.ma-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.ma-modal-content {
+  width: 100%;
+  max-width: 550px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp 0.3s ease-out;
+}
+
+.ma-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+.ma-modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.ma-time-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.ma-days-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ma-day-btn {
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: var(--radius);
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+.ma-day-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+:root.dark .ma-day-btn:hover, :root.aurora .ma-day-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.ma-day-btn.selected {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.ma-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 2rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 600px) {
+  .ma-header {
+    flex-direction: column;
+  }
+  .ma-modal-content {
+    padding: 1.25rem;
+  }
+}

@@ -19,6 +19,12 @@ const gameRoutes = require('./routes/games');
 const devotionalRoutes = require('./routes/devotionals');
 const emailRoutes = require('./routes/emails');
 const bibleVideoRoutes = require('./routes/bibleVideos');
+const automationRoutes = require('./routes/automation');
+const memberRoutes = require('./routes/members');
+const submissionRoutes = require('./routes/submissions');
+const calendarRoutes = require('./routes/calendar');
+const settingsRoutes = require('./routes/settings');
+const automationScheduler = require('./services/automationScheduler');
 const { initReminderScheduler } = require('./utils/reminderScheduler');
 
 
@@ -52,6 +58,7 @@ app.use(cookieParser());
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB');
+    automationScheduler.init();
   })
   .catch((err) => {
     console.error('MongoDB connection error:', err);
@@ -71,6 +78,11 @@ app.use('/api/games', gameRoutes);
 app.use('/api/devotionals', devotionalRoutes);
 app.use('/api/emails', emailRoutes);
 app.use('/api/bible-videos', bibleVideoRoutes);
+app.use('/api/automation', automationRoutes);
+app.use('/api/members', memberRoutes);
+app.use('/api/submissions', submissionRoutes);
+app.use('/api/calendar', calendarRoutes);
+app.use('/api/settings', settingsRoutes);
 
 
 // Ping route for uptime monitoring

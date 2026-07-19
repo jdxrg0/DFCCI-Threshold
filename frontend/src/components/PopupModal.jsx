@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
 
 const PopupModal = ({ isOpen, onClose, title, message, onConfirm, confirmText, cancelText, isAlert, isPrompt, promptValue, onPromptChange }) => {
   useEffect(() => {
@@ -15,12 +16,12 @@ const PopupModal = ({ isOpen, onClose, title, message, onConfirm, confirmText, c
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 9999,
+      zIndex: 99999,
       padding: '1rem',
       backdropFilter: 'blur(4px)'
     }}>
@@ -69,7 +70,8 @@ const PopupModal = ({ isOpen, onClose, title, message, onConfirm, confirmText, c
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library, Gamepad2, BookHeart, Flame } from 'lucide-react';
+import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library, Gamepad2, BookHeart, Flame, Clock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../api';
@@ -149,6 +149,24 @@ const PortalDashboard = () => {
       openTitle: t('open_module')
     }
   ];
+
+  if (user?.role === 'ADMIN') {
+    // Insert Automation Hub after Devotional Tracker (index 1 -> so insert at index 2)
+    const devoIndex = modules.findIndex(m => m.id === 'devotional_tracker');
+    const insertIndex = devoIndex !== -1 ? devoIndex + 1 : modules.length;
+    
+    modules.splice(insertIndex, 0, {
+      id: 'automation_hub',
+      title: 'Automation Hub',
+      desc: 'Manage scheduled group messages and personalized role reminders.',
+      Icon: Clock,
+      docsPath: '/docs/automation-hub',
+      openPath: '/admin/automation',
+      OpenIcon: Clock,
+      docsTitle: t('read_docs') || 'Read Docs',
+      openTitle: t('open_module') || 'Open Module'
+    });
+  }
 
   const statPills = [
     { icon: Wallet, value: stats ? `₱${stats.fundBalance.toLocaleString()}` : '—', label: 'Fund' },
