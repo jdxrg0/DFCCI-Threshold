@@ -53,7 +53,7 @@ export default function AutomationDashboard() {
     name: '',
     targetUrl: '',
     targetRole: '',
-    advanceWeeks: 0,
+    advanceWeeks: 1,
     message: '',
     time: '12:00',
     selectedDays: [],
@@ -206,14 +206,14 @@ export default function AutomationDashboard() {
     setIsModalOpen(true);
     setShowAdvanced(mode === 'dynamic');
     setEditingId(null);
-    setFormData({ name: '', targetUrl: '', targetRole: '', advanceWeeks: 0, message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
+    setFormData({ name: '', targetUrl: '', targetRole: '', advanceWeeks: 1, message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
     setMessageQueue([]);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setFormData({ name: '', targetUrl: '', targetRole: '', advanceWeeks: 0, message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
+    setFormData({ name: '', targetUrl: '', targetRole: '', advanceWeeks: 1, message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
     setMessageQueue([]);
   };
 
@@ -386,7 +386,7 @@ export default function AutomationDashboard() {
       name: schedule.scheduleName,
       targetUrl: schedule.chatUrl || '',
       targetRole: schedule.targetRole || '',
-      advanceWeeks: schedule.advanceWeeks || 0,
+      advanceWeeks: schedule.advanceWeeks || 1,
       message: schedule.message,
       time,
       selectedDays,
@@ -426,7 +426,7 @@ export default function AutomationDashboard() {
       codeTemplate: formData.codeTemplate,
       chatUrl: formData.targetUrl,
       targetRole: showAdvanced ? formData.targetRole : '',
-      advanceWeeks: showAdvanced ? parseInt(formData.advanceWeeks, 10) : 0,
+      advanceWeeks: showAdvanced ? parseInt(formData.advanceWeeks, 10) : 1,
       message: formData.message,
       messageQueue: messageQueue
     };
@@ -642,11 +642,10 @@ export default function AutomationDashboard() {
                         onChange={(e) => setFormData({...formData, advanceWeeks: e.target.value})}
                         style={{ appearance: 'auto' }}
                       >
-                        <option value="0">0 (Current Week)</option>
-                        <option value="1">1 Week</option>
-                        <option value="2">2 Weeks</option>
-                        <option value="3">3 Weeks</option>
-                        <option value="4">4 Weeks</option>
+                        <option value="1">Next 1 Week</option>
+                        <option value="2">Next 2 Weeks</option>
+                        <option value="3">Next 3 Weeks</option>
+                        <option value="4">Next 4 Weeks</option>
                       </select>
                     </div>
                   </div>
