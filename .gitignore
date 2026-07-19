@@ -24,3 +24,6 @@ Thumbs.db
 
 # Vite
 frontend/.vite/
+
+.vercel
+.env*

@@ -554,10 +554,17 @@ export default function AutomationDashboard() {
               </div>
               
               <div style={{ padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <a href={schedule.chatUrl || '#'} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'none', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  <LinkIcon size={12} style={{ flexShrink: 0 }} />
-                  {schedule.chatUrl ? schedule.chatUrl.replace('https://', '') : 'Invalid URL'}
-                </a>
+                {schedule.targetRole ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-main)', fontWeight: '600' }}>
+                    <LinkIcon size={12} style={{ flexShrink: 0 }} />
+                    Role-Based Message (Dynamic URL)
+                  </span>
+                ) : (
+                  <a href={schedule.chatUrl || '#'} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'none', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <LinkIcon size={12} style={{ flexShrink: 0 }} />
+                    {schedule.chatUrl ? schedule.chatUrl.replace('https://', '') : 'Invalid URL'}
+                  </a>
+                )}
               </div>
               
               <div style={{ position: 'relative', padding: '1rem', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderLeft: '3px solid var(--primary)', borderRadius: '0.75rem', fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>

@@ -191,14 +191,25 @@ class AutomationScheduler {
       
       const todayStr = new Date().toISOString().split('T')[0]; // needed for role reminder diff math
 
+      // Determine if we should ignore today's date (if it's Sunday and past 12 PM Manila time)
+      const nowManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+      const isSunday = nowManila.getDay() === 0;
+      const isPastNoon = nowManila.getHours() >= 12;
+      
+      let cutoffDateObj = new Date();
+      if (isSunday && isPastNoon) {
+        cutoffDateObj.setDate(cutoffDateObj.getDate() + 1);
+      }
+      const cutoffDateStr = cutoffDateObj.toISOString().split('T')[0];
+
       // Determine how many upcoming weeks to process (0 = 1 week, 3 = 3 weeks, etc.)
       const limit = schedule.advanceWeeks && schedule.advanceWeeks > 0 ? schedule.advanceWeeks : 1;
       
-      // Find up to `limit` upcoming items
-      const upcomingItems = sortedQueue.filter(q => !q.isSent && q.targetDate >= todayStr).slice(0, limit);
+      // Find up to `limit` upcoming items using cutoffDateStr
+      const upcomingItems = sortedQueue.filter(q => !q.isSent && q.targetDate >= cutoffDateStr).slice(0, limit);
 
       if (schedule.targetRole && upcomingItems.length === 0) {
-        console.log(`[Scheduler] Specific Role schedule looking for lineups >= ${todayStr} but none found. Skipping completely.`);
+        console.log(`[Scheduler] Specific Role schedule looking for lineups >= ${cutoffDateStr} but none found. Skipping completely.`);
         return;
       }
       
