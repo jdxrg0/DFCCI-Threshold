@@ -186,14 +186,24 @@ class AutomationScheduler {
 
       console.log(`[Scheduler] TRIGGERING WORKFLOW [${actionType}]: ${schedule.scheduleName} (${schedule.githubFileName})`);
       
-      // Find the closest upcoming unsent message in the queue
-      const todayStr = new Date().toISOString().split('T')[0];
+      // Find the closest upcoming unsent message in the queue based on advanceWeeks
+      const targetSearchDate = new Date();
+      if (schedule.advanceWeeks && schedule.advanceWeeks > 0) {
+         targetSearchDate.setDate(targetSearchDate.getDate() + (schedule.advanceWeeks * 7));
+      }
+      const targetSearchDateStr = targetSearchDate.toISOString().split('T')[0];
+      const todayStr = new Date().toISOString().split('T')[0]; // still needed for role reminder diff math
       
       // Sort the queue by date to ensure we get the absolute earliest upcoming date
       const sortedQueue = [...schedule.messageQueue].sort((a, b) => a.targetDate.localeCompare(b.targetDate));
       
-      // Pick the first item that is in the future (or today) and hasn't been sent
-      let queuedItem = sortedQueue.find(q => !q.isSent && q.targetDate >= todayStr);
+      // Pick the first item that is in the future (or target search date) and hasn't been sent
+      let queuedItem = sortedQueue.find(q => !q.isSent && q.targetDate >= targetSearchDateStr);
+
+      if (schedule.targetRole && !queuedItem) {
+        console.log(`[Scheduler] Specific Role schedule looking for lineup >= ${targetSearchDateStr} but none found. Skipping completely.`);
+        return;
+      }
       
       let finalMessage = schedule.message;
       let reminderTasks = [];

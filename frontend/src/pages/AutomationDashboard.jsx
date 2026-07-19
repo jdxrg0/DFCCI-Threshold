@@ -53,6 +53,7 @@ export default function AutomationDashboard() {
     name: '',
     targetUrl: '',
     targetRole: '',
+    advanceWeeks: 0,
     message: '',
     time: '12:00',
     selectedDays: [],
@@ -205,14 +206,14 @@ export default function AutomationDashboard() {
     setIsModalOpen(true);
     setShowAdvanced(mode === 'dynamic');
     setEditingId(null);
-    setFormData({ name: '', targetUrl: '', targetRole: '', message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
+    setFormData({ name: '', targetUrl: '', targetRole: '', advanceWeeks: 0, message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
     setMessageQueue([]);
   };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setEditingId(null);
-    setFormData({ name: '', targetUrl: '', targetRole: '', message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
+    setFormData({ name: '', targetUrl: '', targetRole: '', advanceWeeks: 0, message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
     setMessageQueue([]);
   };
 
@@ -385,6 +386,7 @@ export default function AutomationDashboard() {
       name: schedule.scheduleName,
       targetUrl: schedule.chatUrl || '',
       targetRole: schedule.targetRole || '',
+      advanceWeeks: schedule.advanceWeeks || 0,
       message: schedule.message,
       time,
       selectedDays,
@@ -424,6 +426,7 @@ export default function AutomationDashboard() {
       codeTemplate: formData.codeTemplate,
       chatUrl: formData.targetUrl,
       targetRole: showAdvanced ? formData.targetRole : '',
+      advanceWeeks: showAdvanced ? parseInt(formData.advanceWeeks, 10) : 0,
       message: formData.message,
       messageQueue: messageQueue
     };
@@ -608,23 +611,44 @@ export default function AutomationDashboard() {
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
                 {showAdvanced ? (
-                <div className="form-group">
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <LinkIcon size={16} /> Target Role
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <select
-                      className="form-input"
-                      value={formData.targetRole}
-                      onChange={(e) => setFormData({...formData, targetRole: e.target.value})}
-                      required
-                      style={{ appearance: 'auto' }}
-                    >
-                      <option value="">Select Target Role</option>
-                      {availableRoles.map(role => (
-                        <option key={role} value={role}>{role}</option>
-                      ))}
-                    </select>
+                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <LinkIcon size={16} /> Target Role
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <select
+                        className="form-input"
+                        value={formData.targetRole}
+                        onChange={(e) => setFormData({...formData, targetRole: e.target.value})}
+                        required
+                        style={{ appearance: 'auto' }}
+                      >
+                        <option value="">Select Target Role</option>
+                        {availableRoles.map(role => (
+                          <option key={role} value={role}>{role}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Clock size={16} /> Weeks in Advance
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <select
+                        className="form-input"
+                        value={formData.advanceWeeks}
+                        onChange={(e) => setFormData({...formData, advanceWeeks: e.target.value})}
+                        style={{ appearance: 'auto' }}
+                      >
+                        <option value="0">0 (Current Week)</option>
+                        <option value="1">1 Week</option>
+                        <option value="2">2 Weeks</option>
+                        <option value="3">3 Weeks</option>
+                        <option value="4">4 Weeks</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
               ) : (

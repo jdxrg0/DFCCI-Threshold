@@ -31,6 +31,10 @@ const scheduleSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  advanceWeeks: {
+    type: Number,
+    default: 0
+  },
   message: {
     type: String,
     required: true,

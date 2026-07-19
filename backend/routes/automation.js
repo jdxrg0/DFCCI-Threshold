@@ -11,7 +11,7 @@ router.use(requireRole(['ADMIN']));
 // POST /api/automation/schedule
 router.post('/schedule', async (req, res) => {
   try {
-    const { scheduleName, cronTime, codeCronTime, enableCodeBroadcast, codeTemplate, chatUrl = '', targetRole = '', message, messageQueue = [], roleReminders = [] } = req.body;
+    const { scheduleName, cronTime, codeCronTime, enableCodeBroadcast, codeTemplate, chatUrl = '', targetRole = '', advanceWeeks = 0, message, messageQueue = [], roleReminders = [] } = req.body;
 
     if (!scheduleName || !cronTime || (!chatUrl && !targetRole) || !message) {
       return res.status(400).json({ msg: 'Please provide all required fields (Target Chat URL or Target Role is required)' });
@@ -105,6 +105,7 @@ jobs:
       codeTemplate,
       chatUrl,
       targetRole,
+      advanceWeeks,
       message,
       messageQueue,
       roleReminders,
@@ -141,7 +142,7 @@ router.get('/schedules', async (req, res) => {
 // PUT /api/automation/schedule/:id
 router.put('/schedule/:id', async (req, res) => {
   try {
-    const { scheduleName, cronTime, codeCronTime, enableCodeBroadcast, codeTemplate, chatUrl = '', targetRole = '', message, messageQueue = [], roleReminders = [] } = req.body;
+    const { scheduleName, cronTime, codeCronTime, enableCodeBroadcast, codeTemplate, chatUrl = '', targetRole = '', advanceWeeks = 0, message, messageQueue = [], roleReminders = [] } = req.body;
     
     if (!scheduleName || !cronTime || (!chatUrl && !targetRole) || !message) {
       return res.status(400).json({ msg: 'Please provide all required fields (Target Chat URL or Target Role is required)' });
@@ -253,6 +254,7 @@ jobs:
     schedule.codeTemplate = codeTemplate;
     schedule.chatUrl = chatUrl;
     schedule.targetRole = targetRole;
+    schedule.advanceWeeks = advanceWeeks;
     schedule.message = message;
     schedule.messageQueue = messageQueue;
     schedule.roleReminders = roleReminders;
