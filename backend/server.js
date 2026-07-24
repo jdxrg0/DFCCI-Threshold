@@ -56,8 +56,41 @@ app.use(cookieParser());
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
+  .then(async () => {
     console.log('Connected to MongoDB');
+    
+    // Drop old deprecated index for DuesPayment if it exists to fix E11000 Server error
+    try {
+      const DuesPayment = require('./models/DuesPayment');
+      await DuesPayment.collection.dropIndex('member_1_weekStart_1');
+      console.log('Dropped old index: member_1_weekStart_1');
+    } catch (err) {
+      // Ignore if index doesn't exist
+    }
+
+    // AUTOMATED HEALING: Cleanup orphaned Weekly Dues transactions
+    try {
+      const Transaction = require('./models/Transaction');
+      const DuesPayment = require('./models/DuesPayment');
+      
+      const duesTransactions = await Transaction.find({ category: 'Weekly Dues' });
+      let orphansRemoved = 0;
+      
+      for (const t of duesTransactions) {
+        const payment = await DuesPayment.findOne({ transactionId: t._id });
+        if (!payment) {
+          await Transaction.findByIdAndDelete(t._id);
+          orphansRemoved++;
+        }
+      }
+      
+      if (orphansRemoved > 0) {
+        console.log(`[Self-Healing] Removed ${orphansRemoved} orphaned Weekly Dues transaction(s).`);
+      }
+    } catch (err) {
+      console.error('[Self-Healing] Error cleaning up orphans:', err);
+    }
+
     automationScheduler.init();
   })
   .catch((err) => {

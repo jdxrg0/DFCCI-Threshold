@@ -139,13 +139,25 @@ class AutomationScheduler {
   addJob(schedule) {
     const id = schedule._id.toString();
     
+    const fs = require('fs');
+    const logFile = 'scheduler_debug.log';
+    const log = (msg) => {
+        console.log(msg);
+        fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${msg}\n`);
+    };
+
+    log(`[Scheduler] addJob called for scheduleId: ${id} with cronTime: ${schedule.cronTime}`);
+    
     // Clear existing job if it exists (for updates)
     if (this.jobs.has(id)) {
+      log(`[Scheduler] Removing existing job for id: ${id}`);
       this.removeJob(id);
     }
 
     // 1. Main Group Chat Job
+    log(`[Scheduler] Scheduling cron job with string: ${schedule.cronTime}`);
     const mainJob = cron.schedule(schedule.cronTime, () => {
+      log(`[Scheduler] CRON FIRED for ${id} (Main Group Chat)`);
       this.triggerGitHubAction(id, 'MAIN');
     }, { scheduled: true, timezone: "UTC" });
 
@@ -179,14 +191,23 @@ class AutomationScheduler {
     }
   }
 
-  async triggerGitHubAction(scheduleId, actionType) {
+  async triggerGitHubAction(id, actionType = 'MAIN') {
+    const fs = require('fs');
+    const logFile = 'scheduler_debug.log';
+    const log = (msg) => {
+        console.log(msg);
+        fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${msg}\n`);
+    };
     try {
-      const schedule = await Schedule.findById(scheduleId);
-      if (!schedule) return;
-
-      console.log(`[Scheduler] TRIGGERING WORKFLOW [${actionType}]: ${schedule.scheduleName} (${schedule.githubFileName})`);
+      log(`[Scheduler] triggerGitHubAction started for id: ${id}, actionType: ${actionType}`);
+      const schedule = await Schedule.findById(id);
       
-      // Sort the queue by date to ensure we get the absolute earliest upcoming date
+      if (!schedule) {
+        log(`[Scheduler] Schedule not found in DB!`);
+        return;
+      }
+
+      log(`[Scheduler] Found schedule: ${schedule.scheduleName}. TargetRole: ${schedule.targetRole}`);
       const sortedQueue = [...schedule.messageQueue].sort((a, b) => a.targetDate.localeCompare(b.targetDate));
       
       const todayStr = new Date().toISOString().split('T')[0]; // needed for role reminder diff math
@@ -208,8 +229,10 @@ class AutomationScheduler {
       // Find up to `limit` upcoming items using cutoffDateStr
       const upcomingItems = sortedQueue.filter(q => !q.isSent && q.targetDate >= cutoffDateStr).slice(0, limit);
 
+      log(`[Scheduler] Found ${upcomingItems.length} upcoming items using limit ${limit} and cutoff ${cutoffDateStr}`);
+
       if (schedule.targetRole && upcomingItems.length === 0) {
-        console.log(`[Scheduler] Specific Role schedule looking for lineups >= ${cutoffDateStr} but none found. Skipping completely.`);
+        log(`[Scheduler] Specific Role schedule looking for lineups >= ${cutoffDateStr} but none found. Skipping completely.`);
         return;
       }
       
@@ -218,6 +241,7 @@ class AutomationScheduler {
       
       const Member = require('../models/Member');
       const allMembers = await Member.find();
+      log(`[Scheduler] Fetched ${allMembers.length} members from DB`);
 
       // Fetch Weekly Code for replacement
       let weeklyCode = 'NOT_GENERATED';
@@ -235,6 +259,7 @@ class AutomationScheduler {
       
       if (upcomingItems.length > 0) {
         for (const queuedItem of upcomingItems) {
+          log(`[Scheduler] Processing queued item for targetDate: ${queuedItem.targetDate}`);
           let finalMessage = schedule.message;
 
           // ---- If this is purely a CODE job ----
@@ -285,13 +310,14 @@ class AutomationScheduler {
                         message: finalMessage,
                         expectedCode: queuedItem.weeklyConfirmationCode
                      });
+                     log(`[Scheduler] Added task for ${assignedName} at ${member.facebookChatUrl}`);
                      finalMessage = ""; // Prevent sending to generic
                   } else {
-                     console.log(`[Scheduler] Member ${assignedName} for role ${schedule.targetRole} not found or has no chatUrl. Skipping this week.`);
+                     log(`[Scheduler] Member ${assignedName} for role ${schedule.targetRole} not found or has no facebookChatUrl.`);
                      finalMessage = ""; // Even if failed, don't send to generic if targetRole was expected
                   }
                 } else {
-                  console.log(`[Scheduler] No one assigned to role ${schedule.targetRole} for ${queuedItem.targetDate}. Skipping this week.`);
+                  log(`[Scheduler] No one assigned to role ${schedule.targetRole} for ${queuedItem.targetDate}.`);
                   finalMessage = "";
                 }
               }
@@ -353,6 +379,13 @@ class AutomationScheduler {
         lastFinalMessage = lastFinalMessage.replace(/{WeeklyCode}/gi, weeklyCode);
       }
 
+      if (actionType === 'MAIN' && reminderTasks.length === 0 && schedule.targetRole) {
+        log(`[Scheduler] No valid members found for role ${schedule.targetRole}. Skipping workflow trigger.`);
+        return;
+      }
+      
+      log(`[Scheduler] reminderTasks populated with ${reminderTasks.length} items`);
+
       if (actionType === 'REMINDER' && reminderTasks.length === 0) {
         console.log(`[Scheduler] No reminders to send today for ${schedule.scheduleName}. Skipping daily run.`);
         return;
@@ -360,6 +393,8 @@ class AutomationScheduler {
 
       const owner = 'd0ul0s';
       const repo = 'Residential-Proxy-Method';
+      
+      log(`[Scheduler] Dispatching to GitHub API: ${schedule.githubFileName}`);
       
       const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${schedule.githubFileName}/dispatches`, {
         method: 'POST',
@@ -371,23 +406,24 @@ class AutomationScheduler {
         body: JSON.stringify({
           ref: 'main',
           inputs: {
-            dynamic_message: lastFinalMessage,
-            code_message: codeMessage,
+            dynamic_message: lastFinalMessage || "NO_MESSAGE",
+            code_message: codeMessage || "NO_MESSAGE",
             reminder_tasks: JSON.stringify(reminderTasks)
           }
         })
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error(`[Scheduler] Failed to trigger ${schedule.githubFileName}:`, errorData);
+        const errorData = await response.text();
+        log(`[Scheduler] Failed to trigger ${schedule.githubFileName}. Status: ${response.status}. Body: ${errorData}`);
       } else {
-        console.log(`[Scheduler] Successfully triggered GitHub workflow for ${schedule.scheduleName}`);
+        log(`[Scheduler] Successfully triggered GitHub workflow for ${schedule.scheduleName}`);
         // We no longer mark it as isSent=true here.
         // It will organically stop being the "closest upcoming" once the date actually passes!
       }
     } catch (error) {
-      console.error(`[Scheduler] Error triggering workflow:`, error);
+      log(`[Scheduler] Error triggering workflow: ${error.message}`);
+      console.error(error);
     }
   }
 

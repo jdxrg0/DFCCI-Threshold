@@ -229,10 +229,10 @@ router.delete('/:id', adminOrTreasurerAuth, async (req, res) => {
       return res.status(404).json({ message: 'Transaction not found' });
     }
 
-    await transaction.deleteOne();
-
-    // Cascade delete any linked DuesPayment
+    // Cascade delete any linked DuesPayment BEFORE deleting the transaction
     await DuesPayment.deleteMany({ transactionId: req.params.id });
+
+    await transaction.deleteOne();
 
     res.json({ message: 'Transaction removed' });
   } catch (error) {
@@ -305,15 +305,16 @@ router.post('/dues/ledger', adminOrTreasurerAuth, async (req, res) => {
     if (!memberId || !collectionDate) return res.status(400).json({ message: 'memberId and collectionDate required' });
 
     const dDate = new Date(collectionDate);
-    dDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(dDate.getTime() + 24 * 60 * 60 * 1000 - 1);
+    // Expand window by ±24 hours to handle timezone shifts between local and Vercel UTC
+    const startDate = new Date(dDate.getTime() - 24 * 60 * 60 * 1000);
+    const endDate = new Date(dDate.getTime() + 48 * 60 * 60 * 1000);
 
     const member = await DuesMember.findById(memberId);
     if (!member) return res.status(404).json({ message: 'Member not found' });
 
     let payment = await DuesPayment.findOne({
       member: memberId,
-      collectionDate: { $gte: dDate, $lte: endDate }
+      collectionDate: { $gte: startDate, $lte: endDate }
     });
 
     const numAmount = Number(amount);
@@ -321,8 +322,10 @@ router.post('/dues/ledger', adminOrTreasurerAuth, async (req, res) => {
     // If amount is 0, empty, or invalid, delete the record
     if (!amount || numAmount === 0 || isNaN(numAmount)) {
       if (payment) {
-        if (payment.transactionId) await Transaction.findByIdAndDelete(payment.transactionId);
         await payment.deleteOne();
+        if (payment.transactionId) {
+          await Transaction.findByIdAndDelete(payment.transactionId);
+        }
       }
       return res.json({ message: 'Payment cleared' });
     }
@@ -359,7 +362,14 @@ router.post('/dues/ledger', adminOrTreasurerAuth, async (req, res) => {
       recordedBy: req.user._id,
       transactionId: transaction._id,
     });
-    await payment.save();
+    
+    try {
+      await payment.save();
+    } catch (err) {
+      // If saving the payment fails (e.g. unique constraint), clean up the transaction to prevent orphans
+      await transaction.deleteOne();
+      throw err; // rethrow to be caught by the outer catch block
+    }
 
     res.status(201).json({ payment, transaction });
   } catch (err) {
