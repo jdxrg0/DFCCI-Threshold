@@ -1,183 +1,448 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
 import PopupModal from '../components/PopupModal';
-import MessengerAutomation from '../components/MessengerAutomation';
-import { PRESETS, renderPresetSvg } from '../utils/avatarHelper';
-import { 
-  ChevronLeft, 
-  ChevronDown,
-  Users, 
-  Trash2, 
-  RotateCcw, 
-  History, 
-  MessageSquare,
+import PageHeader from '../components/PageHeader';
+import { renderAvatarHelper } from '../utils/avatarHelper';
+import {
+  AlertTriangle,
+  ArrowRight,
   Bell,
   BellOff,
-  UserCog,
-  Mail,
-  Eye,
-  RefreshCw,
   CheckCircle,
   Clock,
-  ShieldAlert,
-  UserCheck,
-  Search,
-  X,
-  HardDrive,
-  Database,
-  Image,
   Cloud,
   Cpu,
-  Zap,
+  Database,
+  Download,
+  Eye,
   GitBranch,
-  Info
+  HardDrive,
+  History,
+  Info,
+  Mail,
+  MessageSquare,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  Trash2,
+  UserCog,
+  Users,
+  X,
+  Zap,
 } from 'lucide-react';
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Admin Dashboard — /admin
+
+   Seven tabs over five APIs:
+     users               GET  /users                        (+ role, delete,
+                                                              reminders, rename
+                                                              request, date power)
+     deletion-requests   GET  /threads/admin/deletion-requests   (+ approve/reject)
+     restore-requests    GET  /threads/admin/restore-requests    (+ approve/reject)
+     recently-deleted    GET  /threads/admin/recently-deleted
+     tickets             GET  /tickets                       (+ PATCH /:id/admin)
+     emails              GET  /emails                        (+ POST /:id/resend)
+     limits              GET  /users/admin/platform-limits
+
+   Everything boots in parallel so the badge counts and the KPI rail are
+   correct on first paint; switching a tab re-fetches just that tab. The
+   presentation lives in styles/admin.css — do not reintroduce inline colour
+   here, it is what stopped this page working on the light themes.
+   ────────────────────────────────────────────────────────────────────────── */
+
+const USERS_PER_PAGE = 12;
+const EMAILS_PER_PAGE = 10;
+const RETENTION_DAYS = 60;
+
+const ROLE_ORDER = { ADMIN: 0, COUNSELOR: 1, YOUTH_TREASURER: 2, MEMBER: 3 };
+
+const TICKET_TONE = { bug: 'danger', feature: 'info', question: 'violet' };
+
+const usageTone = (percent) => {
+  if (percent > 85) return 'var(--danger)';
+  if (percent > 60) return 'var(--warning)';
+  return 'var(--success)';
+};
+
+const formatBytes = (bytes) => {
+  if (!bytes) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+};
+
+const shortDate = (value) =>
+  value ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+
+// Hours until `value`, or 0 when it has already passed.
+const hoursUntil = (value) => {
+  if (!value) return 0;
+  const diff = new Date(value) - new Date();
+  return diff > 0 ? Math.ceil(diff / 3600000) : 0;
+};
+
+/* ── Small shared pieces ──────────────────────────────────────────────── */
+
+const Meter = ({ percent, tone }) => {
+  const width = Math.min(100, Math.max(0, percent || 0));
+  return (
+    <div
+      className="adm-meter__track"
+      role="progressbar"
+      aria-valuenow={Math.round(width)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div className="adm-meter__fill" style={{ width: `${width}%`, '--tone': tone }} />
+    </div>
+  );
+};
+
+const EmptyState = ({ icon: Icon, title, text }) => (
+  <div className="adm-empty">
+    <Icon size={38} className="adm-empty__icon" aria-hidden="true" />
+    <h4 className="adm-empty__title">{title}</h4>
+    <p className="adm-empty__text">{text}</p>
+  </div>
+);
+
+const Skeletons = ({ count = 5 }) => (
+  <div aria-hidden="true">
+    {Array.from({ length: count }, (_, i) => (
+      <div key={i} className="adm-skel" />
+    ))}
+  </div>
+);
+
+const Flow = ({ from, to }) => (
+  <div className="adm-flow">
+    <div className="adm-flow__side">
+      <span className="adm-flow__label">Sender</span>
+      <span className="adm-flow__name">{from || 'Unknown'}</span>
+    </div>
+    <ArrowRight size={14} className="adm-flow__arrow" aria-hidden="true" />
+    <div className="adm-flow__side adm-flow__side--to">
+      <span className="adm-flow__label">Receiver</span>
+      <span className="adm-flow__name">{to || 'Unknown'}</span>
+    </div>
+  </div>
+);
+
+const Pager = ({ page, totalPages, onChange, label }) => {
+  if (totalPages <= 1) return null;
+  return (
+    <div className="adm-pager">
+      <button
+        type="button"
+        className="btn btn-secondary"
+        disabled={page <= 1}
+        onClick={() => onChange(Math.max(1, page - 1))}
+      >
+        {label.previous}
+      </button>
+      <span className="adm-pager__label">{label.of}</span>
+      <button
+        type="button"
+        className="btn btn-secondary"
+        disabled={page >= totalPages}
+        onClick={() => onChange(Math.min(totalPages, page + 1))}
+      >
+        {label.next}
+      </button>
+    </div>
+  );
+};
+
+/* ── Page ─────────────────────────────────────────────────────────────── */
+
 const AdminPanel = () => {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { t } = useLanguage();
-  const [activeTab, setActiveTab] = useState('users'); // 'users', 'deletion-requests', 'restore-requests', 'recently-deleted', 'tickets', 'emails'
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState('users');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [lastSync, setLastSync] = useState(null);
+
+  const [users, setUsers] = useState([]);
   const [deletionRequests, setDeletionRequests] = useState([]);
   const [restoreRequests, setRestoreRequests] = useState([]);
   const [recentlyDeleted, setRecentlyDeleted] = useState([]);
   const [tickets, setTickets] = useState([]);
-  const navigate = useNavigate();
 
-  // Outgoing Emails State
+  // Users tab controls
+  const [userQuery, setUserQuery] = useState('');
+  const [userRole, setUserRole] = useState('');
+  const [userStatus, setUserStatus] = useState('');
+  const [userSort, setUserSort] = useState('name');
+  const [usersPage, setUsersPage] = useState(1);
+
+  // Tickets tab controls
+  const [ticketStatus, setTicketStatus] = useState('');
+
+  // Emails tab
   const [emails, setEmails] = useState([]);
   const [emailsSearch, setEmailsSearch] = useState('');
   const [emailsStatus, setEmailsStatus] = useState('');
   const [emailsPage, setEmailsPage] = useState(1);
   const [emailsTotalPages, setEmailsTotalPages] = useState(1);
   const [emailsTotalCount, setEmailsTotalCount] = useState(0);
+  const [emailsLoggedAll, setEmailsLoggedAll] = useState(0);
   const [emailsLoading, setEmailsLoading] = useState(false);
   const [emailPreview, setEmailPreview] = useState(null);
   const [resendingId, setResendingId] = useState(null);
-  
-  // Platform Limits State
+
+  // Platform limits
   const [limitsData, setLimitsData] = useState(null);
   const [limitsLoading, setLimitsLoading] = useState(false);
   const [limitsError, setLimitsError] = useState('');
 
-  const [popup, setPopup] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false, isPrompt: false, promptValue: '' });
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const [popup, setPopup] = useState({
+    isOpen: false, title: '', message: '', onConfirm: null,
+    isAlert: false, isPrompt: false, promptValue: '',
+  });
 
-  const showAlert = (title, message) => setPopup({ isOpen: true, title, message, onConfirm: null, isAlert: true, isPrompt: false, promptValue: '' });
-  const showConfirm = (title, message, onConfirm) => setPopup({ isOpen: true, title, message, onConfirm, isAlert: false, isPrompt: false, promptValue: '' });
-  const showPrompt = (title, message, onConfirm) => setPopup({ isOpen: true, title, message, onConfirm, isAlert: false, isPrompt: true, promptValue: '' });
+  const bootedRef = useRef(false);
+  const tabRefs = useRef([]);
 
-  // Responsive device detector
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+  const showAlert = (title, message) =>
+    setPopup({ isOpen: true, title, message, onConfirm: null, isAlert: true, isPrompt: false, promptValue: '' });
+  const showConfirm = (title, message, onConfirm) =>
+    setPopup({ isOpen: true, title, message, onConfirm, isAlert: false, isPrompt: false, promptValue: '' });
+  const showPrompt = (title, message, onConfirm) =>
+    setPopup({ isOpen: true, title, message, onConfirm, isAlert: false, isPrompt: true, promptValue: '' });
+
+  /* ── Fetchers ───────────────────────────────────────────────────────── */
+
+  // Each fetcher owns one slice and reports its own failure. The previous
+  // build wrote to a shared `error` that was never rendered, so a dead
+  // endpoint looked like an empty list.
+  const load = useCallback(async (path, setter, label, config) => {
+    try {
+      const res = await api.get(path, config);
+      setter(res.data);
+      setError('');
+      return res.data;
+    } catch (err) {
+      setError(`Could not load ${label}. ${err.response?.data?.message || err.message || ''}`.trim());
+      return null;
+    }
   }, []);
 
-  const tabs = [
-    { id: 'users', label: 'Users', icon: Users },
-    { id: 'deletion-requests', label: 'Deletion', icon: Trash2 },
-    { id: 'restore-requests', label: 'Restore', icon: RotateCcw },
-    { id: 'recently-deleted', label: 'History', icon: History },
-    { id: 'tickets', label: 'Requests', icon: MessageSquare },
-    { id: 'emails', label: t('admin_emails_tab') || 'Emails', icon: Mail },
-    { id: 'limits', label: 'Platform Limits', icon: HardDrive }
-  ];
+  const fetchUsers = useCallback(() => load('/users', setUsers, 'members'), [load]);
+  const fetchDeletionRequests = useCallback(
+    () => load('/threads/admin/deletion-requests', setDeletionRequests, 'deletion requests'), [load]);
+  const fetchRestoreRequests = useCallback(
+    () => load('/threads/admin/restore-requests', setRestoreRequests, 'restore requests'), [load]);
+  const fetchRecentlyDeleted = useCallback(
+    () => load('/threads/admin/recently-deleted', setRecentlyDeleted, 'the deletion archive'), [load]);
+  const fetchTickets = useCallback(() => load('/tickets', setTickets, 'system requests'), [load]);
 
-  const getBadgeCount = (id) => {
-    if (id === 'deletion-requests') return deletionRequests.length;
-    if (id === 'restore-requests') return restoreRequests.length;
-    if (id === 'tickets') return tickets.filter(t => t.status === 'open' || t.status === 'in-progress').length;
-    return 0;
-  };
+  const fetchEmails = useCallback(async () => {
+    setEmailsLoading(true);
+    try {
+      const res = await api.get('/emails', {
+        params: { page: emailsPage, limit: EMAILS_PER_PAGE, search: emailsSearch, status: emailsStatus },
+      });
+      setEmails(res.data.emails || []);
+      setEmailsTotalPages(res.data.totalPages || 1);
+      setEmailsTotalCount(res.data.totalCount || 0);
+      // Keep an unfiltered total for the KPI rail, so filtering the log does
+      // not make the headline number jump around.
+      if (!emailsSearch && !emailsStatus) setEmailsLoggedAll(res.data.totalCount || 0);
+      setError('');
+    } catch (err) {
+      setError(`Could not load the email log. ${err.response?.data?.message || err.message || ''}`.trim());
+    } finally {
+      setEmailsLoading(false);
+    }
+  }, [emailsPage, emailsSearch, emailsStatus]);
 
-  // Parallel initial data load to populate counts & metrics instantly
+  const fetchPlatformLimits = useCallback(async () => {
+    setLimitsLoading(true);
+    setLimitsError('');
+    try {
+      const res = await api.get('/users/admin/platform-limits');
+      setLimitsData(res.data);
+    } catch (err) {
+      setLimitsError(err.response?.data?.message || 'Failed to fetch platform limits data.');
+    } finally {
+      setLimitsLoading(false);
+    }
+  }, []);
+
+  /* ── Boot & tab sync ────────────────────────────────────────────────── */
+
   useEffect(() => {
-    if (hasInitialized) return;
-    if (user?.role !== 'ADMIN') {
+    if (authLoading || !user) return; // wait for auth before deciding on access
+    if (user.role !== 'ADMIN') {
       navigate('/dashboard');
       return;
     }
-    
-    setHasInitialized(true);
-    const initLoad = async () => {
-      try {
-        setLoading(true);
-        await Promise.allSettled([
-          fetchUsers(),
-          fetchDeletionRequests(),
-          fetchRestoreRequests(),
-          fetchRecentlyDeleted(),
-          fetchTickets(),
-          fetchEmails()
-        ]);
-      } catch (err) {
-        console.error("Admin parallel initialization error", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    initLoad();
-  }, [user, navigate]);
+    if (bootedRef.current) return;
+    bootedRef.current = true;
 
-  // Fresh re-fetch of individual lists on tab selection
+    (async () => {
+      await Promise.allSettled([
+        fetchUsers(), fetchDeletionRequests(), fetchRestoreRequests(),
+        fetchRecentlyDeleted(), fetchTickets(), fetchEmails(),
+      ]);
+      setLastSync(Date.now());
+      setLoading(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, user, navigate]);
+
+  // Re-fetch the tab being opened. Platform limits are excluded: that call
+  // hits the Cloudinary API and runs dbStats over every collection, so it
+  // loads once and refreshes only on request.
   useEffect(() => {
-    if (user?.role !== 'ADMIN' || loading) return;
+    if (!bootedRef.current || loading) return;
     if (activeTab === 'users') fetchUsers();
     if (activeTab === 'deletion-requests') fetchDeletionRequests();
     if (activeTab === 'restore-requests') fetchRestoreRequests();
     if (activeTab === 'recently-deleted') fetchRecentlyDeleted();
     if (activeTab === 'tickets') fetchTickets();
-    if (activeTab === 'emails') fetchEmails();
-    if (activeTab === 'limits') fetchPlatformLimits();
+    if (activeTab === 'limits' && !limitsData && !limitsLoading) fetchPlatformLimits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  // Email log is server-paginated and server-searched, so the query is
+  // debounced — it used to fire one request per keystroke.
+  useEffect(() => {
+    if (!bootedRef.current || loading || activeTab !== 'emails') return;
+    const id = setTimeout(fetchEmails, 280);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, emailsSearch, emailsStatus, emailsPage]);
 
-  const fetchPlatformLimits = async () => {
+  // Any change to the result set sends the pager home, so a filter can never
+  // leave the admin stranded on a page that no longer exists.
+  const setUserFilter = (setter) => (value) => { setter(value); setUsersPage(1); };
+
+  const refreshAll = async () => {
+    setRefreshing(true);
+    await Promise.allSettled([
+      fetchUsers(), fetchDeletionRequests(), fetchRestoreRequests(),
+      fetchRecentlyDeleted(), fetchTickets(), fetchEmails(),
+      limitsData ? fetchPlatformLimits() : Promise.resolve(),
+    ]);
+    setLastSync(Date.now());
+    setRefreshing(false);
+  };
+
+  /* ── Mutations ──────────────────────────────────────────────────────── */
+
+  const mutate = async (request, onDone, fallback) => {
     try {
-      setLimitsLoading(true);
-      setLimitsError('');
-      const res = await api.get('/users/admin/platform-limits');
-      setLimitsData(res.data);
+      await request();
+      await onDone();
     } catch (err) {
-      setLimitsError('Failed to fetch platform limits data');
-      console.error(err);
-    } finally {
-      setLimitsLoading(false);
+      showAlert('Error', err.response?.data?.message || err.response?.data?.msg || fallback);
     }
   };
 
-  const fetchEmails = async () => {
-    try {
-      setEmailsLoading(true);
-      const res = await api.get('/emails', {
-        params: {
-          page: emailsPage,
-          limit: 10,
-          search: emailsSearch,
-          status: emailsStatus
-        }
-      });
-      setEmails(res.data.emails);
-      setEmailsTotalPages(res.data.totalPages);
-      setEmailsTotalCount(res.data.totalCount);
-    } catch (err) {
-      setError('Failed to fetch email logs');
-    } finally {
-      setEmailsLoading(false);
-      setLoading(false);
+  // Role changes are irreversible from the member's side and ADMIN grants
+  // full platform control, so both now confirm instead of firing on change.
+  const handleRoleChange = (target, newRole) => {
+    if (target._id === user._id) {
+      showAlert('Not allowed', 'You cannot change your own role.');
+      return;
     }
+    if (newRole === target.role) return;
+
+    const warning = newRole === 'ADMIN'
+      ? '\n\nAdministrators can manage every member, approve deletions and read the platform logs.'
+      : '';
+    showConfirm(
+      'Change role',
+      `Change ${target.displayName} from ${t(`role_${target.role.toLowerCase()}`)} to ${t(`role_${newRole.toLowerCase()}`)}?${warning}`,
+      () => mutate(() => api.put(`/users/${target._id}/role`, { role: newRole }), fetchUsers, 'Failed to update role'),
+    );
+  };
+
+  const handleToggleReminders = (id) =>
+    mutate(() => api.put(`/users/${id}/toggle-reminders`), fetchUsers, 'Failed to toggle reminders');
+
+  const handleRequestNameChange = (id) =>
+    mutate(() => api.put(`/users/${id}/request-name-change`), fetchUsers, 'Failed to request name change');
+
+  const handleDeleteUser = (target) => {
+    showConfirm(
+      'Delete member',
+      `Permanently delete ${target.displayName} (${target.email})? Their account and access are removed immediately. This cannot be undone.`,
+      () => mutate(() => api.delete(`/users/${target._id}`), fetchUsers, 'Failed to delete user'),
+    );
+  };
+
+  const handleDatePower = (target) => {
+    const remaining = hoursUntil(target.customDatePowerExpires);
+    const prefix = remaining
+      ? `${target.displayName} currently has custom date power (~${remaining}h remaining).\n\n`
+      : '';
+    showPrompt(
+      'Custom date power',
+      `${prefix}Enter a duration in hours (e.g. 1, 2, 24). Enter 0 to revoke.`,
+      async (val) => {
+        if (val === null || val === undefined || String(val).trim() === '') return;
+        const num = parseFloat(val);
+        if (Number.isNaN(num) || num < 0) {
+          showAlert('Error', 'Please enter a valid positive number, or 0 to revoke.');
+          return;
+        }
+        try {
+          const res = await api.put(`/users/${target._id}/custom-date-power`, {
+            durationMinutes: Math.round(num * 60),
+          });
+          showAlert('Success', res.data.message);
+          fetchUsers();
+        } catch (err) {
+          showAlert('Error', err.response?.data?.message || 'Failed to update custom date power');
+        }
+      },
+    );
+  };
+
+  const handleApproveDeletion = (id) =>
+    mutate(() => api.put(`/threads/admin/${id}/approve-deletion`), () =>
+      Promise.all([fetchDeletionRequests(), fetchRecentlyDeleted()]), 'Failed to approve deletion');
+
+  const handleRejectDeletion = (id) =>
+    mutate(() => api.put(`/threads/admin/${id}/reject-deletion`), fetchDeletionRequests, 'Failed to reject deletion');
+
+  const handleApproveRestore = (id) =>
+    mutate(() => api.put(`/threads/admin/${id}/approve-restore`), () =>
+      Promise.all([fetchRestoreRequests(), fetchRecentlyDeleted()]), 'Failed to approve restore');
+
+  const handleRejectRestore = (id) =>
+    mutate(() => api.put(`/threads/admin/${id}/reject-restore`), fetchRestoreRequests, 'Failed to reject restore');
+
+  const handleUpdateTicketStatus = (id, status) =>
+    mutate(() => api.patch(`/tickets/${id}/admin`, { status }), fetchTickets, 'Failed to update ticket');
+
+  const handleAdminResponse = (ticket) => {
+    showPrompt('Admin response', `Reply to "${ticket.title}":`, async (response) => {
+      if (!response || !response.trim()) return;
+      await mutate(
+        () => api.patch(`/tickets/${ticket._id}/admin`, { adminResponse: response.trim() }),
+        fetchTickets,
+        'Failed to update response',
+      );
+    });
   };
 
   const handleResendEmail = async (id) => {
+    setResendingId(id);
     try {
-      setResendingId(id);
       await api.post(`/emails/${id}/resend`);
       showAlert('Success', t('email_resend_success'));
       fetchEmails();
@@ -188,2364 +453,1130 @@ const AdminPanel = () => {
     }
   };
 
-  const fetchRestoreRequests = async () => {
-    try {
-      const res = await api.get('/threads/admin/restore-requests');
-      setRestoreRequests(res.data);
-    } catch (err) {
-      setError('Failed to fetch restore requests');
-    } finally {
-      setLoading(false);
-    }
-  };
+  /* ── Derived data ───────────────────────────────────────────────────── */
 
-  const fetchDeletionRequests = async () => {
-    try {
-      const res = await api.get('/threads/admin/deletion-requests');
-      setDeletionRequests(res.data);
-    } catch (err) {
-      setError('Failed to fetch deletion requests');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const verifiedUsers = users.filter((u) => u.isVerified).length;
+  const pendingApprovals = deletionRequests.length + restoreRequests.length;
+  const openTickets = tickets.filter((tk) => tk.status === 'open' || tk.status === 'in-progress').length;
 
-  const fetchRecentlyDeleted = async () => {
-    try {
-      const res = await api.get('/threads/admin/recently-deleted');
-      setRecentlyDeleted(res.data);
-    } catch (err) {
-      setError('Failed to fetch recently deleted threads');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const tabs = useMemo(() => [
+    { id: 'users', label: 'Members', icon: Users, count: 0 },
+    { id: 'deletion-requests', label: 'Deletion', icon: Trash2, count: deletionRequests.length, tone: 'danger' },
+    { id: 'restore-requests', label: 'Restore', icon: RotateCcw, count: restoreRequests.length, tone: 'warn' },
+    { id: 'recently-deleted', label: 'Archive', icon: History, count: 0 },
+    { id: 'tickets', label: 'Requests', icon: MessageSquare, count: openTickets, tone: 'violet' },
+    { id: 'emails', label: t('admin_emails_tab') || 'Emails', icon: Mail, count: 0 },
+    { id: 'limits', label: 'Platform Limits', icon: HardDrive, count: 0 },
+  ], [deletionRequests.length, restoreRequests.length, openTickets, t]);
 
-  const fetchUsers = async () => {
-    try {
-      const res = await api.get('/users');
-      setUsers(res.data);
-    } catch (err) {
-      setError('Failed to fetch users');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchTickets = async () => {
-    try {
-      const res = await api.get('/tickets');
-      setTickets(res.data);
-    } catch (err) {
-      setError('Failed to fetch tickets');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-
-  const handleRoleChange = async (userId, newRole) => {
-    if (userId === user._id) {
-      showAlert('Error', 'You cannot change your own role.');
-      return;
-    }
-    try {
-      await api.put(`/users/${userId}/role`, { role: newRole });
-      fetchUsers();
-    } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to update role');
-    }
-  };
-
-  const handleToggleReminders = async (userId) => {
-    try {
-      await api.put(`/users/${userId}/toggle-reminders`);
-      fetchUsers();
-    } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to toggle reminders');
-    }
-  };
-
-  const handleRequestNameChange = async (userId) => {
-    try {
-      await api.put(`/users/${userId}/request-name-change`);
-      fetchUsers();
-    } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to request name change');
-    }
-  };
-
-  const handleApproveDeletion = async (id) => {
-    try {
-      await api.put(`/threads/admin/${id}/approve-deletion`);
-      fetchDeletionRequests();
-    } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to approve deletion');
-    }
-  };
-
-  const handleRejectDeletion = async (id) => {
-    try {
-      await api.put(`/threads/admin/${id}/reject-deletion`);
-      fetchDeletionRequests();
-    } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to reject deletion');
-    }
-  };
-
-  const handleApproveRestore = async (id) => {
-    try {
-      await api.put(`/threads/admin/${id}/approve-restore`);
-      fetchRestoreRequests();
-    } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to approve restore');
-    }
-  };
-
-  const handleRejectRestore = async (id) => {
-    try {
-      await api.put(`/threads/admin/${id}/reject-restore`);
-      fetchRestoreRequests();
-    } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to reject restore');
-    }
-  };
-
-  const handleUpdateTicketStatus = async (id, status) => {
-    try {
-      await api.patch(`/tickets/${id}/admin`, { status });
-      fetchTickets();
-    } catch (err) {
-      showAlert('Error', err.response?.data?.msg || 'Failed to update ticket');
-    }
-  };
-
-  const handleAdminResponse = (id) => {
-    showPrompt('Admin Response', 'Enter admin response:', async (response) => {
-      if (response && response.trim() !== '') {
-        try {
-          await api.patch(`/tickets/${id}/admin`, { adminResponse: response.trim() });
-          fetchTickets();
-        } catch (err) {
-          showAlert('Error', err.response?.data?.msg || 'Failed to update response');
-        }
-      }
+  const filteredUsers = useMemo(() => {
+    const q = userQuery.trim().toLowerCase();
+    const list = users.filter((u) => {
+      if (userRole && u.role !== userRole) return false;
+      if (userStatus === 'verified' && !u.isVerified) return false;
+      if (userStatus === 'unverified' && u.isVerified) return false;
+      if (!q) return true;
+      return `${u.displayName || ''} ${u.email || ''}`.toLowerCase().includes(q);
     });
-  };
 
-  const handleDeleteUser = (id) => {
-    showConfirm('Delete User', 'Are you sure you want to delete this user? This action cannot be undone.', async () => {
-      try {
-        await api.delete(`/users/${id}`);
-        fetchUsers();
-      } catch (err) {
-        showAlert('Error', err.response?.data?.message || 'Failed to delete user');
+    const byName = (a, b) => (a.displayName || '').localeCompare(b.displayName || '');
+    return [...list].sort((a, b) => {
+      if (userSort === 'name-desc') return byName(b, a);
+      if (userSort === 'newest') return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+      if (userSort === 'oldest') return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+      if (userSort === 'role') {
+        const delta = (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9);
+        return delta !== 0 ? delta : byName(a, b);
       }
+      return byName(a, b);
     });
+  }, [users, userQuery, userRole, userStatus, userSort]);
+
+  const usersTotalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
+  const pagedUsers = filteredUsers.slice((usersPage - 1) * USERS_PER_PAGE, usersPage * USERS_PER_PAGE);
+
+  const visibleTickets = useMemo(
+    () => (ticketStatus ? tickets.filter((tk) => tk.status === ticketStatus) : tickets),
+    [tickets, ticketStatus],
+  );
+
+  const stats = [
+    { id: 'members', icon: Users, value: users.length, label: 'Members', tone: 'var(--primary)', tab: 'users' },
+    { id: 'verified', icon: ShieldCheck, value: verifiedUsers, label: 'Verified', tone: 'var(--success)', tab: 'users', onPick: () => setUserStatus('verified') },
+    { id: 'approvals', icon: ShieldAlert, value: pendingApprovals, label: 'Pending Approvals', tone: 'var(--warning)', tab: 'deletion-requests' },
+    { id: 'requests', icon: MessageSquare, value: openTickets, label: 'Open Requests', tone: '#8b5cf6', tab: 'tickets' },
+    { id: 'emails', icon: Mail, value: emailsLoggedAll, label: 'Emails Logged', tone: 'var(--info)', tab: 'emails' },
+  ];
+
+  /* ── Users CSV export ───────────────────────────────────────────────── */
+
+  const exportUsersCsv = () => {
+    // A leading =, +, - or @ makes a spreadsheet treat the cell as a formula.
+    const safe = (value) => {
+      const str = String(value ?? '');
+      const escaped = /^[=+\-@]/.test(str) ? `'${str}` : str;
+      return `"${escaped.replace(/"/g, '""')}"`;
+    };
+    const header = ['Name', 'Email', 'Role', 'Verified', 'Dues reminders', 'Rename requested', 'Joined'];
+    const rows = filteredUsers.map((u) => [
+      u.displayName, u.email, u.role,
+      u.isVerified ? 'Yes' : 'No',
+      u.subscribedToDuesReminders ? 'Yes' : 'No',
+      u.nameChangeRequested ? 'Yes' : 'No',
+      u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '',
+    ]);
+    const csv = [header, ...rows].map((r) => r.map(safe).join(',')).join('\r\n');
+    // BOM so Excel opens the UTF-8 names correctly.
+    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `dfcci-members-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
-  const handleDatePower = async (userId, currentExpiration) => {
-    const isActive = currentExpiration && new Date(currentExpiration) > new Date();
-    let message = 'Enter duration in hours to grant custom date power (e.g., 1, 2, 24). Enter 0 to revoke date power:';
-    if (isActive) {
-      const hoursLeft = Math.ceil((new Date(currentExpiration) - new Date()) / (1000 * 60 * 60));
-      message = `User currently has custom date power active (~${hoursLeft} hours remaining).\n\n${message}`;
-    }
-    showPrompt('Custom Date Power', message, async (val) => {
-      if (val === null || val === undefined || val.trim() === '') return;
-      const num = parseFloat(val);
-      if (isNaN(num) || num < 0) {
-        showAlert('Error', 'Please enter a valid positive number or 0.');
-        return;
-      }
-      try {
-        const durationMinutes = Math.round(num * 60);
-        const res = await api.put(`/users/${userId}/custom-date-power`, { durationMinutes });
-        showAlert('Success', res.data.message);
-        fetchUsers();
-      } catch (err) {
-        showAlert('Error', err.response?.data?.message || 'Failed to update custom date power');
-      }
-    });
+  /* ── Drawer behaviour ───────────────────────────────────────────────── */
+
+  useEffect(() => {
+    if (!emailPreview) return;
+    const onKey = (e) => { if (e.key === 'Escape') setEmailPreview(null); };
+    document.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [emailPreview]);
+
+  /* ── Tab keyboard navigation ────────────────────────────────────────── */
+
+  const onTabKeyDown = (e, index) => {
+    const keys = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 };
+    let next = null;
+    if (keys[e.key]) next = (index + keys[e.key] + tabs.length) % tabs.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    if (next === null) return;
+    e.preventDefault();
+    setActiveTab(tabs[next].id);
+    tabRefs.current[next]?.focus();
   };
 
-  if (loading) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '80vh', gap: '1rem' }}>
-      <RefreshCw size={40} className="spin" style={{ color: 'var(--primary)' }} />
-      <span style={{ color: 'var(--text-muted)', fontWeight: '600', fontSize: '1rem' }}>Initializing Admin Workspace...</span>
+  /* ── Reusable user fragments (one source for table row + mobile card) ── */
+
+  const identityOf = (u, size) => (
+    <div className="adm-ident">
+      {renderAvatarHelper(u, size, { flexShrink: 0 })}
+      <div className="adm-ident__text">
+        <span className="adm-ident__name">{u.displayName}</span>
+        <span className="adm-ident__mail">{u.email}</span>
+      </div>
     </div>
   );
 
-  // Compute summary stats
-  const totalUsers = users.length;
-  const verifiedUsers = users.filter(u => u.isVerified).length;
-  const pendingApprovals = deletionRequests.length + restoreRequests.length;
-  const activeTickets = tickets.filter(t => t.status === 'open' || t.status === 'in-progress').length;
-  const emailVolume = emailsTotalCount;
+  const verifyChipOf = (u) => (
+    <span className="adm-chip" data-tone={u.isVerified ? 'ok' : 'warn'}>
+      {u.isVerified ? <CheckCircle size={11} /> : <ShieldAlert size={11} />}
+      {u.isVerified ? 'Verified' : 'Unverified'}
+    </span>
+  );
 
-  return (
-    <div className="container" style={{ maxWidth: '1080px', padding: isMobile ? '1rem 0.75rem 5.5rem' : '2rem 1.5rem' }}>
-      
-      {/* Centered Premium Header */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: isMobile ? '1.5rem' : '2rem', position: 'relative' }}>
-        <div className="btn-back-wrapper">
-          <button 
-            onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} 
-            className="btn-back-pill"
-          >
-            <ChevronLeft size={16} /> {t('back')}
-          </button>
-        </div>
-        <h2 style={{
-          fontSize: isMobile ? '1.6rem' : '2.2rem',
-          fontWeight: '900',
-          textAlign: 'center',
-          margin: 0,
-          background: 'linear-gradient(135deg, #a78bfa 0%, #3b82f6 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          letterSpacing: '-0.03em',
-          textShadow: '0 4px 12px rgba(59, 130, 246, 0.1)',
-        }}>
-          Admin Dashboard
-        </h2>
-        <p style={{ margin: '0.35rem 0 0', fontSize: isMobile ? '0.8rem' : '0.9rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-          System Administration and Platform Integrity Control
-        </p>
+  const roleChipOf = (u) => (
+    <span className="adm-chip adm-chip--sq" data-role={u.role}>
+      {t(`role_${(u.role || 'member').toLowerCase()}`)}
+    </span>
+  );
+
+  const permissionsOf = (u, compact) => {
+    if (!u.isVerified) return <span className="adm-self">Awaiting verification</span>;
+    const powerHours = hoursUntil(u.customDatePowerExpires);
+    return (
+      <div className="adm-pills">
+        <button
+          type="button"
+          className="adm-pill"
+          data-tone="ok"
+          aria-pressed={!!u.subscribedToDuesReminders}
+          onClick={() => handleToggleReminders(u._id)}
+          title={u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled')}
+        >
+          {u.subscribedToDuesReminders ? <Bell size={12} /> : <BellOff size={12} />}
+          {compact ? 'Dues' : (u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled'))}
+        </button>
+
+        <button
+          type="button"
+          className="adm-pill"
+          data-tone="warn"
+          aria-pressed={!!u.nameChangeRequested}
+          onClick={() => handleRequestNameChange(u._id)}
+          title={u.nameChangeRequested ? 'A rename is already pending' : 'Ask this member to update their name'}
+        >
+          <UserCog size={12} />
+          {u.nameChangeRequested ? 'Rename pending' : 'Rename'}
+        </button>
+
+        <button
+          type="button"
+          className="adm-pill"
+          data-tone="violet"
+          aria-pressed={powerHours > 0}
+          onClick={() => handleDatePower(u)}
+          title="Let this member backdate entries for a limited window"
+        >
+          <Zap size={12} />
+          {powerHours > 0 ? `Date power ${powerHours}h` : 'Date power'}
+        </button>
       </div>
-      
-      {/* 2-Column Responsive Dashboard Layout */}
-      <div style={{
-        display: 'flex',
-        flexDirection: isMobile ? 'column' : 'row',
-        gap: isMobile ? '1rem' : '1.5rem',
-        alignItems: 'flex-start',
-        width: '100%',
-        marginTop: '1.5rem'
-      }}>
-        
-        {/* Navigation panel */}
-        {!isMobile && (
-          /* Desktop Vertical Sidebar Navigation */
-          <div style={{
-            width: '240px',
-            flexShrink: 0,
-            background: 'var(--surface)',
-            border: '1px solid var(--surface-border)',
-            borderRadius: '1rem',
-            padding: '0.6rem',
-            boxShadow: 'var(--shadow-sm)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.35rem',
-            position: 'sticky',
-            top: '2rem'
-          }}>
-            <div style={{ padding: '0.5rem 0.75rem 0.25rem', fontSize: '0.72rem', fontWeight: '800', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Control Center
-            </div>
-            {tabs.map(tab => {
-              const active = activeTab === tab.id;
-              const TabIcon = tab.icon;
-              const badgeCount = getBadgeCount(tab.id);
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    width: '100%',
-                    padding: '0.65rem 0.85rem',
-                    borderRadius: '0.75rem',
-                    border: 'none',
-                    background: active ? 'var(--primary-glow)' : 'transparent',
-                    color: active ? 'var(--primary)' : 'var(--text-muted)',
-                    fontWeight: active ? '700' : '600',
-                    fontSize: '0.88rem',
-                    cursor: 'pointer',
-                    outline: 'none',
-                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: active ? '0 4px 12px rgba(59, 130, 246, 0.08)' : 'none'
-                  }}
-                  onMouseEnter={e => { if(!active) e.currentTarget.style.color = 'var(--text-main)'; }}
-                  onMouseLeave={e => { if(!active) e.currentTarget.style.color = 'var(--text-muted)'; }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <TabIcon size={16} className="admin-tab-icon" style={{ strokeWidth: active ? '2.5' : '2' }} />
-                    <span>{tab.label}</span>
-                  </div>
-                  {badgeCount > 0 && (
-                    <span style={{
-                      background: tab.id === 'tickets' ? '#8b5cf6' : '#ef4444',
-                      color: 'white',
-                      borderRadius: '9999px',
-                      fontSize: '0.65rem',
-                      fontWeight: '800',
-                      padding: '0.1rem 0.4rem',
-                      minWidth: '16px',
-                      height: '16px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-                    }}>
-                      {badgeCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
+    );
+  };
 
-        {/* Content Column */}
-        <div style={{ flex: 1, minWidth: 0, width: '100%' }}>
-          <div className="card" style={{ padding: '0', overflow: 'hidden', background: 'transparent', boxShadow: 'none', border: 'none' }}>
-        {activeTab === 'users' && (() => {
-          const getInitials = (name) => {
-            if (!name) return '?';
-            const parts = name.trim().split(/\s+/);
-            if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-            return name.trim().substring(0, 2).toUpperCase();
-          };
-          
-          const getRoleGradient = (role) => {
-            if (role === 'ADMIN') return 'linear-gradient(135deg, #c084fc 0%, #6366f1 100%)';
-            if (role === 'YOUTH_TREASURER') return 'linear-gradient(135deg, #34d399 0%, #0d9488 100%)';
-            if (role === 'COUNSELOR') return 'linear-gradient(135deg, #fbbf24 0%, #d97706 100%)';
-            return 'linear-gradient(135deg, #94a3b8 0%, #475569 100%)';
-          };
+  const roleSelectOf = (u) => (
+    <select
+      className="adm-field adm-field--auto"
+      value={u.role}
+      onChange={(e) => handleRoleChange(u, e.target.value)}
+      aria-label={`Role for ${u.displayName}`}
+    >
+      <option value="MEMBER">{t('role_member')}</option>
+      <option value="COUNSELOR">{t('role_counselor')}</option>
+      <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
+      <option value="ADMIN">{t('role_admin')}</option>
+    </select>
+  );
+
+  /* ── Tab: members ───────────────────────────────────────────────────── */
+
+  const renderUsers = () => (
+    <>
+      <div className="adm-toolbar">
+        <div className="adm-search">
+          <Search size={15} className="adm-search__icon" aria-hidden="true" />
+          <input
+            className="adm-field"
+            type="search"
+            value={userQuery}
+            onChange={(e) => setUserFilter(setUserQuery)(e.target.value)}
+            placeholder="Search name or email…"
+            aria-label="Search members"
+          />
+          {userQuery && (
+            <button type="button" className="adm-search__clear" onClick={() => setUserFilter(setUserQuery)('')} aria-label="Clear search">
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <select className="adm-field adm-field--auto" value={userRole} onChange={(e) => setUserFilter(setUserRole)(e.target.value)} aria-label="Filter by role">
+          <option value="">All roles</option>
+          <option value="ADMIN">{t('role_admin')}</option>
+          <option value="COUNSELOR">{t('role_counselor')}</option>
+          <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
+          <option value="MEMBER">{t('role_member')}</option>
+        </select>
+
+        <select className="adm-field adm-field--auto" value={userStatus} onChange={(e) => setUserFilter(setUserStatus)(e.target.value)} aria-label="Filter by verification">
+          <option value="">Any status</option>
+          <option value="verified">Verified</option>
+          <option value="unverified">Unverified</option>
+        </select>
+
+        <select className="adm-field adm-field--auto" value={userSort} onChange={(e) => setUserFilter(setUserSort)(e.target.value)} aria-label="Sort members">
+          <option value="name">Name A–Z</option>
+          <option value="name-desc">Name Z–A</option>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="role">By role</option>
+        </select>
+
+        <span className="adm-toolbar__meta">
+          {filteredUsers.length === users.length
+            ? `${users.length} members`
+            : `${filteredUsers.length} of ${users.length}`}
+        </span>
+
+        <button type="button" className="adm-ghost-btn" onClick={exportUsersCsv} disabled={!filteredUsers.length}>
+          <Download size={13} /> CSV
+        </button>
+      </div>
+
+      {filteredUsers.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title="No members match"
+          text="Nothing matches the current search and filters. Clear them to see the full roster."
+        />
+      ) : (
+        <>
+          {/* Desktop table */}
+          <div className="adm-table-wrap adm-desk">
+            <div className="adm-table-scroll">
+              <table className="adm-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Member</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Permissions</th>
+                    <th scope="col">Joined</th>
+                    <th scope="col" className="adm-td-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedUsers.map((u) => (
+                    <tr key={u._id}>
+                      <td>{identityOf(u, 38)}</td>
+                      <td>{verifyChipOf(u)}</td>
+                      <td>{roleChipOf(u)}</td>
+                      <td>{permissionsOf(u)}</td>
+                      <td className="adm-td-dim">{shortDate(u.createdAt)}</td>
+                      <td className="adm-td-right">
+                        {u._id === user._id ? (
+                          <span className="adm-self">Current session</span>
+                        ) : (
+                          <div className="adm-actions">
+                            {roleSelectOf(u)}
+                            <button
+                              type="button"
+                              className="adm-icon-btn"
+                              data-tone="danger"
+                              onClick={() => handleDeleteUser(u)}
+                              aria-label={`Delete ${u.displayName}`}
+                              title={`Delete ${u.displayName}`}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Mobile cards */}
+          <div className="adm-cards adm-cards--single adm-mob">
+            {pagedUsers.map((u) => (
+              <div key={u._id} className="adm-card">
+                <div className="adm-card__head">
+                  {identityOf(u, 34)}
+                  {roleChipOf(u)}
+                </div>
+                <div className="adm-rule" />
+                <div className="adm-card__head">
+                  {verifyChipOf(u)}
+                  <span className="adm-card__stamp">Joined {shortDate(u.createdAt)}</span>
+                </div>
+                {permissionsOf(u, true)}
+                {u._id !== user._id && (
+                  <div className="adm-card__foot">
+                    {roleSelectOf(u)}
+                    <button
+                      type="button"
+                      className="adm-icon-btn"
+                      data-tone="danger"
+                      onClick={() => handleDeleteUser(u)}
+                      aria-label={`Delete ${u.displayName}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <Pager
+            page={usersPage}
+            totalPages={usersTotalPages}
+            onChange={setUsersPage}
+            label={{ previous: t('previous'), next: t('next'), of: t('page_of')(usersPage, usersTotalPages) }}
+          />
+        </>
+      )}
+    </>
+  );
+
+  /* ── Tab: thread approvals ──────────────────────────────────────────── */
+
+  const renderApprovals = (list, kind) => {
+    const isDeletion = kind === 'deletion';
+    if (!list.length) {
+      return (
+        <EmptyState
+          icon={isDeletion ? Trash2 : RotateCcw}
+          title={isDeletion ? 'No deletion requests' : 'No restore requests'}
+          text={isDeletion
+            ? 'Nothing is waiting for approval. Members ask here before a mirror thread is removed.'
+            : 'Nothing is waiting to come back out of the archive.'}
+        />
+      );
+    }
+    return (
+      <div className="adm-cards">
+        {list.map((req) => (
+          <div key={req._id} className="adm-card">
+            <div className="adm-card__head">
+              <span className="adm-chip" data-tone={isDeletion ? 'warn' : 'brand'}>
+                {isDeletion ? 'Pending approval' : 'Restore pending'}
+              </span>
+              <span className="adm-card__stamp">
+                {isDeletion ? shortDate(req.deletionRequestedAt) : 'Needs verification'}
+              </span>
+            </div>
+
+            <Flow from={req.sender?.displayName} to={req.receiver?.displayName} />
+
+            <div className="adm-card__foot">
+              <button
+                type="button"
+                className={`btn ${isDeletion ? 'btn-success' : 'btn-primary'}`}
+                style={{ flex: 1 }}
+                onClick={() => (isDeletion ? handleApproveDeletion(req._id) : handleApproveRestore(req._id))}
+              >
+                {isDeletion ? <CheckCircle size={14} /> : <RotateCcw size={14} />}
+                {isDeletion ? 'Approve' : 'Restore'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{ flex: 1 }}
+                onClick={() => (isDeletion ? handleRejectDeletion(req._id) : handleRejectRestore(req._id))}
+              >
+                <X size={14} /> {isDeletion ? 'Reject' : 'Dismiss'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  /* ── Tab: archive ───────────────────────────────────────────────────── */
+
+  const renderArchive = () => {
+    if (!recentlyDeleted.length) {
+      return (
+        <EmptyState
+          icon={History}
+          title="Archive is empty"
+          text={`No deleted threads are being held. Approved deletions stay recoverable here for ${RETENTION_DAYS} days.`}
+        />
+      );
+    }
+    return (
+      <div className="adm-cards">
+        {recentlyDeleted.map((log) => {
+          const deletedAt = new Date(log.deletedAt);
+          const expiry = new Date(deletedAt.getTime() + RETENTION_DAYS * 86400000);
+          const daysLeft = Math.max(0, Math.ceil((expiry - new Date()) / 86400000));
+          const percentLeft = Math.max(0, Math.min(100, (daysLeft / RETENTION_DAYS) * 100));
+          const tone = daysLeft < 15 ? 'var(--danger)' : daysLeft < 30 ? 'var(--warning)' : 'var(--success)';
+          const toneName = daysLeft < 15 ? 'danger' : daysLeft < 30 ? 'warn' : 'ok';
 
           return (
-            <>
-              {/* Desktop Modern Glass Table */}
-              <div className="admin-table-container desktop-admin-table card" style={{
-                background: 'var(--surface)',
-                border: '1px solid var(--surface-border)',
-                borderRadius: '1.25rem',
-                boxShadow: 'var(--shadow-sm)',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                overflow: 'hidden'
-              }}>
-                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)' }}>
-                      <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>User Details</th>
-                      <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Verification</th>
-                      <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>System Role</th>
-                      <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Dues Subscriptions</th>
-                      <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Actions</th>
+            <div key={log._id} className="adm-card">
+              <div className="adm-card__head">
+                <span className="adm-chip" data-tone="muted">Archived log</span>
+                <span className="adm-card__stamp">Deleted {shortDate(log.deletedAt)}</span>
+              </div>
+
+              <Flow from={log.sender?.displayName} to={log.receiver?.displayName} />
+
+              <div className="adm-meter">
+                <div className="adm-meter__row">
+                  <span className="adm-meter__label">Retention window</span>
+                  <span className="adm-meter__value" data-tone={toneName}>
+                    <Clock size={11} style={{ verticalAlign: '-1px', marginRight: '0.2rem' }} />
+                    {daysLeft} days left
+                  </span>
+                </div>
+                <Meter percent={percentLeft} tone={tone} />
+                <div className="adm-meter__foot">
+                  <span>Purges {shortDate(expiry)}</span>
+                  <span>{RETENTION_DAYS}-day policy</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  /* ── Tab: system requests ───────────────────────────────────────────── */
+
+  const renderTickets = () => (
+    <>
+      <div className="adm-toolbar">
+        <select
+          className="adm-field adm-field--auto"
+          value={ticketStatus}
+          onChange={(e) => setTicketStatus(e.target.value)}
+          aria-label="Filter requests by status"
+        >
+          <option value="">All requests</option>
+          <option value="open">Open</option>
+          <option value="in-progress">In progress</option>
+          <option value="resolved">Resolved</option>
+          <option value="closed">Closed</option>
+        </select>
+        <span className="adm-toolbar__spacer" />
+        <span className="adm-toolbar__meta">
+          {openTickets} open · {tickets.length} total
+        </span>
+      </div>
+
+      {visibleTickets.length === 0 ? (
+        <EmptyState
+          icon={MessageSquare}
+          title="No requests here"
+          text="Nothing matches this filter. Members raise bugs, feature ideas and questions from the System Requests module."
+        />
+      ) : (
+        <div className="adm-cards">
+          {visibleTickets.map((ticket) => (
+            <div key={ticket._id} className="adm-card">
+              <div className="adm-card__head">
+                <span className="adm-chip" data-tone={TICKET_TONE[ticket.type] || 'muted'}>{ticket.type}</span>
+                <span className="adm-card__stamp">by {ticket.createdBy?.displayName || 'Member'}</span>
+              </div>
+
+              <div>
+                <h4 className="adm-card__title">{ticket.title}</h4>
+                <p className="adm-card__body" style={{ marginTop: '0.2rem' }}>{ticket.description}</p>
+              </div>
+
+              {ticket.adminResponse && (
+                <div className="adm-quote">
+                  <span className="adm-quote__who"><CheckCircle size={11} /> Admin response</span>
+                  <p className="adm-quote__text">{ticket.adminResponse}</p>
+                </div>
+              )}
+
+              <div className="adm-card__foot">
+                <select
+                  className="adm-field"
+                  style={{ flex: 1 }}
+                  value={ticket.status}
+                  onChange={(e) => handleUpdateTicketStatus(ticket._id, e.target.value)}
+                  aria-label={`Status for ${ticket.title}`}
+                >
+                  <option value="open">Open</option>
+                  <option value="in-progress">In progress</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+                <button type="button" className="adm-ghost-btn" onClick={() => handleAdminResponse(ticket)}>
+                  <MessageSquare size={13} /> {ticket.adminResponse ? 'Edit reply' : 'Reply'}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
+  /* ── Tab: outgoing email log ────────────────────────────────────────── */
+
+  const renderEmails = () => (
+    <>
+      <div className="adm-toolbar">
+        <div className="adm-search">
+          <Search size={15} className="adm-search__icon" aria-hidden="true" />
+          <input
+            className="adm-field"
+            type="search"
+            value={emailsSearch}
+            onChange={(e) => { setEmailsSearch(e.target.value); setEmailsPage(1); }}
+            placeholder={t('email_search_placeholder')}
+            aria-label="Search the email log"
+          />
+          {emailsSearch && (
+            <button
+              type="button"
+              className="adm-search__clear"
+              onClick={() => { setEmailsSearch(''); setEmailsPage(1); }}
+              aria-label="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        <select
+          className="adm-field adm-field--auto"
+          value={emailsStatus}
+          onChange={(e) => { setEmailsStatus(e.target.value); setEmailsPage(1); }}
+          aria-label="Filter by delivery status"
+        >
+          <option value="">{t('email_all_statuses')}</option>
+          <option value="sent">{t('email_status_sent')}</option>
+          <option value="failed">{t('email_status_failed')}</option>
+        </select>
+
+        <span className="adm-toolbar__meta">
+          {emailsLoading ? 'Loading…' : `${emailsTotalCount} logged`}
+        </span>
+      </div>
+
+      {emailsLoading && emails.length === 0 ? (
+        <Skeletons count={5} />
+      ) : emails.length === 0 ? (
+        <EmptyState icon={Mail} title={t('email_no_logs')} text="Every outgoing notice, OTP and dues reminder is recorded here once sent." />
+      ) : (
+        <>
+          <div className="adm-table-wrap adm-desk">
+            <div className="adm-table-scroll">
+              <table className="adm-table">
+                <thead>
+                  <tr>
+                    <th scope="col">{t('email_to')}</th>
+                    <th scope="col">{t('email_subject')}</th>
+                    <th scope="col">{t('email_sent_at')}</th>
+                    <th scope="col">{t('email_status')}</th>
+                    <th scope="col" className="adm-td-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emails.map((mail) => (
+                    <tr key={mail._id}>
+                      <td style={{ fontWeight: 700 }}>{mail.to}</td>
+                      <td style={{ maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {mail.subject}
+                      </td>
+                      <td className="adm-td-dim">
+                        {new Date(mail.sentAt).toLocaleString(undefined, {
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                        })}
+                      </td>
+                      <td>
+                        <span className="adm-chip" data-tone={mail.status === 'sent' ? 'ok' : 'danger'}>
+                          {mail.status === 'sent' ? t('email_status_sent') : t('email_status_failed')}
+                        </span>
+                      </td>
+                      <td className="adm-td-right">
+                        <div className="adm-actions">
+                          <button type="button" className="adm-ghost-btn" onClick={() => setEmailPreview(mail)}>
+                            <Eye size={13} /> View
+                          </button>
+                          <button
+                            type="button"
+                            className="adm-ghost-btn"
+                            onClick={() => handleResendEmail(mail._id)}
+                            disabled={resendingId === mail._id}
+                          >
+                            <RefreshCw size={13} className={resendingId === mail._id ? 'adm-spin' : undefined} />
+                            {resendingId === mail._id ? 'Resending' : 'Resend'}
+                          </button>
+                        </div>
+                      </td>
                     </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="adm-cards adm-cards--single adm-mob">
+            {emails.map((mail) => (
+              <div key={mail._id} className="adm-card">
+                <div className="adm-card__head">
+                  <span className="adm-ident__mail">To: {mail.to}</span>
+                  <span className="adm-chip" data-tone={mail.status === 'sent' ? 'ok' : 'danger'}>
+                    {mail.status === 'sent' ? 'Sent' : 'Failed'}
+                  </span>
+                </div>
+                <div>
+                  <h4 className="adm-card__title">{mail.subject}</h4>
+                  <span className="adm-card__stamp">{new Date(mail.sentAt).toLocaleString()}</span>
+                </div>
+                <div className="adm-card__foot">
+                  <button type="button" className="adm-ghost-btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEmailPreview(mail)}>
+                    <Eye size={13} /> View
+                  </button>
+                  <button
+                    type="button"
+                    className="adm-ghost-btn"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={() => handleResendEmail(mail._id)}
+                    disabled={resendingId === mail._id}
+                  >
+                    <RefreshCw size={13} className={resendingId === mail._id ? 'adm-spin' : undefined} />
+                    {resendingId === mail._id ? 'Resending' : 'Resend'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Pager
+            page={emailsPage}
+            totalPages={emailsTotalPages}
+            onChange={setEmailsPage}
+            label={{ previous: t('previous'), next: t('next'), of: t('page_of')(emailsPage, emailsTotalPages) }}
+          />
+        </>
+      )}
+    </>
+  );
+
+  /* ── Tab: platform limits ───────────────────────────────────────────── */
+
+  const renderLimits = () => {
+    if (limitsLoading && !limitsData) {
+      return (
+        <>
+          <div className="adm-stats" style={{ marginTop: 0, marginBottom: 'var(--sp-4)' }} aria-hidden="true">
+            <div className="adm-skel" /><div className="adm-skel" /><div className="adm-skel" />
+          </div>
+          <Skeletons count={3} />
+        </>
+      );
+    }
+
+    if (limitsError) {
+      return (
+        <div className="adm-empty">
+          <AlertTriangle size={38} className="adm-empty__icon" style={{ color: 'var(--danger)', opacity: 1 }} />
+          <h4 className="adm-empty__title">Could not read resource stats</h4>
+          <p className="adm-empty__text">{limitsError}</p>
+          <button type="button" className="btn btn-primary" style={{ marginTop: '0.6rem' }} onClick={fetchPlatformLimits}>
+            <RefreshCw size={14} /> Try again
+          </button>
+        </div>
+      );
+    }
+
+    if (!limitsData) return null;
+
+    const { database, emails: emailUsage, cloudinary } = limitsData;
+    const mongoLimit = database.limitBytes || 512 * 1024 * 1024;
+    const mongoPercent = Math.min(100, Math.max(0.1, (database.dataSize / mongoLimit) * 100));
+    const emailLimit = emailUsage.limit || 500;
+    const emailPercent = Math.min(100, Math.max(0.1, (emailUsage.sentLast24h / emailLimit) * 100));
+
+    const cloudMeters = [
+      cloudinary?.credits && {
+        key: 'credits', label: 'Monthly credits',
+        text: `${(cloudinary.credits.usage || 0).toFixed(2)} / ${cloudinary.credits.limit || 25}`,
+        percent: cloudinary.credits.usedPercent || 0,
+      },
+      cloudinary?.storage && {
+        key: 'storage', label: 'Media storage',
+        text: `${formatBytes(cloudinary.storage.usage)} / ${formatBytes(cloudinary.storage.limit)}`,
+        percent: cloudinary.storage.usedPercent || 0,
+      },
+      cloudinary?.transformations && {
+        key: 'transforms', label: 'Image transformations',
+        text: `${(cloudinary.transformations.usage || 0).toLocaleString()} / ${(cloudinary.transformations.limit || 25000).toLocaleString()}`,
+        percent: cloudinary.transformations.usedPercent || 0,
+      },
+      cloudinary?.bandwidth && {
+        key: 'bandwidth', label: 'Delivery bandwidth',
+        text: `${formatBytes(cloudinary.bandwidth.usage)} / ${formatBytes(cloudinary.bandwidth.limit)}`,
+        percent: cloudinary.bandwidth.usedPercent || 0,
+      },
+    ].filter(Boolean);
+
+    const headline = [
+      {
+        key: 'db', icon: Database, tone: 'var(--success)', label: 'Database storage',
+        value: formatBytes(database.dataSize), meta: `${mongoPercent.toFixed(2)}% of 512 MB free tier`,
+      },
+      {
+        key: 'cloud', icon: Cloud, tone: 'var(--info)', label: 'Cloudinary credits',
+        value: cloudinary?.credits ? `${(cloudinary.credits.usage || 0).toFixed(2)} / ${cloudinary.credits.limit || 25}` : 'N/A',
+        meta: cloudinary?.credits ? `${(cloudinary.credits.usedPercent || 0).toFixed(1)}% credit usage` : 'Free plan (25 credits)',
+      },
+      {
+        key: 'mail', icon: Mail, tone: '#8b5cf6', label: 'Daily emails',
+        value: `${emailUsage.sentLast24h} / ${emailLimit}`, meta: `${emailPercent.toFixed(1)}% of the 24h cap`,
+      },
+    ];
+
+    return (
+      <div className="adm-limits">
+        <div className="adm-toolbar">
+          <span className="adm-toolbar__meta">
+            Live usage across the free tiers this platform runs on.
+          </span>
+          <span className="adm-toolbar__spacer" />
+          <button type="button" className="adm-ghost-btn" onClick={fetchPlatformLimits} disabled={limitsLoading}>
+            <RefreshCw size={13} className={limitsLoading ? 'adm-spin' : undefined} /> Refresh stats
+          </button>
+        </div>
+
+        <div className="adm-stats" style={{ marginTop: 0 }}>
+          {headline.map(({ key, icon: Icon, tone, label, value, meta }) => (
+            <div key={key} className="adm-stat adm-stat--static" style={{ '--tone': tone }}>
+              <span className="adm-stat__icon"><Icon size={19} /></span>
+              <span className="adm-stat__text">
+                <span className="adm-stat__value">{value}</span>
+                <span className="adm-stat__label">{label}</span>
+                <span className="adm-card__stamp" style={{ marginTop: '0.15rem' }}>{meta}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="adm-limit-grid">
+          {/* MongoDB */}
+          <section className="adm-limit-card" data-tone="ok">
+            <div className="adm-limit-head">
+              <h4 className="adm-limit-head__name"><Database size={17} /> MongoDB Atlas (M0)</h4>
+              <span className="adm-chip" data-tone="ok">Database</span>
+            </div>
+            <p className="adm-fine">
+              The shared M0 cluster caps out at <strong>512 MB</strong>. Passing it locks writes, which
+              blocks signups, threads and transactions.
+            </p>
+            <div className="adm-meter">
+              <div className="adm-meter__row">
+                <span className="adm-meter__label">Storage consumption</span>
+                <span className="adm-meter__value" data-tone={mongoPercent > 80 ? 'danger' : undefined}>
+                  {formatBytes(database.dataSize)} / 512 MB
+                </span>
+              </div>
+              <Meter percent={mongoPercent} tone={usageTone(mongoPercent)} />
+              <div className="adm-meter__foot">
+                <span>Logical {formatBytes(database.dataSize)}</span>
+                <span>Allocated {formatBytes(database.storageSize)}</span>
+              </div>
+            </div>
+            <div>
+              <div className="adm-subhead">
+                <span>Collections</span>
+                <span>{database.collections.length}</span>
+              </div>
+              <div className="adm-mini-scroll" style={{ marginTop: '0.4rem' }}>
+                <table className="adm-mini">
+                  <thead>
+                    <tr><th scope="col">Collection</th><th scope="col">Docs</th><th scope="col">Size</th></tr>
                   </thead>
                   <tbody>
-                    {users.map(u => (
-                      <tr key={u._id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }} className="table-row-hover">
-                        
-                        {/* Avatar & Name */}
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            {u.profilePicture ? (
-                              PRESETS.includes(u.profilePicture) ? (
-                                renderPresetSvg(u.profilePicture, 40, { flexShrink: 0 })
-                              ) : (
-                                <img
-                                  src={u.profilePicture}
-                                  alt={u.displayName}
-                                  style={{
-                                    width: '40px',
-                                    height: '40px',
-                                    borderRadius: '9999px',
-                                    objectFit: 'cover',
-                                    border: '2px solid var(--border-color)',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                    flexShrink: 0
-                                  }}
-                                />
-                              )
-                            ) : (
-                              <div style={{
-                                width: '40px',
-                                height: '40px',
-                                borderRadius: '9999px',
-                                background: getRoleGradient(u.role),
-                                color: 'white',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontWeight: '800',
-                                fontSize: '0.9rem',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                flexShrink: 0
-                              }}>
-                                {getInitials(u.displayName)}
-                              </div>
-                            )}
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '0.92rem' }}>{u.displayName}</span>
-                              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>{u.email}</span>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Verified Badge */}
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: u.isVerified ? 'rgba(34,197,94,0.1)' : 'rgba(245,158,11,0.1)', color: u.isVerified ? '#10b981' : '#f59e0b', padding: '0.3rem 0.65rem', borderRadius: '9999px', fontSize: '0.75rem', fontWeight: '700' }}>
-                            {u.isVerified ? <CheckCircle size={12} /> : <ShieldAlert size={12} />}
-                            {u.isVerified ? 'Verified' : 'Unverified'}
-                          </div>
-                        </td>
-
-                        {/* Role Chip */}
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          <span style={{
-                            background: u.role === 'ADMIN' ? 'rgba(192,132,252,0.15)' : u.role === 'YOUTH_TREASURER' ? 'rgba(52,211,153,0.15)' : u.role === 'COUNSELOR' ? 'rgba(251,191,36,0.15)' : 'rgba(148,163,184,0.15)',
-                            color: u.role === 'ADMIN' ? '#c084fc' : u.role === 'YOUTH_TREASURER' ? '#34d399' : u.role === 'COUNSELOR' ? '#fbbf24' : '#94a3b8',
-                            padding: '0.3rem 0.65rem',
-                            borderRadius: '0.5rem',
-                            fontSize: '0.75rem',
-                            fontWeight: '700',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.03em'
-                          }}>
-                            {u.role === 'ADMIN' && t('role_admin')}
-                            {u.role === 'COUNSELOR' && t('role_counselor')}
-                            {u.role === 'YOUTH_TREASURER' && t('role_youth_treasurer')}
-                            {u.role === 'MEMBER' && t('role_member')}
-                          </span>
-                        </td>
-
-                        {/* Reminders Toggle & Name Change */}
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          {u.isVerified ? (
-                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                              <button 
-                                onClick={() => handleToggleReminders(u._id)}
-                                style={{ 
-                                  background: u.subscribedToDuesReminders ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.03)', 
-                                  color: u.subscribedToDuesReminders ? '#22c55e' : 'var(--text-muted)',
-                                  border: `1px solid ${u.subscribedToDuesReminders ? 'rgba(34,197,94,0.2)' : 'var(--border-color)'}`,
-                                  padding: '0.4rem 0.8rem',
-                                  borderRadius: '9999px',
-                                  fontSize: '0.75rem',
-                                  cursor: 'pointer',
-                                  fontWeight: '600',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.4rem',
-                                  transition: 'all 0.2s',
-                                  outline: 'none'
-                                }}
-                              >
-                                {u.subscribedToDuesReminders ? <Bell size={13} style={{ fill: 'rgba(34,197,94,0.1)' }} /> : <BellOff size={13} />}
-                                {u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled')}
-                              </button>
-
-                              <button 
-                                onClick={() => handleRequestNameChange(u._id)}
-                                style={{ 
-                                  background: u.nameChangeRequested ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)', 
-                                  color: u.nameChangeRequested ? '#f59e0b' : 'var(--text-main)',
-                                  border: `1px solid ${u.nameChangeRequested ? 'rgba(245,158,11,0.2)' : 'var(--border-color)'}`,
-                                  padding: '0.4rem 0.8rem',
-                                  borderRadius: '9999px',
-                                  fontSize: '0.75rem',
-                                  cursor: 'pointer',
-                                  fontWeight: '600',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.4rem',
-                                  transition: 'all 0.2s',
-                                  outline: 'none'
-                                }}
-                              >
-                                <UserCog size={13} />
-                                {u.nameChangeRequested ? 'Change Pending' : 'Request Rename'}
-                              </button>
-
-                              {(() => {
-                                const isDatePowerActive = u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date();
-                                return (
-                                  <button 
-                                    onClick={() => handleDatePower(u._id, u.customDatePowerExpires)}
-                                    style={{ 
-                                      background: isDatePowerActive ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.03)', 
-                                      color: isDatePowerActive ? '#8b5cf6' : 'var(--text-main)',
-                                      border: `1px solid ${isDatePowerActive ? 'rgba(139,92,246,0.2)' : 'var(--border-color)'}`,
-                                      padding: '0.4rem 0.8rem',
-                                      borderRadius: '9999px',
-                                      fontSize: '0.75rem',
-                                      cursor: 'pointer',
-                                      fontWeight: '600',
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      gap: '0.4rem',
-                                      transition: 'all 0.2s',
-                                      outline: 'none'
-                                    }}
-                                  >
-                                    <Zap size={13} style={{ fill: isDatePowerActive ? 'rgba(139,92,246,0.1)' : 'none' }} />
-                                    {isDatePowerActive ? 'Date Power Active' : 'Grant Date Power'}
-                                  </button>
-                                );
-                              })()}
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Require Verification</span>
-                          )}
-                        </td>
-
-                        {/* Interactive Edit / Role Actions */}
-                        <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
-                          {u._id !== user._id ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                              <select 
-                                value={u.role} 
-                                onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                                style={{ 
-                                  padding: '0.35rem 0.6rem', 
-                                  borderRadius: '0.5rem', 
-                                  border: '1px solid var(--border-color)', 
-                                  background: 'rgba(0,0,0,0.2)', 
-                                  color: 'var(--text-main)',
-                                  fontSize: '0.82rem',
-                                  fontWeight: '600',
-                                  outline: 'none',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                <option value="MEMBER">{t('role_member')}</option>
-                                <option value="COUNSELOR">{t('role_counselor')}</option>
-                                <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
-                                <option value="ADMIN">{t('role_admin')}</option>
-                              </select>
-                              <button 
-                                onClick={() => handleDeleteUser(u._id)}
-                                style={{ 
-                                  background: 'rgba(239,68,68,0.08)', 
-                                  border: '1px solid rgba(239,68,68,0.15)', 
-                                  color: '#ef4444', 
-                                  cursor: 'pointer', 
-                                  padding: '0.4rem', 
-                                  borderRadius: '0.5rem',
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'center',
-                                  transition: 'all 0.2s',
-                                  outline: 'none'
-                                }}
-                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.18)'}
-                                onMouseLeave={e => e.currentTarget.style.background = 'rgba(239,68,68,0.08)'}
-                                title="Delete User"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </div>
-                          ) : (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic', paddingRight: '0.5rem' }}>Current Session</span>
-                          )}
-                        </td>
-
+                    {database.collections.map((col) => (
+                      <tr key={col.name}>
+                        <td>{col.name}</td>
+                        <td>{col.count}</td>
+                        <td>{col.size > 0 ? formatBytes(col.size) : '< 1 KB'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+            </div>
+          </section>
 
-              {/* Mobile Glass Card Deck */}
-              <div className="mobile-admin-cards" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {users.map(u => (
-                  <div key={u._id} style={{
-                    background: 'var(--surface)',
-                    border: '1px solid var(--surface-border)',
-                    padding: '0.75rem',
-                    borderRadius: '0.75rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
-                    boxShadow: 'var(--shadow-sm)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)'
-                  }}>
-                    {/* Member Top Bar */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      {u.profilePicture ? (
-                        PRESETS.includes(u.profilePicture) ? (
-                          renderPresetSvg(u.profilePicture, 34, { flexShrink: 0 })
-                        ) : (
-                          <img
-                            src={u.profilePicture}
-                            alt={u.displayName}
-                            style={{
-                              width: '34px',
-                              height: '34px',
-                              borderRadius: '9999px',
-                              objectFit: 'cover',
-                              border: '1.5px solid var(--border-color)',
-                              boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                              flexShrink: 0
-                            }}
-                          />
-                        )
-                      ) : (
-                        <div style={{
-                          width: '34px',
-                          height: '34px',
-                          borderRadius: '9999px',
-                          background: getRoleGradient(u.role),
-                          color: 'white',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontWeight: '800',
-                          fontSize: '0.85rem',
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
-                          flexShrink: 0
-                        }}>
-                          {getInitials(u.displayName)}
-                        </div>
-                      )}
-                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                        <span style={{ fontWeight: '800', color: 'var(--text-main)', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {u.displayName}
-                        </span>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '0.02rem' }}>
-                          {u.email}
-                        </span>
-                      </div>
-                      
-                      {/* Compact Role Badge in Header */}
-                      <span style={{
-                        background: u.role === 'ADMIN' ? 'rgba(192,132,252,0.15)' : u.role === 'YOUTH_TREASURER' ? 'rgba(52,211,153,0.15)' : u.role === 'COUNSELOR' ? 'rgba(251,191,36,0.15)' : 'rgba(148,163,184,0.15)',
-                        color: u.role === 'ADMIN' ? '#c084fc' : u.role === 'YOUTH_TREASURER' ? '#34d399' : u.role === 'COUNSELOR' ? '#fbbf24' : '#94a3b8',
-                        padding: '0.2rem 0.4rem',
-                        borderRadius: '0.3rem',
-                        fontSize: '0.65rem',
-                        fontWeight: '700',
-                        textTransform: 'uppercase',
-                        flexShrink: 0
-                      }}>
-                        {u.role === 'ADMIN' && t('role_admin')}
-                        {u.role === 'COUNSELOR' && t('role_counselor')}
-                        {u.role === 'YOUTH_TREASURER' && t('role_youth_treasurer')}
-                        {u.role === 'MEMBER' && t('role_member')}
-                      </span>
+          {/* Cloudinary */}
+          <section className="adm-limit-card" data-tone="info">
+            <div className="adm-limit-head">
+              <h4 className="adm-limit-head__name"><Cloud size={17} /> Cloudinary media</h4>
+              <span className="adm-chip" data-tone="info">Media</span>
+            </div>
+            <p className="adm-fine">
+              Hosts profile pictures and resource covers. The free tier gives <strong>25 monthly credits</strong> —
+              1 credit is 1 GB of storage, 1 GB of bandwidth, or 1,000 transformations.
+            </p>
+            {cloudMeters.length ? (
+              <>
+                {cloudMeters.map(({ key, label, text, percent }) => (
+                  <div key={key} className="adm-meter">
+                    <div className="adm-meter__row">
+                      <span className="adm-meter__label">{label}</span>
+                      <span className="adm-meter__value">{text}</span>
                     </div>
-
-                    <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: 0 }} />
-
-                    {/* Metadata & Quick Actions Fields */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.2rem',
-                        color: u.isVerified ? '#10b981' : '#f59e0b',
-                        fontSize: '0.72rem',
-                        fontWeight: '700'
-                      }}>
-                        {u.isVerified ? <CheckCircle size={10} /> : <ShieldAlert size={10} />}
-                        {u.isVerified ? 'Verified' : 'Unverified'}
-                      </div>
-
-                      {u.isVerified && (
-                        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                          <button 
-                            onClick={() => handleToggleReminders(u._id)}
-                            style={{ 
-                              background: u.subscribedToDuesReminders ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.03)', 
-                              color: u.subscribedToDuesReminders ? '#22c55e' : 'var(--text-muted)',
-                              border: `1px solid ${u.subscribedToDuesReminders ? 'rgba(34,197,94,0.2)' : 'var(--border-color)'}`,
-                              padding: '0.25rem 0.45rem',
-                              borderRadius: '9999px',
-                              fontSize: '0.68rem',
-                              cursor: 'pointer',
-                              fontWeight: '600',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.2rem',
-                              outline: 'none'
-                            }}
-                          >
-                            {u.subscribedToDuesReminders ? <Bell size={10} style={{ fill: 'rgba(34,197,94,0.1)' }} /> : <BellOff size={10} />}
-                            Dues
-                          </button>
-
-                          <button 
-                            onClick={() => handleRequestNameChange(u._id)}
-                            style={{ 
-                              background: u.nameChangeRequested ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.03)', 
-                              color: u.nameChangeRequested ? '#f59e0b' : 'var(--text-main)',
-                              border: `1px solid ${u.nameChangeRequested ? 'rgba(245,158,11,0.2)' : 'var(--border-color)'}`,
-                              padding: '0.25rem 0.45rem',
-                              borderRadius: '9999px',
-                              fontSize: '0.68rem',
-                              cursor: 'pointer',
-                              fontWeight: '600',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.2rem',
-                              outline: 'none'
-                            }}
-                          >
-                            <UserCog size={10} />
-                            Rename
-                          </button>
-
-                          <button 
-                            onClick={() => handleDatePower(u._id, u.customDatePowerExpires)}
-                            style={{ 
-                              background: u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? 'rgba(139,92,246,0.12)' : 'rgba(255,255,255,0.03)', 
-                              color: u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? '#8b5cf6' : 'var(--text-main)',
-                              border: `1px solid ${u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? 'rgba(139,92,246,0.2)' : 'var(--border-color)'}`,
-                              padding: '0.25rem 0.45rem',
-                              borderRadius: '9999px',
-                              fontSize: '0.68rem',
-                              cursor: 'pointer',
-                              fontWeight: '600',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.2rem',
-                              outline: 'none'
-                            }}
-                          >
-                            <Zap size={10} style={{ fill: u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? 'rgba(139,92,246,0.1)' : 'none' }} />
-                            {u.customDatePowerExpires && new Date(u.customDatePowerExpires) > new Date() ? 'Date Pow' : 'Grant Pow'}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Mobile Card Actions */}
-                    {u._id !== user._id && (
-                      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.5rem' }}>
-                        <select 
-                          value={u.role} 
-                          onChange={(e) => handleRoleChange(u._id, e.target.value)}
-                          style={{ 
-                            padding: '0.4rem', 
-                            borderRadius: '0.4rem', 
-                            border: '1px solid var(--border-color)', 
-                            background: 'rgba(0,0,0,0.2)', 
-                            color: 'var(--text-main)', 
-                            flex: 1, 
-                            fontSize: '0.78rem',
-                            fontWeight: '600',
-                            outline: 'none'
-                          }}
-                        >
-                          <option value="MEMBER">{t('role_member')}</option>
-                          <option value="COUNSELOR">{t('role_counselor')}</option>
-                          <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
-                          <option value="ADMIN">{t('role_admin')}</option>
-                        </select>
-                        <button 
-                          onClick={() => handleDeleteUser(u._id)}
-                          style={{ 
-                            background: 'rgba(239,68,68,0.08)', 
-                            border: '1px solid rgba(239,68,68,0.2)', 
-                            color: '#ef4444', 
-                            cursor: 'pointer', 
-                            padding: '0.4rem 0.6rem', 
-                            borderRadius: '0.4rem', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            justifyContent: 'center',
-                            flexShrink: 0,
-                            outline: 'none'
-                          }}
-                          title="Delete User"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    )}
+                    <Meter percent={percent} tone={usageTone(percent)} />
                   </div>
                 ))}
-              </div>
-            </>
-          );
-        })()}
-
-        {activeTab === 'deletion-requests' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
-            {deletionRequests.length === 0 ? (
-              <div className="card text-center" style={{ gridColumn: '1 / -1', padding: '3rem 2rem', color: 'var(--text-muted)', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem' }}>
-                <Trash2 size={40} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '0.75rem' }} />
-                <h4 style={{ margin: '0 0 0.25rem', color: 'var(--text-main)', fontWeight: '700' }}>No Deletion Requests</h4>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>There are no active thread deletion requests needing approval.</p>
-              </div>
-            ) : (
-              deletionRequests.map(t => (
-                <div key={t._id} style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: isMobile ? '0.75rem' : '1.25rem',
-                  padding: isMobile ? '0.75rem' : '1.25rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: isMobile ? '0.6rem' : '1rem',
-                  boxShadow: 'var(--shadow-sm)',
-                  backdropFilter: 'blur(16px)',
-                  WebkitBackdropFilter: 'blur(16px)',
-                  transition: 'transform 0.2s'
-                }} className="card-hover">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.1)', padding: '0.2rem 0.5rem', borderRadius: '9999px' }}>
-                      Pending Approval
-                    </span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-                      {new Date(t.deletionRequestedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </span>
-                  </div>
-
-                  {/* Flow Bridge */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', padding: isMobile ? '0.5rem' : '0.75rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Sender</span>
-                      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.sender?.displayName || 'Unknown'}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', color: 'var(--text-muted)', padding: '0 0.4rem', fontSize: '0.8rem' }}>
-                      ➔
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, textAlign: 'right', minWidth: 0 }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Receiver</span>
-                      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.receiver?.displayName || 'Unknown'}</span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.1rem' }}>
-                    <button 
-                      onClick={() => handleApproveDeletion(t._id)} 
-                      style={{ 
-                        flex: 1, 
-                        background: 'rgba(16, 185, 129, 0.1)', 
-                        border: '1px solid rgba(16, 185, 129, 0.25)', 
-                        color: '#10b981', 
-                        padding: isMobile ? '0.45rem' : '0.55rem', 
-                        borderRadius: isMobile ? '0.5rem' : '0.75rem', 
-                        cursor: 'pointer', 
-                        fontWeight: '700',
-                        fontSize: isMobile ? '0.78rem' : '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.3rem',
-                        outline: 'none',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)'}
-                    >
-                      <CheckCircle size={13} /> Approve
-                    </button>
-                    <button 
-                      onClick={() => handleRejectDeletion(t._id)} 
-                      style={{ 
-                        flex: 1, 
-                        background: 'rgba(239, 68, 68, 0.08)', 
-                        border: '1px solid rgba(239, 68, 68, 0.15)', 
-                        color: '#ef4444', 
-                        padding: isMobile ? '0.45rem' : '0.55rem', 
-                        borderRadius: isMobile ? '0.5rem' : '0.75rem', 
-                        cursor: 'pointer', 
-                        fontWeight: '700',
-                        fontSize: isMobile ? '0.78rem' : '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.35rem',
-                        outline: 'none',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
-                    >
-                      <Trash2 size={13} /> Reject
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {activeTab === 'restore-requests' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
-            {restoreRequests.length === 0 ? (
-              <div className="card text-center" style={{ gridColumn: '1 / -1', padding: '3rem 2rem', color: 'var(--text-muted)', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem' }}>
-                <RotateCcw size={40} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '0.75rem' }} />
-                <h4 style={{ margin: '0 0 0.25rem', color: 'var(--text-main)', fontWeight: '700' }}>No Restore Requests</h4>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>There are no active thread restore requests needing approval.</p>
-              </div>
-            ) : (
-              restoreRequests.map(t => (
-                <div key={t._id} style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: isMobile ? '0.75rem' : '1.25rem',
-                  padding: isMobile ? '0.75rem' : '1.25rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: isMobile ? '0.6rem' : '1rem',
-                  boxShadow: 'var(--shadow-sm)',
-                  backdropFilter: 'blur(16px)',
-                  WebkitBackdropFilter: 'blur(16px)',
-                  transition: 'transform 0.2s'
-                }} className="card-hover">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--primary)', background: 'var(--primary-glow)', padding: '0.2rem 0.5rem', borderRadius: '9999px' }}>
-                      Restore Pending
-                    </span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-                      Needs Verification
-                    </span>
-                  </div>
-
-                  {/* Flow Bridge */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', padding: isMobile ? '0.5rem' : '0.75rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Sender</span>
-                      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.sender?.displayName || 'Unknown'}</span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', color: 'var(--text-muted)', padding: '0 0.4rem', fontSize: '0.8rem' }}>
-                      ➔
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, textAlign: 'right', minWidth: 0 }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Receiver</span>
-                      <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.receiver?.displayName || 'Unknown'}</span>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.1rem' }}>
-                    <button 
-                      onClick={() => handleApproveRestore(t._id)} 
-                      style={{ 
-                        flex: 1, 
-                        background: 'var(--primary-glow)', 
-                        border: '1px solid rgba(59, 130, 246, 0.25)', 
-                        color: 'var(--primary)', 
-                        padding: isMobile ? '0.45rem' : '0.55rem', 
-                        borderRadius: isMobile ? '0.5rem' : '0.75rem', 
-                        cursor: 'pointer', 
-                        fontWeight: '700',
-                        fontSize: isMobile ? '0.78rem' : '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.3rem',
-                        outline: 'none',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'var(--primary-glow)'}
-                    >
-                      <RotateCcw size={13} /> Restore
-                    </button>
-                    <button 
-                      onClick={() => handleRejectRestore(t._id)} 
-                      style={{ 
-                        flex: 1, 
-                        background: 'rgba(239, 68, 68, 0.08)', 
-                        border: '1px solid rgba(239, 68, 68, 0.15)', 
-                        color: '#ef4444', 
-                        padding: isMobile ? '0.45rem' : '0.55rem', 
-                        borderRadius: isMobile ? '0.5rem' : '0.75rem', 
-                        cursor: 'pointer', 
-                        fontWeight: '700',
-                        fontSize: isMobile ? '0.78rem' : '0.85rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.35rem',
-                        outline: 'none',
-                        transition: 'all 0.2s'
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)'}
-                    >
-                      <Trash2 size={13} /> Dismiss
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {activeTab === 'recently-deleted' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
-            {recentlyDeleted.length === 0 ? (
-              <div className="card text-center" style={{ gridColumn: '1 / -1', padding: '3rem 2rem', color: 'var(--text-muted)', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem' }}>
-                <History size={40} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '0.75rem' }} />
-                <h4 style={{ margin: '0 0 0.25rem', color: 'var(--text-main)', fontWeight: '700' }}>No Deleted Threads</h4>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>There are no recently deleted message logs in the 60-day archive.</p>
-              </div>
-            ) : (
-              recentlyDeleted.map(t => {
-                const deletedDate = new Date(t.deletedAt);
-                const expiryDate = new Date(deletedDate.getTime() + 60 * 24 * 60 * 60 * 1000);
-                const daysLeft = Math.ceil((expiryDate - new Date()) / (1000 * 60 * 60 * 24));
-                const percentLeft = Math.max(0, Math.min(100, (daysLeft / 60) * 100));
-
-                let statusColor = '#10b981';
-                if (daysLeft < 15) {
-                  statusColor = '#ef4444';
-                } else if (daysLeft < 30) {
-                  statusColor = '#f59e0b';
-                }
-
-                return (
-                  <div key={t._id} style={{
-                    background: 'var(--surface)',
-                    border: '1px solid var(--surface-border)',
-                    borderRadius: isMobile ? '0.75rem' : '1.25rem',
-                    padding: isMobile ? '0.75rem' : '1.25rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: isMobile ? '0.5rem' : '0.85rem',
-                    boxShadow: 'var(--shadow-sm)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
-                    transition: 'transform 0.2s'
-                  }} className="card-hover">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-                        Archived Log
-                      </span>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-                        Deleted {deletedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                      </span>
-                    </div>
-
-                    {/* Flow Bridge */}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-color)', borderRadius: '0.5rem', padding: isMobile ? '0.4rem 0.6rem' : '0.6rem 0.75rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Sender</span>
-                        <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.sender?.displayName || 'Unknown'}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', color: 'var(--text-muted)', padding: '0 0.4rem', fontSize: '0.8rem' }}>
-                        ➔
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', flex: 1, textAlign: 'right', minWidth: 0 }}>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Receiver</span>
-                        <span style={{ fontSize: '0.82rem', fontWeight: '700', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.receiver?.displayName || 'Unknown'}</span>
-                      </div>
-                    </div>
-
-                    {/* Timeline Progression Meter */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.1rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
-                        <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Retention Window</span>
-                        <span style={{ color: statusColor, fontWeight: '800', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                          <Clock size={10} /> {daysLeft} days remaining
-                        </span>
-                      </div>
-                      <div style={{ width: '100%', height: '4px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
-                        <div style={{ width: `${percentLeft}%`, height: '100%', background: statusColor, borderRadius: '9999px', transition: 'width 0.4s' }} />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        )}
-
-        {activeTab === 'tickets' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
-            {tickets.length === 0 ? (
-              <div className="card text-center" style={{ gridColumn: '1 / -1', padding: '3rem 2rem', color: 'var(--text-muted)', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem' }}>
-                <MessageSquare size={40} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '0.75rem' }} />
-                <h4 style={{ margin: '0 0 0.25rem', color: 'var(--text-main)', fontWeight: '700' }}>No Active Requests</h4>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>There are no system request tickets logged currently.</p>
-              </div>
-            ) : (
-              tickets.map(t => {
-                const isResolved = t.status === 'resolved' || t.status === 'closed';
-                
-                return (
-                  <div key={t._id} style={{
-                    background: 'var(--surface)',
-                    border: '1px solid var(--surface-border)',
-                    borderRadius: isMobile ? '0.75rem' : '1.25rem',
-                    padding: isMobile ? '0.75rem' : '1.25rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: isMobile ? '0.5rem' : '1rem',
-                    boxShadow: 'var(--shadow-sm)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
-                    position: 'relative'
-                  }}>
-                    {/* Header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{
-                        background: t.type === 'bug' ? 'rgba(239,68,68,0.12)' : t.type === 'feature' ? 'rgba(59,130,246,0.12)' : 'rgba(139,92,246,0.12)',
-                        color: t.type === 'bug' ? '#ef4444' : t.type === 'feature' ? '#3b82f6' : '#8b5cf6',
-                        padding: '0.2rem 0.45rem',
-                        borderRadius: '9999px',
-                        fontSize: '0.68rem',
-                        fontWeight: '700',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.04em'
-                      }}>
-                        {t.type}
-                      </span>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-                        by {t.createdBy?.displayName || 'Member'}
-                      </span>
-                    </div>
-
-                    {/* Content */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                      <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: isMobile ? '0.9rem' : '1rem', fontWeight: '800', letterSpacing: '-0.01em' }}>
-                        {t.title}
-                      </h4>
-                      <p style={{ margin: 0, fontSize: isMobile ? '0.8rem' : '0.85rem', color: 'var(--text-muted)', lineHeight: '1.35' }}>
-                        {t.description}
-                      </p>
-                    </div>
-
-                    {/* Dialog Speech bubble (Admin Reply) */}
-                    {t.adminResponse && (
-                      <div style={{
-                        background: 'rgba(255,255,255,0.02)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: isMobile ? '0.5rem' : '0.75rem',
-                        padding: isMobile ? '0.5rem' : '0.75rem',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.15rem',
-                        position: 'relative'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.72rem', color: 'var(--primary)', fontWeight: '700' }}>
-                          <CheckCircle size={11} /> Admin Response
-                        </div>
-                        <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-main)', lineHeight: '1.3' }}>
-                          {t.adminResponse}
-                        </p>
-                      </div>
-                    )}
-
-                    <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: 0 }} />
-
-                    {/* Actions Panel */}
-                    <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                      <select 
-                        value={t.status} 
-                        onChange={(e) => handleUpdateTicketStatus(t._id, e.target.value)}
-                        style={{ 
-                          padding: isMobile ? '0.4rem 0.5rem' : '0.5rem 0.6rem', 
-                          borderRadius: isMobile ? '0.5rem' : '0.75rem', 
-                          border: '1px solid var(--border-color)', 
-                          background: 'rgba(0,0,0,0.2)', 
-                          color: 'var(--text-main)',
-                          fontSize: isMobile ? '0.78rem' : '0.82rem',
-                          fontWeight: '700',
-                          outline: 'none',
-                          cursor: 'pointer',
-                          flex: 1
-                        }}
-                      >
-                        <option value="open">🟢 Open</option>
-                        <option value="in-progress">🟡 In Progress</option>
-                        <option value="resolved">🔵 Resolved</option>
-                        <option value="closed">⚪ Closed</option>
-                      </select>
-
-                      <button 
-                        onClick={() => handleAdminResponse(t._id)} 
-                        className="btn btn-secondary"
-                        style={{ 
-                          padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 0.75rem', 
-                          fontSize: isMobile ? '0.78rem' : '0.82rem',
-                          borderRadius: isMobile ? '0.5rem' : '0.75rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.3rem',
-                          fontWeight: '700'
-                        }}
-                      >
-                        <MessageSquare size={12} /> {t.adminResponse ? 'Edit Reply' : 'Reply'}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        )}
-
-        {activeTab === 'emails' && (
-          <>
-            {/* Filters panel */}
-            <div className="card" style={{
-              padding: isMobile ? '0.75rem' : '1.25rem',
-              marginBottom: isMobile ? '0.75rem' : '1.25rem',
-              display: 'flex',
-              gap: isMobile ? '0.5rem' : '1rem',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              background: 'var(--surface)',
-              border: '1px solid var(--surface-border)',
-              borderRadius: isMobile ? '0.75rem' : '1.25rem',
-              boxShadow: 'var(--shadow-sm)',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)'
-            }}>
-              {/* Search Bar Input */}
-              <div style={{ flex: 1, minWidth: '220px', position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <Search size={16} style={{ position: 'absolute', left: '1rem', color: 'var(--text-muted)' }} />
-                <input
-                  type="text"
-                  value={emailsSearch}
-                  onChange={(e) => {
-                    setEmailsSearch(e.target.value);
-                    setEmailsPage(1);
-                  }}
-                  placeholder={t('email_search_placeholder')}
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem 1rem 0.65rem 2.5rem',
-                    borderRadius: '0.75rem',
-                    border: '1px solid var(--border-color)',
-                    background: 'rgba(0,0,0,0.15)',
-                    color: 'var(--text-main)',
-                    fontSize: '0.88rem',
-                    fontWeight: '600',
-                    outline: 'none',
-                    transition: 'border 0.2s'
-                  }}
-                />
-              </div>
-
-              {/* Status Select */}
-              <select
-                value={emailsStatus}
-                onChange={(e) => {
-                  setEmailsStatus(e.target.value);
-                  setEmailsPage(1);
-                }}
-                style={{
-                  padding: '0.65rem 1rem',
-                  borderRadius: '0.75rem',
-                  border: '1px solid var(--border-color)',
-                  background: 'rgba(0,0,0,0.15)',
-                  color: 'var(--text-main)',
-                  minWidth: '160px',
-                  fontSize: '0.88rem',
-                  fontWeight: '700',
-                  outline: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="">📨 {t('email_all_statuses')}</option>
-                <option value="sent">🟢 {t('email_status_sent')}</option>
-                <option value="failed">🔴 {t('email_status_failed')}</option>
-              </select>
-
-              {/* Total Count Badge */}
-              <div style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                background: 'var(--primary-glow)',
-                border: '1px solid rgba(59, 130, 246, 0.15)',
-                color: 'var(--primary)',
-                padding: '0.65rem 1rem',
-                borderRadius: '0.75rem',
-                fontSize: '0.88rem',
-                fontWeight: '700',
-                whiteSpace: 'nowrap'
-              }}>
-                <Mail size={14} />
-                <span>Total: {emailsTotalCount}</span>
-              </div>
-            </div>
-
-            {/* Desktop Table View */}
-            <div className="admin-table-container desktop-admin-table card" style={{
-              background: 'var(--surface)',
-              border: '1px solid var(--surface-border)',
-              borderRadius: '1.25rem',
-              boxShadow: 'var(--shadow-sm)',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              overflow: 'hidden'
-            }}>
-              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)' }}>
-                    <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('email_to')}</th>
-                    <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('email_subject')}</th>
-                    <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('email_sent_at')}</th>
-                    <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('email_status')}</th>
-                    <th style={{ padding: '1rem 1.25rem', fontSize: '0.85rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {emails.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" style={{ padding: '3rem 2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        {emailsLoading ? (
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <RefreshCw size={16} className="spin" /> Hydrating Logs...
-                          </div>
-                        ) : t('email_no_logs')}
-                      </td>
-                    </tr>
-                  ) : (
-                    emails.map(email => (
-                      <tr key={email._id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }} className="table-row-hover">
-                        <td style={{ padding: '1rem 1.25rem', fontWeight: '700', color: 'var(--text-main)', fontSize: '0.9rem' }}>{email.to}</td>
-                        <td style={{ padding: '1rem 1.25rem', fontSize: '0.88rem', color: 'var(--text-main)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {email.subject}
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                          {new Date(email.sentAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem' }}>
-                          <span style={{
-                            background: email.status === 'sent' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                            color: email.status === 'sent' ? '#22c55e' : '#ef4444',
-                            padding: '0.25rem 0.6rem',
-                            borderRadius: '9999px',
-                            fontSize: '0.75rem',
-                            fontWeight: '700'
-                          }}>
-                            {email.status === 'sent' ? t('email_status_sent') : t('email_status_failed')}
-                          </span>
-                        </td>
-                        <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
-                          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                            <button
-                              onClick={() => setEmailPreview(email)}
-                              style={{ 
-                                background: 'rgba(255,255,255,0.03)', 
-                                border: '1px solid var(--border-color)', 
-                                color: 'var(--text-main)',
-                                padding: '0.4rem 0.8rem',
-                                borderRadius: '0.5rem',
-                                fontSize: '0.78rem',
-                                cursor: 'pointer',
-                                fontWeight: '700',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.35rem',
-                                transition: 'all 0.2s',
-                                outline: 'none'
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                            >
-                              <Eye size={13} /> View
-                            </button>
-                            <button
-                              onClick={() => handleResendEmail(email._id)}
-                              disabled={resendingId === email._id}
-                              style={{ 
-                                background: 'var(--primary-glow)', 
-                                border: '1px solid rgba(59,130,246,0.2)', 
-                                color: 'var(--primary)',
-                                padding: '0.4rem 0.8rem',
-                                borderRadius: '0.5rem',
-                                fontSize: '0.78rem',
-                                cursor: 'pointer',
-                                fontWeight: '700',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.35rem',
-                                transition: 'all 0.2s',
-                                outline: 'none'
-                              }}
-                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.15)'}
-                              onMouseLeave={e => e.currentTarget.style.background = 'var(--primary-glow)'}
-                            >
-                              <RefreshCw size={13} className={resendingId === email._id ? 'spin' : ''} />
-                              {resendingId === email._id ? 'Resending' : 'Resend'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile Cards View */}
-            <div className="mobile-admin-cards" style={{ flexDirection: 'column', gap: '0.5rem' }}>
-              {emails.length === 0 ? (
-                <div className="card text-center" style={{ padding: '2rem', color: 'var(--text-muted)', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '0.75rem' }}>
-                  {emailsLoading ? 'Loading Logs...' : t('email_no_logs')}
-                </div>
-              ) : (
-                emails.map(email => (
-                  <div key={email._id} style={{
-                    background: 'var(--surface)',
-                    border: '1px solid var(--surface-border)',
-                    padding: '0.75rem',
-                    borderRadius: '0.75rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
-                    boxShadow: 'var(--shadow-sm)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>To: {email.to}</span>
-                      <span style={{
-                        background: email.status === 'sent' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                        color: email.status === 'sent' ? '#22c55e' : '#ef4444',
-                        padding: '0.15rem 0.45rem',
-                        borderRadius: '9999px',
-                        fontSize: '0.68rem',
-                        fontWeight: '700',
-                        flexShrink: 0
-                      }}>
-                        {email.status === 'sent' ? 'Sent' : 'Failed'}
-                      </span>
-                    </div>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.1rem' }}>
-                      <span style={{ fontWeight: '800', color: 'var(--text-main)', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {email.subject}
-                      </span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        {new Date(email.sentAt).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: 0 }} />
-
-                    <div style={{ display: 'flex', gap: '0.4rem' }}>
-                      <button
-                        onClick={() => setEmailPreview(email)}
-                        style={{ 
-                          flex: 1, 
-                          background: 'rgba(255,255,255,0.03)', 
-                          border: '1px solid var(--border-color)', 
-                          color: 'var(--text-main)',
-                          padding: '0.45rem', 
-                          borderRadius: '0.5rem', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          gap: '0.3rem',
-                          fontSize: '0.78rem',
-                          fontWeight: '700',
-                          outline: 'none'
-                        }}
-                      >
-                        <Eye size={12} /> View
-                      </button>
-                      <button
-                        onClick={() => handleResendEmail(email._id)}
-                        disabled={resendingId === email._id}
-                        style={{ 
-                          flex: 1, 
-                          background: 'var(--primary-glow)', 
-                          border: '1px solid rgba(59,130,246,0.2)', 
-                          color: 'var(--primary)',
-                          padding: '0.45rem', 
-                          borderRadius: '0.5rem', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          gap: '0.3rem',
-                          fontSize: '0.78rem',
-                          fontWeight: '700',
-                          outline: 'none'
-                        }}
-                      >
-                        <RefreshCw size={12} className={resendingId === email._id ? 'spin' : ''} />
-                        {resendingId === email._id ? 'Resending' : 'Resend'}
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Pagination Controls */}
-            {emailsTotalPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '1.75rem', marginBottom: '1.75rem' }}>
-                <button
-                  disabled={emailsPage === 1}
-                  onClick={() => setEmailsPage(prev => Math.max(prev - 1, 1))}
-                  className="btn btn-secondary"
-                  style={{ padding: '0.5rem 1rem', borderRadius: '0.75rem', fontWeight: '700' }}
-                >
-                  {t('previous')}
-                </button>
-                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontWeight: '700' }}>
-                  {t('page_of')(emailsPage, emailsTotalPages)}
+                <span className="adm-card__stamp" style={{ textAlign: 'right' }}>
+                  Plan: {cloudinary.plan} · live stats
                 </span>
-                <button
-                  disabled={emailsPage === emailsTotalPages}
-                  onClick={() => setEmailsPage(prev => Math.min(prev + 1, emailsTotalPages))}
-                  className="btn btn-secondary"
-                  style={{ padding: '0.5rem 1rem', borderRadius: '0.75rem', fontWeight: '700' }}
-                >
-                  {t('next')}
-                </button>
+              </>
+            ) : (
+              <div className="adm-note" data-tone="info">
+                <Info size={14} />
+                <span>Live usage is unavailable right now. Assume the standard free tier (25 credits per month).</span>
               </div>
             )}
-          </>
-        )}
+          </section>
 
-        {activeTab === 'limits' && (() => {
-          if (limitsLoading) {
-            return (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem', gap: '1rem' }}>
-                <RefreshCw size={32} className="spin" style={{ color: 'var(--primary)' }} />
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600', fontSize: '1rem' }}>Fetching live platform statistics...</span>
-              </div>
-            );
-          }
-
-          if (limitsError) {
-            return (
-              <div className="card text-center" style={{ padding: '3rem 2rem', color: 'var(--text-main)', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem' }}>
-                <ShieldAlert size={40} style={{ color: '#ef4444', marginBottom: '0.75rem' }} />
-                <h4 style={{ margin: '0 0 0.25rem', fontWeight: '700' }}>Failed to Load Resource Stats</h4>
-                <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{limitsError}</p>
-                <button onClick={fetchPlatformLimits} className="btn btn-primary" style={{ padding: '0.5rem 1rem', borderRadius: '0.75rem' }}>
-                  Retry Fetch
-                </button>
-              </div>
-            );
-          }
-
-          if (!limitsData) return null;
-
-          const { database, emails, cloudinary } = limitsData;
-
-          const formatBytes = (bytes) => {
-            if (!bytes || bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-          };
-
-          // Mongo Percent
-          const mongoLimit = database.limitBytes || (512 * 1024 * 1024);
-          const mongoPercent = Math.min(100, Math.max(0.1, (database.dataSize / mongoLimit) * 100));
-
-          // Gmail Percent
-          const emailLimit = emails.limit || 500;
-          const emailPercent = Math.min(100, Math.max(0.1, (emails.sentLast24h / emailLimit) * 100));
-
-          const getProgressColor = (percent) => {
-            if (percent > 85) return 'linear-gradient(90deg, #ef4444 0%, #b91c1c 100%)';
-            if (percent > 60) return 'linear-gradient(90deg, #fbbf24 0%, #d97706 100%)';
-            return 'linear-gradient(90deg, #34d399 0%, #059669 100%)';
-          };
-
-          return (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', animation: 'fadeIn 0.3s ease-out' }}>
-              
-              {/* Summary Metrics Cards */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
-                
-                {/* DB card */}
-                <div style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: '1rem',
-                  padding: '1.25rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  <div style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '0.75rem',
-                    background: 'rgba(52, 211, 153, 0.1)',
-                    color: '#34d399',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <Database size={22} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Database Storage</span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                      {formatBytes(database.dataSize)}
-                    </span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {mongoPercent.toFixed(2)}% of 512 MB Free Tier
-                    </span>
-                  </div>
-                </div>
-
-                {/* Cloudinary card */}
-                <div style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: '1rem',
-                  padding: '1.25rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  <div style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '0.75rem',
-                    background: 'rgba(59, 130, 246, 0.1)',
-                    color: '#3b82f6',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <Cloud size={22} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Cloudinary Credits</span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                      {cloudinary?.credits ? `${(cloudinary.credits.usage || 0).toFixed(2)} / ${cloudinary.credits.limit || 25}` : 'N/A'}
-                    </span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {cloudinary?.credits ? `${(cloudinary.credits.usedPercent || 0).toFixed(1)}% Credit usage` : 'Free Plan Limits (25 Credits)'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Gmail SMTP card */}
-                <div style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: '1rem',
-                  padding: '1.25rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  <div style={{
-                    width: '44px',
-                    height: '44px',
-                    borderRadius: '0.75rem',
-                    background: 'rgba(139, 92, 246, 0.1)',
-                    color: '#8b5cf6',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <Mail size={22} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Daily Emails</span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                      {emails.sentLast24h} / {emailLimit}
-                    </span>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {emailPercent.toFixed(1)}% of 24h limit
-                    </span>
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Main Platforms Details Section */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
-                
-                {/* MongoDB Atlas Details */}
-                <div className="card" style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: '1.25rem',
-                  padding: '1.5rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1.25rem',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Database size={18} style={{ color: '#10b981' }} />
-                      <h4 style={{ margin: 0, fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-main)' }}>MongoDB Atlas (Hobby M0)</h4>
-                    </div>
-                    <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.2rem 0.5rem', borderRadius: '9999px', textTransform: 'uppercase' }}>
-                      Database
-                    </span>
-                  </div>
-
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                    MongoDB Atlas provides a <strong>512 MB</strong> storage limit for its shared M0 free cluster.
-                    Exceeding this cap will lock the database, blocking signups, threads, and transactions.
-                  </p>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: '700' }}>
-                      <span style={{ color: 'var(--text-main)' }}>Storage Consumption</span>
-                      <span style={{ color: mongoPercent > 80 ? '#ef4444' : 'var(--text-muted)' }}>
-                        {formatBytes(database.dataSize)} / 512 MB
-                      </span>
-                    </div>
-                    {/* Progress Bar */}
-                    <div style={{ width: '100%', height: '8px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${mongoPercent}%`,
-                        height: '100%',
-                        background: getProgressColor(mongoPercent),
-                        borderRadius: '9999px',
-                        transition: 'width 0.4s'
-                      }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                      <span>Logical Size: {formatBytes(database.dataSize)}</span>
-                      <span>Allocated Size: {formatBytes(database.storageSize)}</span>
-                    </div>
-                  </div>
-
-                  <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: 0 }} />
-
-                  {/* Collections Breakdown */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.78rem', fontWeight: '800', color: 'var(--text-main)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                      Collection Sizes Breakdown ({database.collections.length})
-                    </span>
-                    
-                    <div style={{
-                      maxHeight: '220px',
-                      overflowY: 'auto',
-                      borderRadius: '0.5rem',
-                      border: '1px solid var(--border-color)',
-                      background: 'rgba(0,0,0,0.1)'
-                    }}>
-                      <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
-                        <thead>
-                          <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid var(--border-color)' }}>
-                            <th style={{ padding: '0.5rem 0.75rem', fontWeight: '700', color: 'var(--text-muted)' }}>Collection</th>
-                            <th style={{ padding: '0.5rem 0.75rem', fontWeight: '700', color: 'var(--text-muted)', textAlign: 'right' }}>Docs</th>
-                            <th style={{ padding: '0.5rem 0.75rem', fontWeight: '700', color: 'var(--text-muted)', textAlign: 'right' }}>Size</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {database.collections.map(col => (
-                            <tr key={col.name} style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                              <td style={{ padding: '0.5rem 0.75rem', fontWeight: '600', color: 'var(--text-main)' }}>{col.name}</td>
-                              <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>{col.count}</td>
-                              <td style={{ padding: '0.5rem 0.75rem', color: 'var(--text-muted)', textAlign: 'right' }}>
-                                {col.size > 0 ? formatBytes(col.size) : '< 1 KB'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Cloudinary Details */}
-                <div className="card" style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: '1.25rem',
-                  padding: '1.5rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1.25rem',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Cloud size={18} style={{ color: '#3b82f6' }} />
-                      <h4 style={{ margin: 0, fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-main)' }}>Cloudinary Media Hosting</h4>
-                    </div>
-                    <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', padding: '0.2rem 0.5rem', borderRadius: '9999px', textTransform: 'uppercase' }}>
-                      Media
-                    </span>
-                  </div>
-
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                    Cloudinary hosts profile pictures and resource cover images. The free tier gives <strong>25 monthly Credits</strong>.
-                    1 Credit = 1 GB storage OR 1 GB bandwidth OR 1,000 image transformations.
-                  </p>
-
-                  {cloudinary ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                      
-                      {/* Credits Progress */}
-                      {cloudinary.credits && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: '700' }}>
-                            <span style={{ color: 'var(--text-main)' }}>Total Monthly Credits</span>
-                            <span style={{ color: 'var(--text-muted)' }}>
-                              {(cloudinary.credits.usage || 0).toFixed(2)} / {cloudinary.credits.limit || 25}
-                            </span>
-                          </div>
-                          <div style={{ width: '100%', height: '6px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
-                            <div style={{
-                              width: `${cloudinary.credits.usedPercent || 0}%`,
-                              height: '100%',
-                              background: getProgressColor(cloudinary.credits.usedPercent || 0),
-                              borderRadius: '9999px',
-                              transition: 'width 0.4s'
-                            }} />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Storage Progress */}
-                      {cloudinary.storage && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: '700' }}>
-                            <span style={{ color: 'var(--text-main)' }}>Media Storage Size</span>
-                            <span style={{ color: 'var(--text-muted)' }}>
-                              {formatBytes(cloudinary.storage.usage)} / {formatBytes(cloudinary.storage.limit)}
-                            </span>
-                          </div>
-                          <div style={{ width: '100%', height: '6px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
-                            <div style={{
-                              width: `${cloudinary.storage.usedPercent}%`,
-                              height: '100%',
-                              background: getProgressColor(cloudinary.storage.usedPercent),
-                              borderRadius: '9999px',
-                              transition: 'width 0.4s'
-                            }} />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Transformations Progress */}
-                      {cloudinary.transformations && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: '700' }}>
-                            <span style={{ color: 'var(--text-main)' }}>Image Transformations</span>
-                            <span style={{ color: 'var(--text-muted)' }}>
-                              {(cloudinary.transformations.usage || 0).toLocaleString()} / {(cloudinary.transformations.limit || 25000).toLocaleString()}
-                            </span>
-                          </div>
-                          <div style={{ width: '100%', height: '6px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
-                            <div style={{
-                              width: `${cloudinary.transformations.usedPercent}%`,
-                              height: '100%',
-                              background: getProgressColor(cloudinary.transformations.usedPercent),
-                              borderRadius: '9999px',
-                              transition: 'width 0.4s'
-                            }} />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Bandwidth Progress */}
-                      {cloudinary.bandwidth && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', fontWeight: '700' }}>
-                            <span style={{ color: 'var(--text-main)' }}>Media Delivery Bandwidth</span>
-                            <span style={{ color: 'var(--text-muted)' }}>
-                              {formatBytes(cloudinary.bandwidth.usage)} / {formatBytes(cloudinary.bandwidth.limit)}
-                            </span>
-                          </div>
-                          <div style={{ width: '100%', height: '6px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
-                            <div style={{
-                              width: `${cloudinary.bandwidth.usedPercent}%`,
-                              height: '100%',
-                              background: getProgressColor(cloudinary.bandwidth.usedPercent),
-                              borderRadius: '9999px',
-                              transition: 'width 0.4s'
-                            }} />
-                          </div>
-                        </div>
-                      )}
-
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'right' }}>
-                        Cloudinary Plan: {cloudinary.plan} (Live stats fetched)
-                      </span>
-                    </div>
-                  ) : (
-                    <div style={{
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      border: '1px dashed var(--border-color)',
-                      padding: '1rem',
-                      borderRadius: '0.75rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      color: 'var(--text-muted)',
-                      fontSize: '0.8rem'
-                    }}>
-                      <Info size={16} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                      <span>Live usage statistics currently unavailable. Running on standard Cloudinary Free tier limits (25 Credits/month).</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Gmail & SMTP Limits */}
-                <div className="card" style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: '1.25rem',
-                  padding: '1.5rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1.25rem',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Mail size={18} style={{ color: '#8b5cf6' }} />
-                      <h4 style={{ margin: 0, fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-main)' }}>Gmail Outgoing SMTP</h4>
-                    </div>
-                    <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', padding: '0.2rem 0.5rem', borderRadius: '9999px', textTransform: 'uppercase' }}>
-                      Emails
-                    </span>
-                  </div>
-
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                    Automated youth notices, verification OTPs, and dues reminders are sent using SMTP. Gmail free SMTP has a strict daily cap of <strong>500 emails</strong>.
-                  </p>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: '700' }}>
-                      <span style={{ color: 'var(--text-main)' }}>Emails Sent (Last 24 Hours)</span>
-                      <span style={{ color: emailPercent > 80 ? '#ef4444' : 'var(--text-muted)' }}>
-                        {emails.sentLast24h} / 500
-                      </span>
-                    </div>
-                    <div style={{ width: '100%', height: '8px', background: 'var(--border-color)', borderRadius: '9999px', overflow: 'hidden' }}>
-                      <div style={{
-                        width: `${emailPercent}%`,
-                        height: '100%',
-                        background: getProgressColor(emailPercent),
-                        borderRadius: '9999px',
-                        transition: 'width 0.4s'
-                      }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.1rem' }}>
-                      <span>Remaining Capacity: {Math.max(0, 500 - emails.sentLast24h)} emails</span>
-                      <span>Refreshes dynamically in a rolling window</span>
-                    </div>
-                  </div>
-
-                  <hr style={{ border: 'none', borderTop: '1px solid var(--border-color)', margin: 0 }} />
-
-                  <div style={{
-                    background: 'rgba(139, 92, 246, 0.05)',
-                    border: '1px solid rgba(139, 92, 246, 0.15)',
-                    padding: '0.75rem',
-                    borderRadius: '0.75rem',
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: '0.5rem',
-                    fontSize: '0.78rem',
-                    color: 'var(--text-main)'
-                  }}>
-                    <Info size={14} style={{ color: '#8b5cf6', flexShrink: 0, marginTop: '0.1rem' }} />
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                      <span style={{ fontWeight: '700' }}>Admin Recommendation:</span>
-                      <span style={{ color: 'var(--text-muted)', lineHeight: '1.3' }}>
-                        Ensure members only request name updates or email changes when necessary. Bulk email notifications should be scheduled responsibly to avoid hitting SMTP limits.
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Vercel & Render & GitHub Info Cards */}
-                <div className="card" style={{
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: '1.25rem',
-                  padding: '1.5rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1.25rem',
-                  boxShadow: 'var(--shadow-sm)'
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <Cpu size={18} style={{ color: '#fbbf24' }} />
-                      <h4 style={{ margin: 0, fontWeight: '800', fontSize: '1.05rem', color: 'var(--text-main)' }}>Compute & Deployment Limits</h4>
-                    </div>
-                    <span style={{ fontSize: '0.7rem', fontWeight: '800', background: 'rgba(251, 191, 36, 0.1)', color: '#fbbf24', padding: '0.2rem 0.5rem', borderRadius: '9999px', textTransform: 'uppercase' }}>
-                      Infrastructure
-                    </span>
-                  </div>
-
-                  {/* Vercel */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <span style={{ fontWeight: '800', fontSize: '0.85rem', color: 'var(--text-main)' }}>▲ Vercel (Frontend Hobby Plan)</span>
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                      <li><strong>Bandwidth:</strong> 100 GB / month limit.</li>
-                      <li><strong>Serverless Execution:</strong> Capped at 100 GB-Hours / month.</li>
-                      <li><strong>Function Timeout:</strong> Max 10 seconds execution limit.</li>
-                    </ul>
-                  </div>
-
-                  {/* Render */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', justifyContent: 'space-between' }}>
-                      <span style={{ fontWeight: '800', fontSize: '0.85rem', color: 'var(--text-main)' }}>⬡ Render (Backend Web Service)</span>
-                      <span style={{ fontSize: '0.65rem', fontWeight: '800', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
-                        Ping Active
-                      </span>
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                      <li><strong>Compute Limit:</strong> 750 free instance hours / month.</li>
-                      <li><strong>Sleep Behavior:</strong> Spins down after 15 minutes of inactivity.</li>
-                      <li><strong>Anti-Sleep:</strong> A self-ping runs every 14 minutes in production to prevent sleeping.</li>
-                    </ul>
-                  </div>
-
-                  {/* GitHub */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <GitBranch size={14} style={{ color: 'var(--text-main)' }} />
-                      <span style={{ fontWeight: '800', fontSize: '0.85rem', color: 'var(--text-main)' }}>GitHub (Actions & LFS)</span>
-                    </div>
-                    <ul style={{ margin: 0, paddingLeft: '1.2rem', fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                      <li><strong>Actions CI/CD:</strong> 2,000 build minutes / month limit.</li>
-                      <li><strong>Git LFS Storage:</strong> 1 GB limit for large files.</li>
-                      <li><strong>Git LFS Bandwidth:</strong> 1 GB monthly transfer capacity.</li>
-                    </ul>
-                  </div>
-
-                </div>
-
-              </div>
-
+          {/* Gmail SMTP */}
+          <section className="adm-limit-card" data-tone="violet">
+            <div className="adm-limit-head">
+              <h4 className="adm-limit-head__name"><Mail size={17} /> Gmail outgoing SMTP</h4>
+              <span className="adm-chip" data-tone="violet">Email</span>
             </div>
-          );
-        })()}
+            <p className="adm-fine">
+              Youth notices, verification OTPs and dues reminders all leave through SMTP. The free Gmail
+              relay stops at <strong>500 emails a day</strong>.
+            </p>
+            <div className="adm-meter">
+              <div className="adm-meter__row">
+                <span className="adm-meter__label">Sent in the last 24 hours</span>
+                <span className="adm-meter__value" data-tone={emailPercent > 80 ? 'danger' : undefined}>
+                  {emailUsage.sentLast24h} / {emailLimit}
+                </span>
+              </div>
+              <Meter percent={emailPercent} tone={usageTone(emailPercent)} />
+              <div className="adm-meter__foot">
+                <span>{Math.max(0, emailLimit - emailUsage.sentLast24h)} remaining</span>
+                <span>Rolling window</span>
+              </div>
+            </div>
+            <div className="adm-note" data-tone="violet">
+              <Info size={14} />
+              <span>
+                <strong>Recommendation:</strong> keep name and email change requests deliberate, and stagger bulk
+                notices so a single evening does not exhaust the daily cap.
+              </span>
+            </div>
+          </section>
 
-          </div>
+          {/* Infrastructure */}
+          <section className="adm-limit-card" data-tone="warn">
+            <div className="adm-limit-head">
+              <h4 className="adm-limit-head__name"><Cpu size={17} /> Compute &amp; deployment</h4>
+              <span className="adm-chip" data-tone="warn">Infrastructure</span>
+            </div>
+
+            <div>
+              <div className="adm-subhead"><span>▲ Vercel — frontend (Hobby)</span></div>
+              <ul className="adm-spec" style={{ marginTop: '0.35rem' }}>
+                <li><strong>Bandwidth:</strong> 100 GB per month.</li>
+                <li><strong>Serverless execution:</strong> 100 GB-hours per month.</li>
+                <li><strong>Function timeout:</strong> 10 seconds.</li>
+              </ul>
+            </div>
+
+            <div>
+              <div className="adm-subhead">
+                <span>⬡ Render — backend</span>
+                <span className="adm-chip" data-tone="ok">Ping active</span>
+              </div>
+              <ul className="adm-spec" style={{ marginTop: '0.35rem' }}>
+                <li><strong>Compute:</strong> 750 free instance hours per month.</li>
+                <li><strong>Sleep:</strong> spins down after 15 minutes idle.</li>
+                <li><strong>Anti-sleep:</strong> a self-ping runs every 14 minutes in production.</li>
+              </ul>
+            </div>
+
+            <div>
+              <div className="adm-subhead"><span><GitBranch size={13} style={{ verticalAlign: '-2px' }} /> GitHub</span></div>
+              <ul className="adm-spec" style={{ marginTop: '0.35rem' }}>
+                <li><strong>Actions:</strong> 2,000 build minutes per month.</li>
+                <li><strong>Git LFS storage:</strong> 1 GB.</li>
+                <li><strong>Git LFS bandwidth:</strong> 1 GB per month.</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  };
+
+  /* ── Render ─────────────────────────────────────────────────────────── */
+
+  const panels = {
+    'users': renderUsers,
+    'deletion-requests': () => renderApprovals(deletionRequests, 'deletion'),
+    'restore-requests': () => renderApprovals(restoreRequests, 'restore'),
+    'recently-deleted': renderArchive,
+    'tickets': renderTickets,
+    'emails': renderEmails,
+    'limits': renderLimits,
+  };
+
+  return (
+    <div className="adm-page">
+      <PageHeader
+        icon={ShieldCheck}
+        title="Admin Dashboard"
+        subtitle="System administration and platform integrity control."
+        actions={
+          <>
+            {lastSync && (
+              <span className="adm-sync">
+                <Clock size={12} aria-hidden="true" />
+                Synced {new Date(lastSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <button
+              type="button"
+              className="btn btn-secondary page-header-btn"
+              onClick={refreshAll}
+              disabled={refreshing || loading}
+            >
+              <RefreshCw size={15} className={refreshing ? 'adm-spin' : undefined} aria-hidden="true" />
+              <span>{refreshing ? 'Refreshing' : 'Refresh'}</span>
+            </button>
+          </>
+        }
+      />
+
+      {/* The old build set this state from six fetchers and rendered it
+          nowhere, so a failing endpoint just showed an empty tab. */}
+      {error && (
+        <div className="adm-error" role="alert">
+          <AlertTriangle size={17} aria-hidden="true" />
+          <span className="adm-error__text">{error}</span>
+          <button type="button" className="adm-error__btn" onClick={refreshAll}>Retry</button>
+          <button type="button" className="adm-error__btn" onClick={() => setError('')} aria-label="Dismiss">
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      <div className="adm-stats">
+        {stats.map(({ id, icon: Icon, value, label, tone, tab, onPick }) => (
+          <button
+            key={id}
+            type="button"
+            className="adm-stat"
+            style={{ '--tone': tone }}
+            onClick={() => { if (onPick) onPick(); setUsersPage(1); setActiveTab(tab); }}
+          >
+            <span className="adm-stat__icon"><Icon size={19} aria-hidden="true" /></span>
+            <span className="adm-stat__text">
+              <span className="adm-stat__value">{loading ? '—' : value}</span>
+              <span className="adm-stat__label">{label}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="adm-body">
+        <nav className="adm-nav" role="tablist" aria-label="Admin sections">
+          <span className="adm-nav__title">Control centre</span>
+          {tabs.map((tab, index) => {
+            const TabIcon = tab.icon;
+            const selected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`adm-tab-${tab.id}`}
+                aria-controls={`adm-panel-${tab.id}`}
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                ref={(el) => { tabRefs.current[index] = el; }}
+                className="adm-tab"
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={(e) => onTabKeyDown(e, index)}
+              >
+                <span className="adm-tab__side">
+                  <TabIcon size={16} className="adm-tab__icon" aria-hidden="true" />
+                  <span>{tab.label}</span>
+                </span>
+                {tab.count > 0 && (
+                  <span className="adm-count" data-tone={tab.tone} aria-label={`${tab.count} awaiting attention`}>
+                    {tab.count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div
+          className="adm-panel"
+          role="tabpanel"
+          id={`adm-panel-${activeTab}`}
+          aria-labelledby={`adm-tab-${activeTab}`}
+          tabIndex={-1}
+        >
+          {loading ? <Skeletons count={6} /> : panels[activeTab]?.()}
         </div>
       </div>
 
-      <PopupModal 
+      <PopupModal
         isOpen={popup.isOpen}
-        onClose={() => setPopup(p => ({ ...p, isOpen: false }))}
+        onClose={() => setPopup((p) => ({ ...p, isOpen: false }))}
         title={popup.title}
         message={popup.message}
         onConfirm={popup.onConfirm}
         isAlert={popup.isAlert}
         isPrompt={popup.isPrompt}
         promptValue={popup.promptValue}
-        onPromptChange={(val) => setPopup(p => ({ ...p, promptValue: val }))}
+        onPromptChange={(val) => setPopup((p) => ({ ...p, promptValue: val }))}
       />
 
-      {/* Outgoing Email Slide-out Preview Drawer Sheet */}
+      {/* Email preview drawer */}
       {emailPreview && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.4)',
-          backdropFilter: 'blur(12px)',
-          WebkitBackdropFilter: 'blur(12px)',
-          display: 'flex',
-          justifyContent: 'flex-end',
-          zIndex: 1000,
-          animation: 'fadeIn 0.25s ease-out'
-        }} onClick={() => setEmailPreview(null)}>
-          
-          {/* Prevent click bubbling inside the drawer */}
-          <div 
-            style={{
-              width: '100%',
-              maxWidth: '560px',
-              height: '100%',
-              background: 'var(--surface)',
-              borderLeft: '1px solid var(--surface-border)',
-              boxShadow: '-8px 0 32px rgba(0,0,0,0.3)',
-              display: 'flex',
-              flexDirection: 'column',
-              padding: '1.75rem',
-              overflowY: 'auto',
-              boxSizing: 'border-box',
-              animation: 'slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)'
-            }} 
-            onClick={e => e.stopPropagation()}
+        <div className="adm-drawer-backdrop" onClick={() => setEmailPreview(null)}>
+          <div
+            className="adm-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Email preview"
+            onClick={(e) => e.stopPropagation()}
           >
-            {/* Drawer Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Mail size={20} style={{ color: 'var(--primary)' }} />
-                <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.25rem', fontWeight: '800', letterSpacing: '-0.02em' }}>
-                  Email System Preview
-                </h3>
-              </div>
-              <button 
+            <div className="adm-drawer__head">
+              <h3 className="adm-drawer__title"><Mail size={19} /> Email preview</h3>
+              <button
+                type="button"
+                className="adm-icon-btn"
+                data-tone="muted"
                 onClick={() => setEmailPreview(null)}
-                style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-muted)',
-                  cursor: 'pointer',
-                  borderRadius: '9999px',
-                  padding: '0.4rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s',
-                  outline: 'none'
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                aria-label="Close preview"
+                autoFocus
               >
-                <X size={16} />
+                <X size={15} />
               </button>
             </div>
-            
-            {/* Meta Attributes Panel */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', fontSize: '0.88rem', color: 'var(--text-main)', background: 'rgba(255,255,255,0.01)', padding: '1rem', borderRadius: '0.75rem', border: '1px solid var(--border-color)', marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>To:</span>
-                <span style={{ fontWeight: '700' }}>{emailPreview.to}</span>
+
+            <div className="adm-drawer__meta">
+              <div className="adm-drawer__row">
+                <span className="adm-drawer__key">To</span>
+                <span className="adm-drawer__val">{emailPreview.to}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Subject:</span>
-                <span style={{ fontWeight: '700', textAlign: 'right', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{emailPreview.subject}</span>
+              <div className="adm-drawer__row">
+                <span className="adm-drawer__key">Subject</span>
+                <span className="adm-drawer__val">{emailPreview.subject}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Sent:</span>
-                <span>{new Date(emailPreview.sentAt).toLocaleString()}</span>
+              <div className="adm-drawer__row">
+                <span className="adm-drawer__key">Sent</span>
+                <span className="adm-drawer__val">{new Date(emailPreview.sentAt).toLocaleString()}</span>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: '600' }}>Status:</span>
-                <span style={{
-                  color: emailPreview.status === 'sent' ? '#22c55e' : '#ef4444',
-                  background: emailPreview.status === 'sent' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                  padding: '0.2rem 0.55rem',
-                  borderRadius: '9999px',
-                  fontSize: '0.75rem',
-                  fontWeight: '700'
-                }}>
-                  {emailPreview.status === 'sent' ? 'Sent Success' : 'Delivery Failed'}
+              <div className="adm-drawer__row">
+                <span className="adm-drawer__key">Status</span>
+                <span className="adm-chip" data-tone={emailPreview.status === 'sent' ? 'ok' : 'danger'}>
+                  {emailPreview.status === 'sent' ? 'Delivered' : 'Delivery failed'}
                 </span>
               </div>
               {emailPreview.error && (
-                <div style={{ color: '#ef4444', marginTop: '0.25rem', fontSize: '0.82rem', borderTop: '1px solid rgba(239,68,68,0.15)', paddingTop: '0.5rem' }}>
-                  <strong>Error:</strong> {emailPreview.error}
-                </div>
+                <div className="adm-drawer__err"><strong>Error:</strong> {emailPreview.error}</div>
               )}
             </div>
-            
-            {/* HTML Body Container */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem', minHeight: 0 }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '700' }}>Email Body Content</span>
+
+            <div className="adm-drawer__body">
+              <span className="adm-drawer__key">Body</span>
               <iframe
+                className="adm-drawer__frame"
                 srcDoc={emailPreview.html}
-                title="Email Preview Body"
-                style={{
-                  width: '100%',
-                  flex: 1,
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '0.75rem',
-                  background: '#ffffff',
-                  boxShadow: 'var(--shadow-inner)'
-                }}
+                title="Email body preview"
+                sandbox=""
               />
             </div>
 
-            {/* Actions Panel */}
-            <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.25rem', marginTop: '1.25rem' }}>
-              <button 
-                onClick={() => {
-                  handleResendEmail(emailPreview._id);
-                  setEmailPreview(null);
-                }}
+            <div className="adm-drawer__foot">
+              <button
+                type="button"
                 className="btn btn-primary"
-                style={{ 
-                  flex: 1, 
-                  padding: '0.65rem', 
-                  borderRadius: '0.75rem', 
-                  fontWeight: '700',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.4rem'
-                }}
+                style={{ flex: 1 }}
+                onClick={() => { handleResendEmail(emailPreview._id); setEmailPreview(null); }}
               >
-                <RefreshCw size={15} /> Resend Email
+                <RefreshCw size={15} /> Resend email
               </button>
-              <button 
-                onClick={() => setEmailPreview(null)}
-                className="btn btn-secondary"
-                style={{ 
-                  padding: '0.65rem 1.25rem', 
-                  borderRadius: '0.75rem', 
-                  fontWeight: '700'
-                }}
-              >
-                Close Drawer
+              <button type="button" className="btn btn-secondary" onClick={() => setEmailPreview(null)}>
+                Close
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile Floating Bottom Navigation Bar */}
-      {isMobile && (
-        <div style={{
-          position: 'fixed',
-          bottom: '1.25rem',
-          left: '1rem',
-          right: '1rem',
-          zIndex: 999,
-        }}>
-          <div style={{ position: 'relative', width: '100%' }}>
-            <button 
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.75rem 1rem',
-                borderRadius: '0.75rem',
-                background: 'var(--surface)',
-                border: '1px solid var(--surface-border)',
-                color: 'var(--text-main)',
-                fontSize: '0.9rem',
-                fontWeight: '700',
-                cursor: 'pointer',
-                outline: 'none',
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                transition: 'all 0.2s',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.35)'
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                {(() => {
-                  const activeTabObj = tabs.find(t => t.id === activeTab) || tabs[0];
-                  const ActiveIcon = activeTabObj.icon;
-                  return (
-                    <>
-                      <ActiveIcon size={18} style={{ color: 'var(--primary)' }} />
-                      <span>{activeTabObj.label}</span>
-                      {getBadgeCount(activeTabObj.id) > 0 && (
-                        <span style={{
-                          background: activeTabObj.id === 'tickets' ? '#8b5cf6' : '#ef4444',
-                          color: 'white',
-                          borderRadius: '9999px',
-                          fontSize: '0.6rem',
-                          fontWeight: '800',
-                          padding: '0.1rem 0.35rem',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}>
-                          {getBadgeCount(activeTabObj.id)}
-                        </span>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-              <ChevronDown size={18} style={{ color: 'var(--text-muted)', transform: mobileMenuOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-            </button>
-
-            {/* Floating Dropdown overlay (expands UPWARD) */}
-            {mobileMenuOpen && (
-              <>
-                <div 
-                  onClick={() => setMobileMenuOpen(false)}
-                  style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    zIndex: 998
-                  }}
-                />
-                
-                <div style={{
-                  position: 'absolute',
-                  bottom: 'calc(100% + 0.5rem)',
-                  left: 0,
-                  right: 0,
-                  background: 'var(--surface)',
-                  border: '1px solid var(--surface-border)',
-                  borderRadius: '0.75rem',
-                  padding: '0.5rem',
-                  boxShadow: 'var(--shadow-lg)',
-                  backdropFilter: 'blur(20px)',
-                  WebkitBackdropFilter: 'blur(20px)',
-                  zIndex: 999,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.25rem'
-                }}>
-                  {tabs.map(tab => {
-                    const active = activeTab === tab.id;
-                    const TabIcon = tab.icon;
-                    const badgeCount = getBadgeCount(tab.id);
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => {
-                          setActiveTab(tab.id);
-                          setMobileMenuOpen(false);
-                        }}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          width: '100%',
-                          padding: '0.65rem 0.85rem',
-                          borderRadius: '0.5rem',
-                          border: 'none',
-                          background: active ? 'var(--primary-glow)' : 'transparent',
-                          color: active ? 'var(--primary)' : 'var(--text-main)',
-                          fontWeight: active ? '700' : '500',
-                          fontSize: '0.85rem',
-                          textAlign: 'left',
-                          cursor: 'pointer',
-                          outline: 'none',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                          <TabIcon size={16} style={{ color: active ? 'var(--primary)' : 'var(--text-muted)' }} />
-                          <span>{tab.label}</span>
-                        </div>
-                        {badgeCount > 0 && (
-                          <span style={{
-                            background: tab.id === 'tickets' ? '#8b5cf6' : '#ef4444',
-                            color: 'white',
-                            borderRadius: '9999px',
-                            fontSize: '0.6rem',
-                            fontWeight: '800',
-                            padding: '0.1rem 0.35rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}>
-                            {badgeCount}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
           </div>
         </div>
       )}
@@ -2554,5 +1585,3 @@ const AdminPanel = () => {
 };
 
 export default AdminPanel;
-
-

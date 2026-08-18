@@ -1,0 +1,316 @@
+/* ==========================================================================
+   DFCCI Threshold — Theme definitions (single source of truth)
+   --------------------------------------------------------------------------
+   A theme declares ONLY these eight seed values. Every other colour in the
+   app — surfaces, hairlines, tints, rings, glows, shadows, the page mesh and
+   all legacy aliases — is derived from them by the recipe in tokens.css.
+
+     --bg-color     page ground
+     --text-main    body text
+     --text-muted   secondary text
+     --primary      brand accent, also used AS TEXT (eyebrows, links, refs)
+     --primary-hover
+     --secondary    supporting accent / far stop of --grad-brand
+     --on-primary   label colour on filled primary surfaces
+     --primary-rgb  triplet for the few rgba(var(--primary-rgb), …) call sites
+
+   Every combination below is verified at WCAG AA (>= 4.5:1):
+     text/bg, muted/bg, primary/bg, secondary/bg
+     on-primary/primary, and on-primary against the far stop of --grad-brand.
+   Re-check with `node scripts/audit-themes.mjs` after any edit.
+   ========================================================================== */
+
+/* ── Light (default, used when no theme class is present) ───────────────── */
+:root,
+:root.light {
+  --bg-color: #f8fafc;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --primary: #0369a1;
+  --primary-hover: #075985;
+  --secondary: #0f766e;
+  --on-primary: #ffffff;
+  --primary-rgb: 3, 105, 161;
+}
+
+/* ── Dark ───────────────────────────────────────────────────────────────── */
+:root.dark {
+  --bg-color: #0b1120;
+  --text-main: #f8fafc;
+  --text-muted: #9aa8bd;
+  --primary: #38bdf8;
+  --primary-hover: #7dd3fc;
+  --secondary: #2dd4bf;
+  --on-primary: #06121f;
+  --primary-rgb: 56, 189, 248;
+}
+
+:root.obsidian {
+  --bg-color: #000000;
+  --text-main: #ffffff;
+  --text-muted: #a1a1aa;
+  --primary: #fafafa;
+  --primary-hover: #ffffff;
+  --secondary: #a1a1aa;
+  --on-primary: #09090b;
+  --primary-rgb: 250, 250, 250;
+}
+
+:root.aurora {
+  --bg-color: #04140e;
+  --text-main: #e6fff4;
+  --text-muted: #79b79a;
+  --primary: #34d399;
+  --primary-hover: #6ee7b7;
+  --secondary: #22d3ee;
+  --on-primary: #04120c;
+  --primary-rgb: 52, 211, 153;
+}
+
+:root.dusk {
+  --bg-color: #150a1c;
+  --text-main: #fdf4ff;
+  --text-muted: #bda3cd;
+  --primary: #c084fc;
+  --primary-hover: #d8b4fe;
+  --secondary: #f472b6;
+  --on-primary: #14071a;
+  --primary-rgb: 192, 132, 252;
+}
+
+/* Key kept as `sunset` so existing saved preferences keep working. */
+:root.sunset {
+  --bg-color: #1c0f0b;
+  --text-main: #fff7ed;
+  --text-muted: #d3a184;
+  --primary: #fb923c;
+  --primary-hover: #fdba74;
+  --secondary: #f87171;
+  --on-primary: #1a0c08;
+  --primary-rgb: 251, 146, 60;
+}
+
+/* ── Light variants ─────────────────────────────────────────────────────── */
+/* Secondary is sky rather than teal: at #0f766e it sat 0.039 from --primary in
+   OKLab, which rendered --grad-brand as a flat block. Emerald → sky gradates. */
+:root.mint {
+  --bg-color: #f0fdf4;
+  --text-main: #052e16;
+  --text-muted: #3f6b52;
+  --primary: #047857;
+  --primary-hover: #065f46;
+  --secondary: #0369a1;
+  --on-primary: #ffffff;
+  --primary-rgb: 4, 120, 87;
+}
+
+:root.sepia {
+  --bg-color: #faf3e3;
+  --text-main: #3b2f1b;
+  --text-muted: #6b5836;
+  --primary: #9a4a07;
+  --primary-hover: #7c3d06;
+  --secondary: #7c2d12;
+  --on-primary: #ffffff;
+  --primary-rgb: 154, 74, 7;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Expansion set — designed and adversarially reviewed, then verified with
+   scripts/audit-themes.mjs. Same eight-seed contract as the themes above.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Dark ───────────────────────────────────────────────────────────────── */
+
+/* Dracula
+   The classic desaturated slate-purple ground with hot pink and pastel
+   cyan intact — only the comment-blue muted was lifted into
+   legibility. */
+:root.dracula {
+  --bg-color: #282a36;
+  --text-main: #f8f8f2;
+  --text-muted: #9aa5cf;
+  --primary: #ff79c6;
+  --primary-hover: #ff9ad6;
+  --secondary: #8be9fd;
+  --on-primary: #2b0f22;
+  --primary-rgb: 255, 121, 198;
+}
+
+/* Nord
+   Arctic and calm: a light, low-contrast Polar Night ground rather
+   than a black void, icy frost accent, aurora-purple counterpoint. */
+:root.nord {
+  --bg-color: #2e3440;
+  --text-main: #eceff4;
+  --text-muted: #a7b3c6;
+  --primary: #88c0d0;
+  --primary-hover: #a3d2df;
+  --secondary: #c49bbf;
+  --on-primary: #111820;
+  --primary-rgb: 136, 192, 208;
+}
+
+/* Vaporwave
+   Retrofuturist neon: indigo void, magenta-pink, electric cyan, and
+   the signature lilac restored in the muted tone. */
+:root.vaporwave {
+  --bg-color: #0e0524;
+  --text-main: #f4ecff;
+  --text-muted: #ab93dc;
+  --primary: #ee6ad9;
+  --primary-hover: #ff8ce6;
+  --secondary: #3ce0f0;
+  --on-primary: #1a0418;
+  --primary-rgb: 238, 106, 217;
+}
+
+/* Neon
+   Rain-slick violet-black street lit by a buzzing acid-lime sign, with
+   cyan reflections in the puddles. */
+:root.cyberpunk {
+  --bg-color: #120f1f;
+  --text-main: #f5f4fa;
+  --text-muted: #a8a5bd;
+  --primary: #a3e635;
+  --primary-hover: #bef264;
+  --secondary: #22d3ee;
+  --on-primary: #0d1a00;
+  --primary-rgb: 163, 230, 53;
+}
+
+/* Abyss
+   Pressure-black water at trench depth, lit by a single bioluminescent
+   cyan flare fading into seafoam. */
+:root.abyss {
+  --bg-color: #03141a;
+  --text-main: #e2f4f8;
+  --text-muted: #8fb3bd;
+  --primary: #20d6e0;
+  --primary-hover: #6ae7ee;
+  --secondary: #4fe3b8;
+  --on-primary: #03191f;
+  --primary-rgb: 32, 214, 224;
+}
+
+/* Espresso
+   Mid-roast bean ground — lighter than the near-black crowd — with
+   caramel crema and rosy clay warmth, soft and unhurried. */
+:root.espresso {
+  --bg-color: #332519;
+  --text-main: #f4ebe1;
+  --text-muted: #b69d86;
+  --primary: #d7a566;
+  --primary-hover: #e9bf8b;
+  --secondary: #dfae9e;
+  --on-primary: #1a1209;
+  --primary-rgb: 215, 165, 102;
+}
+
+/* Claret
+   Oxblood cellar dark, poured wine-rose accents against antique brass
+   — opulent and a little theatrical. */
+:root.claret {
+  --bg-color: #1a0910;
+  --text-main: #f7e6ea;
+  --text-muted: #c08e9c;
+  --primary: #ec6b83;
+  --primary-hover: #f78ea0;
+  --secondary: #e6bf5a;
+  --on-primary: #1f060d;
+  --primary-rgb: 236, 107, 131;
+}
+
+/* Beacon
+   Maximum-legibility signal palette: near-black ground, signal yellow
+   and ice cyan, every pair past WCAG AAA. */
+:root.beacon {
+  --bg-color: #05060a;
+  --text-main: #ffffff;
+  --text-muted: #ccd4dd;
+  --primary: #ffd60a;
+  --primary-hover: #ffe66b;
+  --secondary: #5ce1f2;
+  --on-primary: #000000;
+  --primary-rgb: 255, 214, 10;
+}
+
+/* ── Light ──────────────────────────────────────────────────────────────── */
+
+/* Slate
+   Boardroom neutral — near-neutral grey paper, an indigo that actually
+   reads indigo, and a graphite-blue on the same axis. */
+:root.slate {
+  --bg-color: #edeef2;
+  --text-main: #1e293b;
+  --text-muted: #535f73;
+  --primary: #3f3ba3;
+  --primary-hover: #332f8a;
+  --secondary: #3f4d63;
+  --on-primary: #ffffff;
+  --primary-rgb: 63, 59, 163;
+}
+
+/* Cottage
+   Sun-warmed cream linen, garden sage kept green and loud, a
+   terracotta pot on the sill. */
+:root.cottagecore {
+  --bg-color: #f7f1dd;
+  --text-main: #2a2a1e;
+  --text-muted: #67654f;
+  --primary: #4a6323;
+  --primary-hover: #3b4f1c;
+  --secondary: #a04a28;
+  --on-primary: #ffffff;
+  --primary-rgb: 74, 99, 35;
+}
+
+/* Lavender
+   Pressed lavender on pale violet paper — the softened, low-chroma
+   violet of the flower itself, tied with an orchid ribbon. */
+:root.lavender {
+  --bg-color: #f5f1fc;
+  --text-main: #241c33;
+  --text-muted: #5f5473;
+  --primary: #74409f;
+  --primary-hover: #63368a;
+  --secondary: #a32c8b;
+  --on-primary: #ffffff;
+  --primary-rgb: 116, 64, 159;
+}
+
+/* Peony
+   Soft blush ground, a deep rose accent, and an antique gold that
+   finally makes the gradient move. */
+:root.peony {
+  --bg-color: #fdf2f6;
+  --text-main: #3f1d2b;
+  --text-muted: #7d5062;
+  --primary: #a8175a;
+  --primary-hover: #8c0f49;
+  --secondary: #7a4b12;
+  --on-primary: #ffffff;
+  --primary-rgb: 168, 23, 90;
+}
+
+/* Glacier
+   Icy blue-grey near-white cut by deep glacial teal, with a cold
+   indigo in the crevasse — clean and precise. */
+:root.glacier {
+  --bg-color: #e6f0f7;
+  --text-main: #12222d;
+  --text-muted: #4a626f;
+  --primary: #14556b;
+  --primary-hover: #0f4557;
+  --secondary: #3b5391;
+  --on-primary: #ffffff;
+  --primary-rgb: 20, 85, 107;
+}
+
+/* ── Retired ────────────────────────────────────────────────────────────────
+   Nothing is currently retired: the seven themes dropped in the rebuild
+   (dracula, nord, vaporwave, cyberpunk, slate, cottagecore, lavender) are all
+   back above with contrast-corrected palettes, so every key that has ever
+   shipped resolves to a live theme. ThemeContext keeps the migration table so
+   a future removal, or a junk localStorage value, still lands somewhere real.
+   ────────────────────────────────────────────────────────────────────────── */

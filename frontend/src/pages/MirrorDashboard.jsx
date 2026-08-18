@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Send, Inbox, Archive, FolderOpen, Folder, ChevronDown, ChevronRight, User, Trash2, BookOpen } from 'lucide-react';
+import { Send, Inbox, Archive, FolderOpen, Folder, ChevronDown, ChevronRight, User, Trash2, BookOpen, ScanLine } from 'lucide-react';
 import api from '../api';
 import ThreadCard from '../components/ThreadCard';
 import ThreadSkeleton from '../components/ThreadSkeleton';
 import { useLanguage } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 // ── Collapsible folder for a single recipient ──────────────────────────────
 const RecipientFolder = ({ name, threads }) => {
@@ -123,23 +124,23 @@ const MirrorDashboard = () => {
       
       {/* ── BREATHTAKING MESH gradient HERO BANNER ── */}
       <div className="mirror-hero-banner">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div>
-            <h1 className="mirror-hero-title">{t('gentle_mirror_dashboard')}</h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.35rem 0 0 0', fontWeight: '500' }}>
-              Reflect with sincerity, restore with kindness, and pursue mutual understanding.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <Link to="/docs/gentle-mirror" className="btn btn-secondary" style={{ width: '40px', height: '40px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px' }} title="Help & Documentation">
-              <BookOpen size={18} />
-            </Link>
-            <Link to="/mirror/send" className="btn btn-primary" style={{ height: '40px', padding: '0 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderRadius: '9999px', fontWeight: '700' }} title="Send a Mirror">
-              <Send size={16} />
-              <span>Send Mirror</span>
-            </Link>
-          </div>
-        </div>
+        <PageHeader
+          className="page-header--flush"
+          icon={ScanLine}
+          title={t('gentle_mirror_dashboard')}
+          subtitle="Reflect with sincerity, restore with kindness, and pursue mutual understanding."
+          actions={
+            <>
+              <Link to="/docs/gentle-mirror" className="btn btn-secondary page-header-btn-icon" title="Help & Documentation">
+                <BookOpen size={18} />
+              </Link>
+              <Link to="/mirror/send" className="btn btn-primary page-header-btn" title="Send a Mirror">
+                <Send size={16} />
+                <span>Send Mirror</span>
+              </Link>
+            </>
+          }
+        />
       </div>
 
       {/* ── premium SLIDING TABS TRACK ── */}

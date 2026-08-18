@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react';
-import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
-import { ChevronLeft, BookOpen, Globe } from 'lucide-react';
+import { useParams, Link, useLocation } from 'react-router-dom';
+import { BookOpen, Globe } from 'lucide-react';
 import { moduleDocs } from '../data/moduleDocs';
 import { useLanguage } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 const ModuleDocs = () => {
   const { moduleName } = useParams();
-  const navigate = useNavigate();
   const location = useLocation();
   const { lang, setLang, t } = useLanguage();
 
@@ -25,13 +25,11 @@ const ModuleDocs = () => {
   if (!docs) {
     return (
       <div className="container" style={{ maxWidth: '800px', padding: '2rem 1rem', textAlign: 'center' }}>
-        <h2 style={{ color: 'var(--text-main)', marginBottom: '1rem' }}>Documentation Not Found</h2>
-        <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>We couldn't find the documentation for this module.</p>
-        <div className="btn-back-wrapper">
-          <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="btn-back-pill">
-            <ChevronLeft size={16} /> Back to Dashboard
-          </button>
-        </div>
+        <PageHeader
+          icon={BookOpen}
+          title="Documentation Not Found"
+          subtitle="We couldn't find the documentation for this module."
+        />
       </div>
     );
   }
@@ -40,13 +38,6 @@ const ModuleDocs = () => {
 
   return (
     <div className="container" style={{ maxWidth: '800px', padding: '1rem' }}>
-      
-      {/* Centered Back Pill */}
-      <div className="btn-back-wrapper">
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="btn-back-pill">
-          <ChevronLeft size={16} /> Back to Dashboard
-        </button>
-      </div>
 
       {/* Language Selector Row */}
       <div className="flex justify-end" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
@@ -65,18 +56,11 @@ const ModuleDocs = () => {
         </div>
       </div>
 
-      {/* Title */}
-      <div style={{ textAlign: 'center', marginBottom: '3rem' }}>
-        <div style={{ display: 'inline-flex', padding: '1rem', backgroundColor: 'rgba(56, 189, 248, 0.1)', borderRadius: '50%', marginBottom: '1rem' }}>
-          <BookOpen size={40} style={{ color: 'var(--primary)' }} />
-        </div>
-        <h1 style={{ fontSize: '2.5rem', color: 'var(--text-main)', fontWeight: 'bold', marginBottom: '1rem' }}>
-          {currentDocs.title} Docs
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto' }}>
-          {currentDocs.description}
-        </p>
-      </div>
+      <PageHeader
+        icon={BookOpen}
+        title={`${currentDocs.title} Docs`}
+        subtitle={currentDocs.description}
+      />
 
       {/* Content Sections */}
       <div className="card" style={{ padding: '2rem', marginBottom: '2rem', border: '1px solid var(--border-color)' }}>

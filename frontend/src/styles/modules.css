@@ -1,0 +1,142 @@
+/* ==========================================================================
+   Redesign: Module dashboards — shared hero banner, tab track, list cards
+   --------------------------------------------------------------------------
+   Each module grew its own banner/tab/card variant over time. They are unified
+   here so Mirror, Shining Light, Tickets, Games and Resources open identically.
+   ========================================================================== */
+
+/* ── Hero banners ───────────────────────────────────────────────────────── */
+.ticket-hero-banner,
+.games-hero-banner {
+  position: relative;
+  overflow: hidden;
+  padding: var(--sp-7) var(--sp-6);
+  margin-bottom: var(--sp-6);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xl);
+  background: var(--grad-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.ticket-hero-banner::before,
+.games-hero-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(36rem 20rem at 8% 0%, var(--tint-primary-strong), transparent 70%),
+    radial-gradient(30rem 18rem at 100% 100%, color-mix(in srgb, var(--secondary) 18%, transparent), transparent 70%);
+}
+
+/* Banner contents must clear the wash */
+.ticket-hero-banner > *,
+.games-hero-banner > *,
+.mirror-hero-banner > *,
+.affirmation-hero-banner > *,
+.resource-hero-banner > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Tab track ──────────────────────────────────────────────────────────── */
+.premium-tabs-scroll {
+  margin-bottom: var(--sp-5);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.premium-tabs-scroll::-webkit-scrollbar { display: none; }
+
+.premium-tabs-track {
+  display: inline-flex;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+}
+
+.premium-tab-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0.55rem 1.1rem;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.premium-tab-pill:hover { color: var(--text-main); }
+
+.premium-tab-pill.active,
+.premium-tab-pill.active-mirror,
+.premium-tab-pill.active-affirm {
+  background: var(--grad-brand);
+  color: var(--on-primary);
+  box-shadow: var(--shadow-sm), var(--shadow-glow);
+}
+
+/* ── List cards ─────────────────────────────────────────────────────────── */
+.ticket-card-glass,
+.thread-card-glass,
+.affirmation-card-glass,
+.games-card-glass {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  background: var(--grad-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.ticket-card-glass:hover,
+.thread-card-glass:hover,
+.affirmation-card-glass:hover,
+.games-card-glass:hover {
+  transform: translateY(-3px);
+  border-color: var(--ring);
+  box-shadow: var(--shadow-md), var(--shadow-glow);
+}
+
+/* ── Bottom tab bar (mobile) ────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .ticket-hero-banner,
+  .games-hero-banner {
+    padding: var(--sp-5) var(--sp-4);
+    margin-bottom: var(--sp-5);
+    border-radius: var(--r-lg);
+  }
+
+  .premium-tab-pill {
+    padding: 0.5rem 0.85rem;
+    font-size: var(--fs-xs);
+  }
+
+  .ticket-card-glass,
+  .thread-card-glass,
+  .affirmation-card-glass,
+  .games-card-glass {
+    padding: var(--sp-4);
+    border-radius: var(--r-md);
+  }
+
+  .dashboard-tabs {
+    background: color-mix(in srgb, var(--bg-color) 85%, transparent) !important;
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border-top: 1px solid var(--hairline) !important;
+  }
+}

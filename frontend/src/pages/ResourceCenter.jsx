@@ -5,6 +5,7 @@ import { Search, Download, Trash2, Library, Plus, Pencil, BookOpen, Users, Music
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import ResourceUploadModal from '../components/ResourceUploadModal';
+import PageHeader from '../components/PageHeader';
 
 // Helper to generate dynamic book cover backgrounds
 const getCategoryGradient = (category) => {
@@ -107,28 +108,23 @@ const ResourceCenter = () => {
       {/* ── BREATHTAKING HERO BANNER ── */}
       <div className="resource-hero-banner">
         <div className="resource-hero-banner-inner">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-            <div>
-              <h1 className="resource-header-title" style={{ margin: 0 }}>
-                <Library size={32} color="var(--primary)" style={{ flexShrink: 0 }} />
-                {t('resource_center') || 'Resource Center'}
-              </h1>
-              <p style={{ color: 'var(--text-muted)', margin: '0.5rem 0 0', fontSize: '0.95rem' }}>
-                {t('resource_center_desc') || 'Access shared guides, leadership templates, liturgy documents and studies.'}
-              </p>
-            </div>
-            
-            {user?.role === 'ADMIN' && (
-              <button 
-                onClick={() => { setEditingResource(null); setIsModalOpen(true); }} 
-                className="btn btn-primary" 
-                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderRadius: '9999px', padding: '0.6rem 1.25rem' }}
-              >
-                <Plus size={18} />
-                {t('upload_resource') || 'Upload Resource'}
-              </button>
-            )}
-          </div>
+          <PageHeader
+            className="page-header--flush"
+            icon={Library}
+            title={t('resource_center') || 'Resource Center'}
+            subtitle={t('resource_center_desc') || 'Access shared guides, leadership templates, liturgy documents and studies.'}
+            actions={
+              user?.role === 'ADMIN' && (
+                <button
+                  onClick={() => { setEditingResource(null); setIsModalOpen(true); }}
+                  className="btn btn-primary page-header-btn"
+                >
+                  <Plus size={18} />
+                  {t('upload_resource') || 'Upload Resource'}
+                </button>
+              )
+            }
+          />
         </div>
       </div>
 

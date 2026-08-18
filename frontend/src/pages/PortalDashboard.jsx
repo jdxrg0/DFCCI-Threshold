@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library, Gamepad2, BookHeart, Flame, Clock } from 'lucide-react';
+import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library, Gamepad2, BookHeart, Flame, Clock, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../api';
@@ -174,8 +174,8 @@ const PortalDashboard = () => {
   ];
 
   return (
-    <div className="container" style={{ maxWidth: '1100px', padding: '2rem 1rem' }}>
-      {/* ── Hero Row: Welcome + Verse ── */}
+    <div className="portal-shell">
+      {/* ── Hero band: Welcome + Verse ── */}
       <div className="dashboard-hero-row animate-stagger" style={{ animationDelay: '0s' }}>
         <div className="dashboard-hero-card">
           <div className="dashboard-hero-welcome-wrapper">
@@ -220,7 +220,7 @@ const PortalDashboard = () => {
       </h2>
       
       <div className="dashboard-modules-grid">
-        {modules.map(({ id, title, desc, Icon, docsPath, openPath, OpenIcon, docsTitle, openTitle }, index) => (
+        {modules.map(({ id, title, desc, Icon, docsPath, openPath, docsTitle, openTitle }, index) => (
           <div key={id} className="module-card animate-stagger" style={{ animationDelay: `${0.25 + (index * 0.05)}s` }}>
             <div className="module-card-header">
               <div className="module-card-icon">
@@ -232,11 +232,12 @@ const PortalDashboard = () => {
               {desc}
             </p>
             <div className="module-card-actions">
-              <Link to={docsPath} className="module-action-btn action-docs" title={docsTitle}>
+              <Link to={docsPath} className="module-action-btn action-docs" title={docsTitle} aria-label={docsTitle}>
                 <BookOpen size={18} />
               </Link>
               <Link to={openPath} className="module-action-btn action-open" title={openTitle}>
-                <OpenIcon size={18} />
+                <span className="module-action-label">{openTitle}</span>
+                <ArrowRight size={16} />
               </Link>
             </div>
           </div>

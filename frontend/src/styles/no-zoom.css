@@ -1,0 +1,71 @@
+/* ==========================================================================
+   No-zoom — stop the page from zooming on touch devices
+   --------------------------------------------------------------------------
+   Imported LAST from main.jsx so it wins the cascade over the many per-page
+   mobile overrides in index.css. Paired with the `gesturestart` guard in
+   main.jsx, which covers the one case CSS cannot (iOS pinch).
+
+   There are three separate ways a phone zooms a page. The viewport meta in
+   index.html only ever addressed one of them, which is why zooming kept
+   happening anyway:
+
+     1. Pinch gesture      -> blocked below via touch-action (Android/Chrome)
+                              and via `gesturestart` in main.jsx (iOS Safari
+                              which ignores `user-scalable=no`).
+     2. Double-tap to zoom -> blocked below via touch-action.
+     3. Focusing an input  -> iOS auto-zooms whenever the focused control's
+                              font-size is under 16px, and `maximum-scale=1`
+                              then leaves you stuck at that zoom level. Only
+                              a real 16px font-size prevents it; no meta tag
+                              or JS can. Handled below.
+   ========================================================================== */
+
+/* ── 1 & 2. Pinch and double-tap ─────────────────────────────────────────
+   `pan-x pan-y` keeps normal scrolling in both directions but removes the
+   zoom gestures. touch-action is resolved through the ancestor chain, so
+   setting it on the root constrains every element inside it. */
+html,
+body {
+  touch-action: pan-x pan-y;
+}
+
+/* Belt-and-braces for the elements people actually tap twice by accident. */
+a,
+button,
+label,
+summary,
+[role='button'],
+.btn,
+.card {
+  touch-action: manipulation;
+}
+
+/* Stop iOS inflating text of its own accord when the phone is rotated. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ── 3. iOS focus zoom ────────────────────────────────────────────────────
+   Every text-entry control must be at least 16px on a touch device or iOS
+   zooms in the moment it receives focus. This is the cause of most of the
+   "it zoomed and I didn't do anything" cases.
+
+   Scoped to `pointer: coarse` so desktop layouts are untouched, and given
+   enough specificity + !important to beat the per-page mobile overrides
+   in index.css. */
+@media (pointer: coarse) {
+  /* Scoped to `body` rather than `#root` so it also reaches the modals that
+     render through createPortal (MessengerAutomation, PopupModal, …).
+
+     `:not(#never-matches)` is a specificity booster, not a filter — no such
+     id exists anywhere in the app. It is here so this one rule outranks the
+     ~15 scattered `.form-input { font-size: … !important }` mobile overrides
+     in index.css without having to hunt down and edit each of them, and so
+     that a new one added later cannot silently reintroduce the zoom. */
+  body input:not(#never-matches):not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']),
+  body select:not(#never-matches),
+  body textarea:not(#never-matches) {
+    font-size: 16px !important;
+  }
+}

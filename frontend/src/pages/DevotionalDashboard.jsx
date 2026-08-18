@@ -10,6 +10,7 @@ import BibleTracker from '../components/BibleTracker';
 import BibleVideos from '../components/BibleVideos';
 import PopupModal from '../components/PopupModal';
 import { renderAvatarHelper } from '../utils/avatarHelper';
+import PageHeader from '../components/PageHeader';
 
 // ── Stat Pill ────────────────────────────────────────────────────────────────
 const StatPill = ({ icon, value, label, accent }) => (
@@ -588,38 +589,21 @@ const DevotionalDashboard = () => {
 
   return (
     <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0 0.75rem 5rem' }}>
-      {/* ── Hero Header ── */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        marginBottom: '1rem', padding: '0.5rem 0',
-      }}>
-        <h1 style={{
-          fontSize: '1.4rem', fontWeight: '900', color: 'var(--primary)', margin: 0,
-          display: 'flex', alignItems: 'center', gap: '0.4rem',
-        }}>
-          <BookHeart size={24} /> {t('devo_dashboard_title')}
-        </h1>
-        <div style={{ display: 'flex', gap: '0.4rem' }}>
-          <Link to="/docs/devotional-tracker" style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '38px', height: '38px', borderRadius: '10px',
-            backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)',
-            color: 'var(--text-muted)', textDecoration: 'none',
-            transition: 'background-color 0.2s',
-          }}>
-            <BookOpen size={18} />
-          </Link>
-          <Link to="/devotionals/submit" style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: '38px', height: '38px', borderRadius: '10px',
-            background: 'linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 75%, #000))',
-            color: '#fff', textDecoration: 'none', boxShadow: '0 2px 8px color-mix(in srgb, var(--primary) 30%, transparent)',
-            transition: 'transform 0.15s ease',
-          }}>
-            <Send size={18} />
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        icon={BookHeart}
+        title={t('devo_dashboard_title')}
+        subtitle={t('devo_desc')}
+        actions={
+          <>
+            <Link to="/docs/devotional-tracker" className="btn btn-secondary page-header-btn-icon" title="Help & Documentation">
+              <BookOpen size={18} />
+            </Link>
+            <Link to="/devotionals/submit" className="btn btn-primary page-header-btn-icon" title={t('devo_submit_title')}>
+              <Send size={18} />
+            </Link>
+          </>
+        }
+      />
 
       {/* ── Bottom Navigation Tabs ── */}
       <div style={{

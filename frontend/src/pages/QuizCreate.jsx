@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, Trash2, ChevronUp, ChevronDown, Save, Eye, EyeOff, GripVertical, Gamepad2 } from 'lucide-react';
+import { Plus, Trash2, ChevronUp, ChevronDown, Save, Eye, EyeOff, GripVertical, Gamepad2 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import PopupModal from '../components/PopupModal';
+import PageHeader from '../components/PageHeader';
 
 const CATEGORIES = ['General', 'Old Testament', 'New Testament', 'Gospels', 'Psalms & Proverbs', 'Church History', 'Youth Group'];
 
@@ -242,15 +243,10 @@ const QuizCreate = () => {
 
   return (
     <div className="container" style={{ maxWidth: '800px', padding: '1.5rem 1rem' }}>
-      <div className="btn-back-wrapper">
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/games')} className="btn-back-pill">
-          <ChevronLeft size={16} /> {t('back')}
-        </button>
-      </div>
-
-      <h1 style={{ fontSize: '2.1rem', fontWeight: '850', color: 'var(--text-main)', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.6rem', letterSpacing: '-0.02em' }}>
-        <Gamepad2 size={28} style={{ color: 'var(--primary)' }} /> {isEdit ? 'Edit Quiz' : t('games_create_quiz')}
-      </h1>
+      <PageHeader
+        icon={Gamepad2}
+        title={isEdit ? 'Edit Quiz' : t('games_create_quiz')}
+      />
 
       {error && <p style={{ color: '#EF4444', marginBottom: '1rem', fontWeight: '600' }}>{error}</p>}
 

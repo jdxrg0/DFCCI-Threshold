@@ -1,0 +1,142 @@
+/* ==========================================================================
+   Redesign: Animated backdrop
+   --------------------------------------------------------------------------
+   Layered on top of the static --bg-mesh that base.css paints in body::before.
+   Two effects, both driven off the active theme's seed colours so all fifteen
+   families get this for free:
+
+     .bg-fx-orb   slow-drifting colour blobs (pure CSS)
+     .bg-fx-glow  a light that trails the cursor (transform driven from
+                  components/AnimatedBackdrop.jsx)
+
+   Everything lives at z-index -1 inside a `contain: strict` box, so it paints
+   above the grain, below the app, and never triggers layout elsewhere.
+   ========================================================================== */
+
+/* ── Tint strengths. Light themes get a whisper, dark themes can take more ─ */
+:root {
+  --bg-fx-1: color-mix(in srgb, var(--primary) 20%, transparent);
+  --bg-fx-2: color-mix(in srgb, var(--secondary) 16%, transparent);
+  --bg-fx-3: color-mix(in srgb, var(--primary) 12%, transparent);
+  --bg-fx-cursor: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+:root.dark {
+  --bg-fx-1: color-mix(in srgb, var(--primary) 30%, transparent);
+  --bg-fx-2: color-mix(in srgb, var(--secondary) 26%, transparent);
+  --bg-fx-3: color-mix(in srgb, var(--primary) 20%, transparent);
+  --bg-fx-cursor: color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+.bg-fx {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  /* Keeps the blobs from ever contributing to layout or overflow */
+  contain: strict;
+}
+
+/* ── Drifting orbs ──────────────────────────────────────────────────────── */
+/* Soft-edged gradients rather than blur() — a filter on a viewport-sized box
+   costs a full-screen repaint per frame on low-end phones, a gradient does not.
+   Only `transform` is animated, so each orb stays on the compositor. */
+.bg-fx-orb {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  will-change: transform;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+  animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+.bg-fx-orb-1 {
+  top: -22vmax;
+  left: -14vmax;
+  width: 62vmax;
+  height: 62vmax;
+  background: radial-gradient(closest-side, var(--bg-fx-1), transparent);
+  animation-name: bg-fx-drift-1;
+  animation-duration: 34s;
+}
+
+.bg-fx-orb-2 {
+  top: -10vmax;
+  right: -18vmax;
+  width: 54vmax;
+  height: 54vmax;
+  background: radial-gradient(closest-side, var(--bg-fx-2), transparent);
+  animation-name: bg-fx-drift-2;
+  animation-duration: 44s;
+}
+
+.bg-fx-orb-3 {
+  bottom: -26vmax;
+  left: 28vmax;
+  width: 58vmax;
+  height: 58vmax;
+  background: radial-gradient(closest-side, var(--bg-fx-3), transparent);
+  animation-name: bg-fx-drift-3;
+  animation-duration: 52s;
+}
+
+@keyframes bg-fx-drift-1 {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(14vw, 10vh, 0) scale(1.18); }
+}
+
+@keyframes bg-fx-drift-2 {
+  from { transform: translate3d(0, 0, 0) scale(1.1); }
+  to   { transform: translate3d(-16vw, 16vh, 0) scale(0.92); }
+}
+
+@keyframes bg-fx-drift-3 {
+  from { transform: translate3d(0, 0, 0) scale(0.95); }
+  to   { transform: translate3d(-12vw, -12vh, 0) scale(1.2); }
+}
+
+/* ── Cursor-following light ─────────────────────────────────────────────── */
+/* Parked at the top-left corner and moved entirely by transform. Positioning a
+   gradient with a CSS variable instead would repaint the whole layer on every
+   pointer move; a translated box is handed to the compositor. */
+.bg-fx-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 44rem;
+  height: 44rem;
+  border-radius: 50%;
+  opacity: 0;
+  will-change: transform, opacity;
+  background: radial-gradient(closest-side, var(--bg-fx-cursor), transparent);
+  transition: opacity 0.6s var(--ease-out, ease);
+}
+
+/* Set by AnimatedBackdrop.jsx on the first real pointer move, so the light
+   fades in where the cursor actually is rather than flashing at 0,0. */
+.bg-fx-glow.is-live { opacity: 1; }
+
+/* ── Opt-out ────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  /* base.css already clamps every animation to ~0ms, which would strand the
+     orbs on their end keyframe. Drop the animation instead so they sit where
+     they were authored, and lose the follow light entirely. */
+  .bg-fx-orb { animation: none !important; }
+  .bg-fx-glow { display: none; }
+}
+
+/* Touch devices have no cursor to follow, and the third orb is the one most
+   likely to overlap content on a narrow viewport. */
+@media (pointer: coarse) {
+  .bg-fx-glow { display: none; }
+}
+
+@media (max-width: 768px) {
+  .bg-fx-orb-3 { display: none; }
+
+  .bg-fx-orb-1 { animation-duration: 48s; }
+  .bg-fx-orb-2 { animation-duration: 60s; }
+}

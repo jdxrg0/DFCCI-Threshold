@@ -3,7 +3,8 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
-import { Eye, Unlock, ChevronLeft } from 'lucide-react';
+import { Eye, Unlock, Users } from 'lucide-react';
+import PageHeader from '../components/PageHeader';
 
 const CounselorDashboard = () => {
   const [threads, setThreads] = useState([]);
@@ -47,13 +48,11 @@ const CounselorDashboard = () => {
 
   return (
     <div className="container" style={{ maxWidth: '800px', paddingBottom: '4rem' }}>
-      <div className="btn-back-wrapper">
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="btn-back-pill">
-          <ChevronLeft size={16} /> Back to Dashboard
-        </button>
-      </div>
-
-      <h2 style={{ marginBottom: '1.5rem', color: 'var(--primary)' }}>Counselor Dashboard</h2>
+      <PageHeader
+        icon={Users}
+        title="Counselor Dashboard"
+        subtitle="Review escalated Gentle Mirror threads and support members through them."
+      />
       {error && <p style={{ color: '#B91C1C' }}>{error}</p>}
       
       <div style={{ marginBottom: '2rem' }}>

@@ -7,6 +7,7 @@ import ThreadSkeleton from '../components/ThreadSkeleton';
 import MyFruits from '../components/MyFruits';
 import EndorseFruit from '../components/EndorseFruit';
 import { useLanguage } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 const AffirmationCard = ({ affirmation, type }) => {
   const isSender = type === 'sent';
@@ -154,25 +155,23 @@ const AffirmationDashboard = () => {
       
       {/* ── BREATHTAKING MESH gradient HERO BANNER ── */}
       <div className="affirmation-hero-banner">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div>
-            <h1 className="affirmation-hero-title" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Sun size={28} style={{ color: 'var(--primary)' }} /> {t('shining_light_dashboard')}
-            </h1>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.35rem 0 0 0', fontWeight: '500' }}>
-              Encourage one another daily, highlight spiritual fruits, and share God's light.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <Link to="/docs/shining-light" className="btn btn-secondary" style={{ width: '40px', height: '40px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '9999px' }} title="Help & Documentation">
-              <BookOpen size={18} />
-            </Link>
-            <Link to="/affirm/send" className="btn btn-primary" style={{ height: '40px', padding: '0 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderRadius: '9999px', fontWeight: '700' }} title={t('send_shining_light')}>
-              <Send size={16} />
-              <span>Send Light</span>
-            </Link>
-          </div>
-        </div>
+        <PageHeader
+          className="page-header--flush"
+          icon={Sun}
+          title={t('shining_light_dashboard')}
+          subtitle="Encourage one another daily, highlight spiritual fruits, and share God's light."
+          actions={
+            <>
+              <Link to="/docs/shining-light" className="btn btn-secondary page-header-btn-icon" title="Help & Documentation">
+                <BookOpen size={18} />
+              </Link>
+              <Link to="/affirm/send" className="btn btn-primary page-header-btn" title={t('send_shining_light')}>
+                <Send size={16} />
+                <span>Send Light</span>
+              </Link>
+            </>
+          }
+        />
       </div>
 
       {/* ── premium SLIDING TABS TRACK ── */}

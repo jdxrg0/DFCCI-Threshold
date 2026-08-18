@@ -2,16 +2,42 @@ const cron = require('node-cron');
 const Schedule = require('../models/Schedule');
 const AppSetting = require('../models/AppSetting');
 
+/* A queue item's `parsedRoles` is a Mongoose Map when it comes off a document
+   and a plain object when it comes off a lean query or a request body. These
+   two readers keep the resolver indifferent to which one it got. */
+const roleEntries = (parsedRoles) => {
+  if (!parsedRoles) return [];
+  if (typeof parsedRoles.entries === 'function') return Array.from(parsedRoles.entries());
+  return Object.entries(parsedRoles);
+};
+
+const roleValue = (parsedRoles, role) => {
+  if (!parsedRoles || !role) return undefined;
+  if (typeof parsedRoles.get === 'function') return parsedRoles.get(role);
+  return parsedRoles[role];
+};
+
 class AutomationScheduler {
   constructor() {
     // Map to hold running cron jobs by their MongoDB _id
     this.jobs = new Map();
   }
 
+  /* Best-effort debug log. A read-only filesystem (container, serverless) must
+     not be able to take the scheduler down, so the file write is guarded. */
+  log(msg) {
+    console.log(msg);
+    try {
+      require('fs').appendFileSync('scheduler_debug.log', `[${new Date().toISOString()}] ${msg}
+`);
+    } catch (e) { /* console output is enough */ }
+  }
+
   async init() {
     try {
       const schedules = await Schedule.find();
-      console.log(`[Scheduler] Found ${schedules.length} active schedules. Starting timers...`);
+      const activeCount = schedules.filter(s => s.isActive !== false).length;
+      console.log(`[Scheduler] Found ${schedules.length} schedules (${activeCount} active). Starting timers...`);
       
       schedules.forEach(schedule => {
         this.addJob(schedule);
@@ -138,30 +164,29 @@ class AutomationScheduler {
 
   addJob(schedule) {
     const id = schedule._id.toString();
-    
-    const fs = require('fs');
-    const logFile = 'scheduler_debug.log';
-    const log = (msg) => {
-        console.log(msg);
-        fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${msg}\n`);
-    };
 
-    log(`[Scheduler] addJob called for scheduleId: ${id} with cronTime: ${schedule.cronTime}`);
-    
     // Clear existing job if it exists (for updates)
     if (this.jobs.has(id)) {
-      log(`[Scheduler] Removing existing job for id: ${id}`);
+      this.log(`[Scheduler] Removing existing job for id: ${id}`);
       this.removeJob(id);
     }
 
+    // Paused schedules keep their database row and their GitHub workflow file,
+    // they simply get no timers until someone resumes them.
+    if (schedule.isActive === false) {
+      this.log(`[Scheduler] Schedule ${id} ("${schedule.scheduleName}") is paused — no timers registered.`);
+      return;
+    }
+
+    this.log(`[Scheduler] addJob called for scheduleId: ${id} with cronTime: ${schedule.cronTime}`);
+
     // 1. Main Group Chat Job
-    log(`[Scheduler] Scheduling cron job with string: ${schedule.cronTime}`);
     const mainJob = cron.schedule(schedule.cronTime, () => {
-      log(`[Scheduler] CRON FIRED for ${id} (Main Group Chat)`);
+      this.log(`[Scheduler] CRON FIRED for ${id} (Main Group Chat)`);
       this.triggerGitHubAction(id, 'MAIN');
     }, { scheduled: true, timezone: "UTC" });
 
-    // 2. Daily Reminder Job (Extract time from cronTime and run it every day)
+    // 2. Daily Reminder Job (same clock time as the main job, but every day)
     const timeParts = schedule.cronTime.split(' ');
     const dailyCron = `${timeParts[0]} ${timeParts[1]} * * *`;
     const reminderJob = cron.schedule(dailyCron, () => {
@@ -191,211 +216,255 @@ class AutomationScheduler {
     }
   }
 
-  async triggerGitHubAction(id, actionType = 'MAIN') {
-    const fs = require('fs');
-    const logFile = 'scheduler_debug.log';
-    const log = (msg) => {
-        console.log(msg);
-        fs.appendFileSync(logFile, `[${new Date().toISOString()}] ${msg}\n`);
-    };
+  /**
+   * Work out exactly what a run would send — without sending anything.
+   *
+   * Both the cron path and the dashboard's "Preview" button go through here,
+   * so the text an admin previews is the same string the workflow receives.
+   *
+   * @returns {{shouldDispatch: boolean, reason: string, message: string,
+   *            codeMessage: string, reminderTasks: object[], items: string[]}}
+   */
+  async resolveDispatch(schedule, actionType = 'MAIN') {
+    const skip = (reason) => ({
+      shouldDispatch: false, reason,
+      message: '', codeMessage: '', reminderTasks: [], items: []
+    });
+
+    const sortedQueue = [...(schedule.messageQueue || [])]
+      .sort((a, b) => String(a.targetDate).localeCompare(String(b.targetDate)));
+
+    const todayStr = new Date().toISOString().split('T')[0]; // role-reminder diff math
+
+    // Past noon on a Sunday (Manila) that day's lineup has already happened, so
+    // the window starts tomorrow instead of today.
+    const nowManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+    const cutoffDateObj = new Date();
+    if (nowManila.getDay() === 0 && nowManila.getHours() >= 12) {
+      cutoffDateObj.setDate(cutoffDateObj.getDate() + 1);
+    }
+    const cutoffDateStr = cutoffDateObj.toISOString().split('T')[0];
+
+    // How many upcoming lineups a single run processes.
+    const limit = schedule.advanceWeeks && schedule.advanceWeeks > 0 ? schedule.advanceWeeks : 1;
+    const upcomingItems = sortedQueue
+      .filter(q => !q.isSent && q.targetDate >= cutoffDateStr)
+      .slice(0, limit);
+
+    if (schedule.targetRole && upcomingItems.length === 0) {
+      return skip(`No unsent lineup on or after ${cutoffDateStr} for role "${schedule.targetRole}".`);
+    }
+
+    let weeklyCode = 'NOT_GENERATED';
     try {
-      log(`[Scheduler] triggerGitHubAction started for id: ${id}, actionType: ${actionType}`);
-      const schedule = await Schedule.findById(id);
-      
-      if (!schedule) {
-        log(`[Scheduler] Schedule not found in DB!`);
-        return;
+      const setting = await AppSetting.findOne({ key: 'weekly_code_config' });
+      if (setting && setting.value && setting.value.currentCode) {
+        weeklyCode = setting.value.currentCode;
       }
+    } catch (e) {
+      console.error('[Scheduler] Error fetching weekly code', e);
+    }
 
-      log(`[Scheduler] Found schedule: ${schedule.scheduleName}. TargetRole: ${schedule.targetRole}`);
-      const sortedQueue = [...schedule.messageQueue].sort((a, b) => a.targetDate.localeCompare(b.targetDate));
-      
-      const todayStr = new Date().toISOString().split('T')[0]; // needed for role reminder diff math
+    // ── Confirmation-code broadcast ──────────────────────────────────────
+    // Code runs post the code line only. They deliberately carry no main
+    // message: the group chat already received that on the MAIN run.
+    if (actionType === 'CODE') {
+      const withCode = upcomingItems.find(q => q.weeklyConfirmationCode);
+      if (!withCode) return skip('No confirmation code on the upcoming lineup.');
+      return {
+        shouldDispatch: true,
+        reason: '',
+        message: '',
+        codeMessage: `📌 Here's our code for this week's passing of lineups: ${withCode.weeklyConfirmationCode}`,
+        reminderTasks: [],
+        items: [withCode.targetDate]
+      };
+    }
 
-      // Determine if we should ignore today's date (if it's Sunday and past 12 PM Manila time)
-      const nowManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-      const isSunday = nowManila.getDay() === 0;
-      const isPastNoon = nowManila.getHours() >= 12;
-      
-      let cutoffDateObj = new Date();
-      if (isSunday && isPastNoon) {
-        cutoffDateObj.setDate(cutoffDateObj.getDate() + 1);
-      }
-      const cutoffDateStr = cutoffDateObj.toISOString().split('T')[0];
+    const Member = require('../models/Member');
+    const allMembers = await Member.find();
+    const findMember = (name) => allMembers.find(m => m.name.toLowerCase() === String(name).toLowerCase());
 
-      // Determine how many upcoming weeks to process (0 = 1 week, 3 = 3 weeks, etc.)
-      const limit = schedule.advanceWeeks && schedule.advanceWeeks > 0 ? schedule.advanceWeeks : 1;
-      
-      // Find up to `limit` upcoming items using cutoffDateStr
-      const upcomingItems = sortedQueue.filter(q => !q.isSent && q.targetDate >= cutoffDateStr).slice(0, limit);
+    const reminderTasks = [];
+    let lastFinalMessage = schedule.message;
 
-      log(`[Scheduler] Found ${upcomingItems.length} upcoming items using limit ${limit} and cutoff ${cutoffDateStr}`);
+    if (upcomingItems.length > 0) {
+      for (const queuedItem of upcomingItems) {
+        let finalMessage = queuedItem.messageText || schedule.message;
 
-      if (schedule.targetRole && upcomingItems.length === 0) {
-        log(`[Scheduler] Specific Role schedule looking for lineups >= ${cutoffDateStr} but none found. Skipping completely.`);
-        return;
-      }
-      
-      let reminderTasks = [];
-      let codeMessage = "";
-      
-      const Member = require('../models/Member');
-      const allMembers = await Member.find();
-      log(`[Scheduler] Fetched ${allMembers.length} members from DB`);
+        const targetDateObj = new Date(queuedItem.targetDate);
+        const dateFormatted = targetDateObj
+          .toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' })
+          .toUpperCase();
 
-      // Fetch Weekly Code for replacement
-      let weeklyCode = 'NOT_GENERATED';
-      try {
-        const setting = await AppSetting.findOne({ key: 'weekly_code_config' });
-        if (setting && setting.value && setting.value.currentCode) {
-          weeklyCode = setting.value.currentCode;
+        finalMessage = finalMessage.replace(/{Date Next Sunday}/gi, dateFormatted);
+        finalMessage = finalMessage.replace(/{Date}/gi, dateFormatted);
+        finalMessage = finalMessage.replace(/{DATE_NEXT_SUNDAY}/gi, dateFormatted);
+        finalMessage = finalMessage.replace(/{WeeklyCode}/gi, weeklyCode);
+
+        // Dynamic role tags — {Presider}, {Song Leader}, …
+        for (const [roleName, assignedMember] of roleEntries(queuedItem.parsedRoles)) {
+          finalMessage = finalMessage.replace(new RegExp(`{${roleName}}`, 'gi'), assignedMember);
         }
-      } catch (e) {
-        console.error('[Scheduler] Error fetching weekly code', e);
-      }
 
-      // If we have items in the queue, process them all
-      let lastFinalMessage = schedule.message;
-      
-      if (upcomingItems.length > 0) {
-        for (const queuedItem of upcomingItems) {
-          log(`[Scheduler] Processing queued item for targetDate: ${queuedItem.targetDate}`);
-          let finalMessage = schedule.message;
-
-          // ---- If this is purely a CODE job ----
-          if (actionType === 'CODE') {
-            if (queuedItem.weeklyConfirmationCode) {
-              codeMessage = `📌 Here's our code for this week's passing of lineups: ${queuedItem.weeklyConfirmationCode}`;
-              // We only need one code message, so we can break early
-              break; 
-            }
-          } 
-          // ---- If this is a MAIN or REMINDER job ----
-          else {
-            finalMessage = queuedItem.messageText;
-            console.log(`[Scheduler] Processing upcoming schedule for ${queuedItem.targetDate}.`);
-            
-            // EXTRA SAFETY PARSER
-            const targetDateObjSafety = new Date(queuedItem.targetDate);
-            const safetyDateFormatted = targetDateObjSafety.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }).toUpperCase();
-            finalMessage = finalMessage.replace(/{Date Next Sunday}/gi, safetyDateFormatted);
-            finalMessage = finalMessage.replace(/{Date}/gi, safetyDateFormatted);
-            finalMessage = finalMessage.replace(/{DATE_NEXT_SUNDAY}/gi, safetyDateFormatted);
-            finalMessage = finalMessage.replace(/{WeeklyCode}/gi, weeklyCode);
-
-            // DYNAMIC ROLE TAG REPLACEMENT
-            if (queuedItem.parsedRoles) {
-              for (const [roleName, assignedMember] of queuedItem.parsedRoles.entries()) {
-                const roleRegex = new RegExp(`{${roleName}}`, 'gi');
-                finalMessage = finalMessage.replace(roleRegex, assignedMember);
-              }
-            }
-
-            // Target Role Logic (MAIN)
-            if (actionType === 'MAIN' && schedule.targetRole && queuedItem.parsedRoles) {
-              if (queuedItem.overrideChatUrl) {
-                reminderTasks.push({
-                   url: queuedItem.overrideChatUrl,
-                   message: finalMessage,
-                   expectedCode: queuedItem.weeklyConfirmationCode
-                });
-                finalMessage = ""; // Prevent sending to generic
-              } else {
-                const assignedName = queuedItem.parsedRoles.get(schedule.targetRole);
-                if (assignedName) {
-                  const member = allMembers.find(m => m.name.toLowerCase() === assignedName.toLowerCase());
-                  if (member && member.facebookChatUrl) {
-                     reminderTasks.push({
-                        url: member.facebookChatUrl,
-                        message: finalMessage,
-                        expectedCode: queuedItem.weeklyConfirmationCode
-                     });
-                     log(`[Scheduler] Added task for ${assignedName} at ${member.facebookChatUrl}`);
-                     finalMessage = ""; // Prevent sending to generic
-                  } else {
-                     log(`[Scheduler] Member ${assignedName} for role ${schedule.targetRole} not found or has no facebookChatUrl.`);
-                     finalMessage = ""; // Even if failed, don't send to generic if targetRole was expected
-                  }
-                } else {
-                  log(`[Scheduler] No one assigned to role ${schedule.targetRole} for ${queuedItem.targetDate}.`);
-                  finalMessage = "";
-                }
-              }
-            }
-
-            // Role Reminders
-            const targetDateObj = new Date(queuedItem.targetDate);
-            const todayDateObj = new Date(todayStr);
-            const diffTime = targetDateObj - todayDateObj;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-            if (schedule.roleReminders && schedule.roleReminders.length > 0 && queuedItem.parsedRoles) {
-              schedule.roleReminders.forEach(reminder => {
-                if (reminder.daysPrior.includes(diffDays)) {
-                   const assignedName = queuedItem.parsedRoles.get(reminder.role);
-                   if (assignedName) {
-                      const member = allMembers.find(m => m.name.toLowerCase() === assignedName.toLowerCase());
-                      if (member && member.facebookChatUrl) {
-                         let msg = reminder.messageTemplate.replace(/{Name}/gi, assignedName);
-                         msg = msg.replace(/{Role}/gi, reminder.role);
-                         for (const [rName, mName] of queuedItem.parsedRoles.entries()) {
-                            const roleRegex = new RegExp(`{${rName}}`, 'gi');
-                            msg = msg.replace(roleRegex, mName);
-                         }
-                         msg = msg.replace(/{WeeklyCode}/gi, weeklyCode);
-                         reminderTasks.push({
-                            url: member.facebookChatUrl,
-                            message: msg,
-                            expectedCode: queuedItem.weeklyConfirmationCode
-                         });
-                      }
-                   }
-                }
+        // Role-targeted delivery: the message goes to one person's inbox
+        // instead of the group chat.
+        if (actionType === 'MAIN' && schedule.targetRole && queuedItem.parsedRoles) {
+          if (queuedItem.overrideChatUrl) {
+            reminderTasks.push({
+              url: queuedItem.overrideChatUrl,
+              message: finalMessage,
+              expectedCode: queuedItem.weeklyConfirmationCode
+            });
+          } else {
+            const assignedName = roleValue(queuedItem.parsedRoles, schedule.targetRole);
+            const member = assignedName ? findMember(assignedName) : null;
+            if (member && member.facebookChatUrl) {
+              reminderTasks.push({
+                url: member.facebookChatUrl,
+                message: finalMessage,
+                expectedCode: queuedItem.weeklyConfirmationCode
               });
-            }
-
-            if (actionType === 'REMINDER') {
-              finalMessage = "";
+              this.log(`[Scheduler] Added task for ${assignedName} at ${member.facebookChatUrl}`);
+            } else if (assignedName) {
+              this.log(`[Scheduler] Member "${assignedName}" (${schedule.targetRole}) is missing a Facebook chat URL.`);
+            } else {
+              this.log(`[Scheduler] Nobody assigned to ${schedule.targetRole} on ${queuedItem.targetDate}.`);
             }
           }
-          lastFinalMessage = finalMessage;
-        }
-      } else {
-        // ---- FALLBACK FOR NO QUEUE ITEMS (Generic Schedules Only) ----
-        if (actionType === 'CODE') {
-           console.log(`[Scheduler] No upcoming code found for ${schedule.scheduleName}. Skipping code job.`);
-           return;
+          // Role schedules never fall back to the group chat.
+          finalMessage = '';
         }
 
-        console.log(`[Scheduler] No upcoming unsent items found in queue! Falling back to raw template.`);
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        const dateFormatted = tomorrow.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }).toUpperCase();
-        lastFinalMessage = lastFinalMessage.replace(/{DATE_TOMORROW}/gi, dateFormatted);
-        lastFinalMessage = lastFinalMessage.replace(/{DATE_TODAY}/gi, dateFormatted);
-        lastFinalMessage = lastFinalMessage.replace(/{Date Next Sunday}/gi, dateFormatted);
-        lastFinalMessage = lastFinalMessage.replace(/{Date}/gi, dateFormatted);
-        lastFinalMessage = lastFinalMessage.replace(/{DATE_NEXT_SUNDAY}/gi, dateFormatted);
-        lastFinalMessage = lastFinalMessage.replace(/{WeeklyCode}/gi, weeklyCode);
+        // Role reminders — extra nudges N days before the target date.
+        const diffDays = Math.ceil((targetDateObj - new Date(todayStr)) / (1000 * 60 * 60 * 24));
+        if (schedule.roleReminders && schedule.roleReminders.length > 0 && queuedItem.parsedRoles) {
+          schedule.roleReminders.forEach(reminder => {
+            if (!reminder.daysPrior || !reminder.daysPrior.includes(diffDays)) return;
+            const assignedName = roleValue(queuedItem.parsedRoles, reminder.role);
+            if (!assignedName) return;
+            const member = findMember(assignedName);
+            if (!member || !member.facebookChatUrl) return;
+
+            let msg = (reminder.messageTemplate || '')
+              .replace(/{Name}/gi, assignedName)
+              .replace(/{Role}/gi, reminder.role);
+            for (const [rName, mName] of roleEntries(queuedItem.parsedRoles)) {
+              msg = msg.replace(new RegExp(`{${rName}}`, 'gi'), mName);
+            }
+            msg = msg.replace(/{WeeklyCode}/gi, weeklyCode);
+
+            reminderTasks.push({
+              url: member.facebookChatUrl,
+              message: msg,
+              expectedCode: queuedItem.weeklyConfirmationCode
+            });
+          });
+        }
+
+        // A REMINDER run only ever produces direct messages.
+        if (actionType === 'REMINDER') finalMessage = '';
+
+        lastFinalMessage = finalMessage;
+      }
+    } else {
+      // ── No queue items: generic schedule falling back to the raw template ──
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const dateFormatted = tomorrow
+        .toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' })
+        .toUpperCase();
+
+      lastFinalMessage = lastFinalMessage
+        .replace(/{DATE_TOMORROW}/gi, dateFormatted)
+        .replace(/{DATE_TODAY}/gi, dateFormatted)
+        .replace(/{Date Next Sunday}/gi, dateFormatted)
+        .replace(/{Date}/gi, dateFormatted)
+        .replace(/{DATE_NEXT_SUNDAY}/gi, dateFormatted)
+        .replace(/{WeeklyCode}/gi, weeklyCode);
+    }
+
+    if (actionType === 'MAIN' && schedule.targetRole && reminderTasks.length === 0) {
+      return skip(`No reachable member for role "${schedule.targetRole}" — check the Member Directory.`);
+    }
+
+    if (actionType === 'REMINDER' && reminderTasks.length === 0) {
+      return skip('No role reminders fall due today.');
+    }
+
+    return {
+      shouldDispatch: true,
+      reason: '',
+      message: lastFinalMessage,
+      codeMessage: '',
+      reminderTasks,
+      items: upcomingItems.map(q => q.targetDate)
+    };
+  }
+
+  /**
+   * Resolve a schedule without dispatching — powers the dashboard preview.
+   */
+  async previewDispatch(id, actionType = 'MAIN') {
+    const schedule = await Schedule.findById(id);
+    if (!schedule) return null;
+
+    const resolved = await this.resolveDispatch(schedule, actionType);
+    return {
+      scheduleName: schedule.scheduleName,
+      isActive: schedule.isActive !== false,
+      actionType,
+      chatUrl: schedule.chatUrl,
+      targetRole: schedule.targetRole,
+      ...resolved
+    };
+  }
+
+  /**
+   * Append a run outcome to the schedule's history (capped at 25 entries) and
+   * mirror it onto lastRun so lists render without loading the whole array.
+   */
+  async recordRun(id, entry) {
+    const record = { at: new Date(), recipients: 0, ...entry };
+    try {
+      await Schedule.findByIdAndUpdate(id, {
+        $set: { lastRun: record },
+        $push: { runHistory: { $each: [record], $slice: -25 } }
+      });
+    } catch (e) {
+      console.error('[Scheduler] Failed to record run outcome:', e.message);
+    }
+    return record;
+  }
+
+  async triggerGitHubAction(id, actionType = 'MAIN', options = {}) {
+    const trigger = options.trigger || 'cron';
+    try {
+      this.log(`[Scheduler] triggerGitHubAction started for id: ${id}, actionType: ${actionType}, trigger: ${trigger}`);
+      const schedule = await Schedule.findById(id);
+
+      if (!schedule) {
+        this.log('[Scheduler] Schedule not found in DB!');
+        return { ok: false, status: 'error', detail: 'Schedule not found' };
       }
 
-      if (actionType === 'MAIN' && reminderTasks.length === 0 && schedule.targetRole) {
-        log(`[Scheduler] No valid members found for role ${schedule.targetRole}. Skipping workflow trigger.`);
-        return;
+      if (schedule.isActive === false) {
+        this.log(`[Scheduler] "${schedule.scheduleName}" is paused. Skipping ${actionType}.`);
+        return { ok: false, status: 'skipped', detail: 'Schedule is paused' };
       }
-      
-      log(`[Scheduler] reminderTasks populated with ${reminderTasks.length} items`);
 
-      if (actionType === 'REMINDER' && reminderTasks.length === 0) {
-        console.log(`[Scheduler] No reminders to send today for ${schedule.scheduleName}. Skipping daily run.`);
-        return;
+      const resolved = await this.resolveDispatch(schedule, actionType);
+
+      if (!resolved.shouldDispatch) {
+        this.log(`[Scheduler] ${schedule.scheduleName} / ${actionType} skipped: ${resolved.reason}`);
+        await this.recordRun(id, { status: 'skipped', actionType, trigger, detail: resolved.reason });
+        return { ok: false, status: 'skipped', detail: resolved.reason, resolved };
       }
 
       const owner = 'd0ul0s';
       const repo = 'Residential-Proxy-Method';
-      
-      log(`[Scheduler] Dispatching to GitHub API: ${schedule.githubFileName}`);
-      
+      this.log(`[Scheduler] Dispatching to GitHub API: ${schedule.githubFileName} (${resolved.reminderTasks.length} direct message(s))`);
+
       const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${schedule.githubFileName}/dispatches`, {
         method: 'POST',
         headers: {
@@ -406,24 +475,36 @@ class AutomationScheduler {
         body: JSON.stringify({
           ref: 'main',
           inputs: {
-            dynamic_message: lastFinalMessage || "NO_MESSAGE",
-            code_message: codeMessage || "NO_MESSAGE",
-            reminder_tasks: JSON.stringify(reminderTasks)
+            dynamic_message: resolved.message || "NO_MESSAGE",
+            code_message: resolved.codeMessage || "NO_MESSAGE",
+            reminder_tasks: JSON.stringify(resolved.reminderTasks)
           }
         })
       });
 
       if (!response.ok) {
         const errorData = await response.text();
-        log(`[Scheduler] Failed to trigger ${schedule.githubFileName}. Status: ${response.status}. Body: ${errorData}`);
-      } else {
-        log(`[Scheduler] Successfully triggered GitHub workflow for ${schedule.scheduleName}`);
-        // We no longer mark it as isSent=true here.
-        // It will organically stop being the "closest upcoming" once the date actually passes!
+        const detail = `GitHub returned ${response.status}: ${errorData.slice(0, 240)}`;
+        this.log(`[Scheduler] Failed to trigger ${schedule.githubFileName}. ${detail}`);
+        await this.recordRun(id, { status: 'error', actionType, trigger, detail });
+        return { ok: false, status: 'error', detail, resolved };
       }
+
+      this.log(`[Scheduler] Successfully triggered GitHub workflow for ${schedule.scheduleName}`);
+      // Queue items are not marked isSent here — an item stops being "the next
+      // upcoming one" organically once its date passes.
+      const recipients = resolved.reminderTasks.length + (resolved.message ? 1 : 0) + (resolved.codeMessage ? 1 : 0);
+      const detail = resolved.items.length
+        ? `Dispatched for ${resolved.items.join(', ')}`
+        : 'Dispatched from the raw template';
+      await this.recordRun(id, { status: 'success', actionType, trigger, detail, recipients });
+
+      return { ok: true, status: 'success', detail, resolved };
     } catch (error) {
-      log(`[Scheduler] Error triggering workflow: ${error.message}`);
+      this.log(`[Scheduler] Error triggering workflow: ${error.message}`);
       console.error(error);
+      await this.recordRun(id, { status: 'error', actionType, trigger, detail: error.message });
+      return { ok: false, status: 'error', detail: error.message };
     }
   }
 

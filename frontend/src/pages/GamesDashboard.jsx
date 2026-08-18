@@ -6,6 +6,7 @@ import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import ThreadSkeleton from '../components/ThreadSkeleton';
+import PageHeader from '../components/PageHeader';
 
 const GamesDashboard = () => {
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('games_activeTab') || 'quizzes');
@@ -80,23 +81,19 @@ const GamesDashboard = () => {
     <div className="container mirror-dashboard-container" style={{ maxWidth: '800px', padding: 0 }}>
       {/* ── BREATHTAKING MESH GRADIENT GAMES BANNER ── */}
       <div className="games-hero-banner">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div>
-            <h1 className="games-dashboard-title" style={{ fontSize: '2.1rem', color: 'var(--text-main)', margin: 0, fontWeight: '850', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Gamepad2 size={28} style={{ color: 'var(--primary)' }} /> {t('games_dashboard')}
-            </h1>
-            <p className="games-dashboard-desc" style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.35rem 0 0 0', fontWeight: '500' }}>
-              Test your knowledge, challenge the community, and climb the spiritual ranks!
-            </p>
-          </div>
-          {isAdmin && (
-            <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-              <Link to="/games/create" className="btn btn-primary" style={{ padding: '0.6rem', borderRadius: '9999px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title={t('games_create_quiz')}>
+        <PageHeader
+          className="page-header--flush"
+          icon={Gamepad2}
+          title={t('games_dashboard')}
+          subtitle="Test your knowledge, challenge the community, and climb the spiritual ranks!"
+          actions={
+            isAdmin && (
+              <Link to="/games/create" className="btn btn-primary page-header-btn-icon" title={t('games_create_quiz')}>
                 <Plus size={16} />
               </Link>
-            </div>
-          )}
-        </div>
+            )
+          }
+        />
       </div>
 
       {/* Tab Bar */}

@@ -60,6 +60,31 @@ const scheduleSchema = new mongoose.Schema({
     daysPrior: [Number],
     messageTemplate: String
   }],
+  // Paused schedules stay in the database and keep their GitHub workflow file,
+  // but no cron timer is registered for them and manual runs are refused.
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  // Denormalised copy of the newest runHistory entry so the dashboard can show
+  // "last run" without pulling the whole history array.
+  lastRun: {
+    at: Date,
+    status: String,        // success | skipped | error
+    actionType: String,    // MAIN | REMINDER | CODE
+    trigger: String,       // cron | manual
+    detail: String,
+    recipients: Number
+  },
+  // Capped at the 25 most recent entries by the $slice in recordRun().
+  runHistory: [{
+    at: { type: Date, default: Date.now },
+    status: String,
+    actionType: String,
+    trigger: String,
+    detail: String,
+    recipients: Number
+  }],
   createdAt: {
     type: Date,
     default: Date.now

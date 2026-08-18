@@ -1,0 +1,263 @@
+/* ==========================================================================
+   Redesign: Base — typography, page shell, backdrop
+   ========================================================================== */
+
+/* ── Page backdrop: layered colour mesh instead of a flat linear gradient ── */
+body::before {
+  background-color: var(--bg-color);
+  background-image: var(--bg-mesh);
+  background-attachment: fixed;
+}
+
+/* A fine grain over the mesh keeps large flat areas from banding. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    color-mix(in srgb, var(--text-main) 7%, transparent) 1px,
+    transparent 0
+  );
+  background-size: 4px 4px;
+}
+
+body {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: var(--fs-body);
+  line-height: 1.6;
+  letter-spacing: -0.005em;
+}
+
+/* ── Headings — heavier and tighter than before ─────────────────────────── */
+h1, h2, h3, h4 {
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+h1 { font-size: var(--fs-h1); font-weight: 900; }
+h2 { font-size: var(--fs-h2); }
+h3 { font-size: var(--fs-h3); }
+
+p { text-wrap: pretty; }
+
+/* ── Layout shell ───────────────────────────────────────────────────────── */
+.container {
+  max-width: var(--shell-width);
+  padding: 0 var(--sp-5);
+}
+
+.main-content {
+  padding: var(--sp-6) 0 var(--sp-8);
+}
+
+/* ── Focus visibility — one consistent ring everywhere ──────────────────── */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* ── Selection ──────────────────────────────────────────────────────────── */
+::selection {
+  background: var(--tint-primary-strong);
+  color: var(--text-main);
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--hairline-strong);
+  border-radius: var(--r-full);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--primary) 55%, transparent);
+  background-clip: content-box;
+}
+
+/* ── Typography utilities ───────────────────────────────────────────────── */
+.text-hero {
+  font-size: var(--fs-display);
+  font-weight: 900;
+  line-height: 1.02;
+  letter-spacing: var(--tracking-tight);
+  margin-bottom: var(--sp-3);
+}
+
+.text-subtitle {
+  font-size: clamp(1.05rem, 0.95rem + 0.5vw, 1.25rem);
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  margin-bottom: var(--sp-6);
+  max-width: 60ch;
+}
+
+.text-gradient {
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* Guards against the gradient clipping descenders on tight line-heights */
+  padding-bottom: 0.06em;
+}
+
+/* ── Page header: shared eyebrow / title / subtitle / actions block ─────── */
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-6);
+  padding-bottom: var(--sp-5);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.page-head-text {
+  min-width: 0;
+}
+
+.page-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--fs-eyebrow);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-eyebrow);
+  color: var(--primary);
+  margin-bottom: var(--sp-2);
+}
+
+.page-title {
+  font-size: var(--fs-h1);
+  font-weight: 900;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.05;
+  margin: 0;
+}
+
+.page-subtitle {
+  margin: var(--sp-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  max-width: 62ch;
+}
+
+.page-head-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+}
+
+/* ── Section titles ─────────────────────────────────────────────────────── */
+.dashboard-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-h3);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  margin: var(--sp-7) 0 var(--sp-4);
+  text-transform: none;
+}
+
+.dashboard-section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--hairline), transparent);
+}
+
+/* ── Back button — now a solid pill rather than a bare text link ────────── */
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0.5rem 0.95rem 0.5rem 0.7rem;
+  margin-bottom: var(--sp-4);
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-sm);
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+
+.back-btn:hover {
+  color: var(--primary);
+  border-color: var(--ring);
+  background: var(--tint-primary);
+  transform: translateX(-2px);
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+@keyframes dash-stagger-fade-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+.animate-stagger {
+  animation: dash-stagger-fade-in var(--dur-slow) var(--ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  body { font-size: 15px; }
+
+  .container { padding: 0 var(--sp-4); }
+
+  .main-content { padding: var(--sp-4) 0 var(--sp-7); }
+
+  .page-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--sp-3);
+    margin-bottom: var(--sp-5);
+    padding-bottom: var(--sp-4);
+  }
+
+  .page-head-actions { width: 100%; }
+
+  .dashboard-section-title { margin: var(--sp-6) 0 var(--sp-3); }
+
+  /* The grain overlay is pure cost on low-end phones */
+  body::after { display: none; }
+}

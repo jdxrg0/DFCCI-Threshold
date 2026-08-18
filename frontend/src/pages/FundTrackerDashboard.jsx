@@ -1,31 +1,50 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import api from '../api';
-import { Link, useNavigate } from 'react-router-dom';
-import { 
-  BookOpen, 
-  Copy, 
-  Pencil, 
-  ChevronLeft, 
-  Plus, 
-  TrendingUp, 
-  TrendingDown, 
-  Coins, 
-  Users, 
-  Briefcase, 
-  Trash2, 
-  Edit3, 
-  ShieldAlert,
+import { Link } from 'react-router-dom';
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  BookOpen,
+  Briefcase,
+  ChartColumn,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Coins,
+  Copy,
+  Download,
   Info,
-  Link2 as LinkIcon
+  Landmark,
+  Link2 as LinkIcon,
+  Mail,
+  Pencil,
+  PiggyBank,
+  Plus,
+  Search,
+  Target,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  Unlink,
+  Users,
+  Wallet,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
-// Helper: Get all Sundays for a given month and year
+/* ══════════════════════════════════════════════════════════════════════════
+   Helpers
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Every Sunday that falls inside the given month
 function getSundays(year, month) {
   const d = new Date(year, month, 1);
   const sundays = [];
-  d.setDate(d.getDate() + ((7 - d.getDay()) % 7)); // First Sunday
+  d.setDate(d.getDate() + ((7 - d.getDay()) % 7));
   while (d.getMonth() === month) {
     sundays.push(new Date(d));
     d.setDate(d.getDate() + 7);
@@ -33,238 +52,601 @@ function getSundays(year, month) {
   return sundays;
 }
 
-// Helper: Format Date to local YYYY-MM-DD to avoid timezone shifts
+// Local YYYY-MM-DD. Using toISOString() here would shift PH dates back a day.
 function getLocalYMD(d) {
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-const inputStyle = {
-  width: '100%', 
-  background: 'rgba(255, 255, 255, 0.03)', 
-  border: '1px solid var(--border-color)',
-  color: 'var(--text-main)', 
-  borderRadius: '0.75rem', 
-  padding: '0.6rem 0.85rem', 
-  boxSizing: 'border-box', 
-  fontSize: '1rem',
-  outline: 'none',
-  transition: 'all 0.2s ease',
-};
-const selectStyle = {
-  background: 'var(--surface)', 
-  border: '1px solid var(--border-color)', 
-  color: 'var(--text-main)',
-  borderRadius: '0.75rem', 
-  padding: '0.5rem 0.75rem', 
-  fontSize: '0.9rem',
-  cursor: 'pointer',
-  outline: 'none',
-  transition: 'all 0.2s ease',
-};
-const labelStyle = { display: 'block', fontSize: '0.95rem', fontWeight: '500', color: 'var(--text-main)', marginBottom: '0.4rem' };
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function startOfDay(d) {
+  const c = new Date(d);
+  c.setHours(0, 0, 0, 0);
+  return c;
+}
+
+const peso = (n) =>
+  `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const pesoWhole = (n) => `₱${Math.round(Number(n) || 0).toLocaleString('en-PH')}`;
+
+const initials = (name = '') =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase() || '?';
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= breakpoint);
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [breakpoint]);
+  return isMobile;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Small presentational pieces
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// Escape closes only the topmost dialog, so an alert raised from inside a form
+// modal does not dismiss both at once.
+const modalStack = [];
+
+function Modal({ onClose, children, size = '', accent, titleId }) {
+  const tokenRef = useRef({});
+
+  useEffect(() => {
+    const token = tokenRef.current;
+    modalStack.push(token);
+    const onKey = (e) => {
+      if (e.key === 'Escape' && modalStack[modalStack.length - 1] === token) onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+      const i = modalStack.indexOf(token);
+      if (i >= 0) modalStack.splice(i, 1);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="ft-backdrop"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        className={`ft-modal ${size}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        style={accent ? { '--accent': accent } : undefined}
+      >
+        {accent && <div className="ft-modal__accent" />}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon, title, text, action }) {
+  return (
+    <div className="ft-empty">
+      <div className="ft-empty__icon">{icon}</div>
+      <h3 className="ft-empty__title">{title}</h3>
+      <p className="ft-empty__text">{text}</p>
+      {action}
+    </div>
+  );
+}
+
+function SkeletonList({ rows = 5 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }} aria-hidden="true">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+          <div className="ft-skel" style={{ width: '18%' }} />
+          <div className="ft-skel" style={{ width: '28%' }} />
+          <div className="ft-skel" style={{ flex: 1 }} />
+          <div className="ft-skel" style={{ width: '12%' }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Month-end balance trend. Derived by walking the monthly nets backwards from
+// today's balance, so it needs no extra endpoint.
+function Sparkline({ points }) {
+  if (!points || points.length < 2) return null;
+  const w = 260;
+  const h = 62;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const span = max - min || 1;
+  const x = (i) => (i / (points.length - 1)) * w;
+  const y = (v) => h - ((v - min) / span) * (h - 8) - 4;
+  const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p).toFixed(1)}`).join(' ');
+  const area = `${line} L${w},${h} L0,${h} Z`;
+  const rising = points[points.length - 1] >= points[0];
+  const stroke = rising ? 'var(--success)' : 'var(--danger)';
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" role="img" aria-label="Balance trend">
+      <defs>
+        <linearGradient id="ft-spark-grad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={stroke} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={stroke} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#ft-spark-grad)" />
+      <path d={line} fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={x(points.length - 1)} cy={y(points[points.length - 1])} r="3.5" fill={stroke} />
+    </svg>
+  );
+}
+
+function Ring({ value, size = 64 }) {
+  const pct = Math.max(0, Math.min(100, value));
+  const r = (size - 8) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg className="ft-ring" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${Math.round(pct)} percent`}>
+      <circle className="ft-ring__track" cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth="6" />
+      <circle
+        className="ft-ring__fill"
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeDasharray={c}
+        strokeDashoffset={c - (pct / 100) * c}
+      />
+      <text className="ft-ring__label" x="50%" y="50%" dominantBaseline="central" textAnchor="middle">
+        {Math.round(pct)}%
+      </text>
+    </svg>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Page
+   ══════════════════════════════════════════════════════════════════════════ */
 
 export default function FundTrackerDashboard() {
   const { user } = useAuth();
   const { t } = useLanguage();
-  const navigate = useNavigate();
   const isPrivileged = user?.role === 'ADMIN' || user?.role === 'YOUTH_TREASURER';
+  const isMobile = useIsMobile();
 
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const [activeTab, setActiveTab] = useState(() => {
-    return localStorage.getItem('fundTrackerActiveTab') || 'overview';
-  });
-
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('fundTrackerActiveTab') || 'overview');
   useEffect(() => {
     localStorage.setItem('fundTrackerActiveTab', activeTab);
   }, [activeTab]);
 
-  const fmtCompact = (num) => {
-    return new Intl.NumberFormat('en-PH', { 
-      style: 'currency', 
-      currency: 'PHP',
-      notation: 'compact',
-      maximumFractionDigits: 1
-    }).format(num);
-  };
-
-  // ── Overview state ──
-  const [summary, setSummary] = useState({ totalIncome: 0, totalExpense: 0, currentBalance: 0 });
+  // ── Overview ──
+  const [summary, setSummary] = useState({
+    totalIncome: 0, totalExpense: 0, currentBalance: 0,
+    monthIncome: 0, monthExpense: 0, monthNet: 0, prevMonthNet: 0,
+    unallocated: 0, transactionCount: 0,
+  });
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [month, setMonth] = useState('');
   const [year, setYear] = useState('');
   const [filterType, setFilterType] = useState('OTHERS');
+  const [fundFilter, setFundFilter] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [customCategory, setCustomCategory] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null); // { original, draft }
+  const [editingCategory, setEditingCategory] = useState(null);
   const [showManageCategories, setShowManageCategories] = useState(false);
-  const [formData, setFormData] = useState({ amount: '', type: 'INCOME', category: '', description: '', date: new Date().toISOString().slice(0, 10), designatedFund: '' });
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    amount: '', type: 'INCOME', category: '', description: '',
+    date: new Date().toISOString().slice(0, 10), designatedFund: '',
+  });
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
   const pageCache = useRef({});
-  const [showFellowshipForm, setShowFellowshipForm] = useState(false);
-  const [fellowshipData, setFellowshipData] = useState({ eventName: '', fee: 30, date: new Date().toISOString().slice(0, 10), participants: [], customParticipants: '' });
 
-  // ── Designated Funds state ──
+  const [showFellowshipForm, setShowFellowshipForm] = useState(false);
+  const [fellowshipData, setFellowshipData] = useState({
+    eventName: '', fee: 30, date: new Date().toISOString().slice(0, 10),
+    participants: [], customParticipants: '',
+  });
+
+  // ── Designated funds ──
   const [designatedFunds, setDesignatedFunds] = useState([]);
-  const [loadingFunds, setLoadingFunds] = useState(false);
+  const [loadingFunds, setLoadingFunds] = useState(true);
   const [showFundForm, setShowFundForm] = useState(false);
   const [editingFundId, setEditingFundId] = useState(null);
-  const [fundData, setFundData] = useState({ name: '', description: '', targetAmount: '', color: '#3b82f6', autoAssignWeeklyDues: false });
+  const [fundData, setFundData] = useState({
+    name: '', description: '', targetAmount: '', color: '#3b82f6', autoAssignWeeklyDues: false,
+  });
+  const [fundTxModal, setFundTxModal] = useState({ isOpen: false, fund: null, transactions: [], loading: false, page: 1, totalPages: 1 });
 
-  // ── Dues Ledger state ──
+  // ── Weekly dues ──
   const [ledgerYear, setLedgerYear] = useState(new Date().getFullYear());
   const [ledgerMonth, setLedgerMonth] = useState(new Date().getMonth());
-  const [ledgerData, setLedgerData] = useState({ members: [], payments: [] });
-  const [loadingDues, setLoadingDues] = useState(false);
+  const [ledgerData, setLedgerData] = useState({ members: [], payments: [], config: null });
+  const [loadingDues, setLoadingDues] = useState(true);
   const [newMemberName, setNewMemberName] = useState('');
   const [showRoster, setShowRoster] = useState(false);
   const [addError, setAddError] = useState('');
-  const [editingCell, setEditingCell] = useState(null); // { memberId, dateStr, value }
+  const [editingCell, setEditingCell] = useState(null); // { memberId, dateStr, value, original, dirty, row, col }
+  const [memberQuery, setMemberQuery] = useState('');
+  const [memberSort, setMemberSort] = useState('name');
+  const cellRefs = useRef(new Map());
+  const refreshTimer = useRef(null);
+  const committedRef = useRef(null);
 
-  // ── Designated Fund Transactions Modal State ──
-  const [fundTxModal, setFundTxModal] = useState({ isOpen: false, fund: null, transactions: [], loading: false, page: 1, totalPages: 1 });
+  // ── Insights ──
+  const [analytics, setAnalytics] = useState(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [breakdownType, setBreakdownType] = useState('EXPENSE');
 
-  // ── Link User Modal state ──
+  // ── Link user ──
   const [linkModal, setLinkModal] = useState({ isOpen: false, member: null });
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [searchingUsers, setSearchingUsers] = useState(false);
-  const [sendingEmail, setSendingEmail] = useState(null); // memberId being emailed
+  const [sendingEmail, setSendingEmail] = useState(null);
   const userSearchTimer = useRef(null);
 
-  // ── Custom Modal States ──
+  // ── Dialogs ──
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const [alertDialog, setAlertDialog] = useState({ isOpen: false, title: '', message: '' });
+  const showAlert = useCallback((title, message) => setAlertDialog({ isOpen: true, title, message }), []);
+  const showConfirm = useCallback(
+    (title, message, onConfirm) => setConfirmDialog({ isOpen: true, title, message, onConfirm }),
+    []
+  );
+  const closeAlert = useCallback(() => setAlertDialog((d) => ({ ...d, isOpen: false })), []);
+  const closeConfirm = useCallback(() => setConfirmDialog((d) => ({ ...d, isOpen: false })), []);
 
-  const showAlert = (title, message) => setAlertDialog({ isOpen: true, title, message });
-  const showConfirm = (title, message, onConfirm) => setConfirmDialog({ isOpen: true, title, message, onConfirm });
+  /* ── Fetching ─────────────────────────────────────────────────────────── */
 
-  const fmt = (n) => `₱${Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const buildTxParams = useCallback(
+    (page) => {
+      const p = new URLSearchParams();
+      if (month) p.append('month', month);
+      if (year) p.append('year', year);
+      if (filterType !== 'ALL') p.append('filterType', filterType);
+      if (fundFilter) p.append('designatedFund', fundFilter);
+      if (search.trim()) p.append('q', search.trim());
+      p.append('page', page);
+      p.append('limit', 10);
+      return p.toString();
+    },
+    [month, year, filterType, fundFilter, search]
+  );
 
-  // ── Fetchers ──
-  // Builds URLSearchParams for the current month/year filter + a given page
-  const buildTxParams = useCallback((page) => {
-    const p = new URLSearchParams();
-    if (month) p.append('month', month);
-    if (year) p.append('year', year);
-    if (filterType !== 'ALL') p.append('filterType', filterType);
-    p.append('page', page);
-    p.append('limit', 10);
-    return p.toString();
-  }, [month, year, filterType]);
+  const cacheKey = useCallback(
+    (page) => `${month}|${year}|${filterType}|${fundFilter}|${search}|${page}`,
+    [month, year, filterType, fundFilter, search]
+  );
 
-  const fetchOverview = useCallback(async () => {
-    try {
+  const fetchOverview = useCallback(
+    async ({ silent = false } = {}) => {
+      try {
+        if (!silent) setLoadingOverview(true);
+        pageCache.current = {};
+
+        const [sumRes, catRes, r1, r2] = await Promise.all([
+          api.get('/funds/summary'),
+          api.get('/funds/categories'),
+          api.get(`/funds?${buildTxParams(1)}`),
+          api.get(`/funds?${buildTxParams(2)}`).catch(() => null),
+        ]);
+
+        setSummary(sumRes.data);
+        setCategories(catRes.data);
+        setTotalPages(r1.data.totalPages);
+        setTotalResults(r1.data.total);
+        setTransactions(r1.data.transactions);
+        setCurrentPage(1);
+
+        pageCache.current[cacheKey(1)] = r1.data.transactions;
+        if (r2?.data?.transactions?.length) pageCache.current[cacheKey(2)] = r2.data.transactions;
+      } catch (err) {
+        console.error('Failed to load fund overview:', err);
+      } finally {
+        if (!silent) setLoadingOverview(false);
+      }
+    },
+    [buildTxParams, cacheKey]
+  );
+
+  const goToPage = useCallback(
+    async (page) => {
+      if (page < 1 || page > totalPages) return;
+      const key = cacheKey(page);
+      if (pageCache.current[key]) {
+        setTransactions(pageCache.current[key]);
+        setCurrentPage(page);
+        return;
+      }
       setLoadingOverview(true);
-      pageCache.current = {};   // Clear cache on fresh load / filter change
-      setCurrentPage(1);
+      try {
+        const res = await api.get(`/funds?${buildTxParams(page)}`);
+        pageCache.current[key] = res.data.transactions;
+        setTotalPages(res.data.totalPages);
+        setTransactions(res.data.transactions);
+        setCurrentPage(page);
+      } catch (err) {
+        console.error('Failed to change page:', err);
+      } finally {
+        setLoadingOverview(false);
+      }
+    },
+    [buildTxParams, cacheKey, totalPages]
+  );
 
-      const [sumRes, catRes, r1, r2, r3] = await Promise.all([
-        api.get('/funds/summary'),
-        api.get('/funds/categories'),
-        api.get(`/funds?${buildTxParams(1)}`),
-        api.get(`/funds?${buildTxParams(2)}`).catch(() => null),
-        api.get(`/funds?${buildTxParams(3)}`).catch(() => null),
-      ]);
-
-      setSummary(sumRes.data);
-      setCategories(catRes.data);
-
-      const tp = r1.data.totalPages;
-      setTotalPages(tp);
-      setTransactions(r1.data.transactions);
-
-      // Cache all 3 prefetched pages
-      const ck = (p) => `${month}-${year}-${filterType}-${p}`;
-      pageCache.current[ck(1)] = r1.data.transactions;
-      if (r2?.data?.transactions?.length) pageCache.current[ck(2)] = r2.data.transactions;
-      if (r3?.data?.transactions?.length) pageCache.current[ck(3)] = r3.data.transactions;
-    } catch (err) { console.error(err); }
-    finally { setLoadingOverview(false); }
-  }, [month, year, filterType, buildTxParams]);
-
-  const goToPage = useCallback(async (page) => {
-    const key = `${month}-${year}-${filterType}-${page}`;
-    if (pageCache.current[key]) {
-      setTransactions(pageCache.current[key]);
-      setCurrentPage(page);
-      return;
-    }
-    setLoadingOverview(true);
+  const fetchLedger = useCallback(async ({ silent = false } = {}) => {
     try {
-      const res = await api.get(`/funds?${buildTxParams(page)}`);
-      const { transactions: txs, totalPages: tp } = res.data;
-      pageCache.current[key] = txs;
-      setTotalPages(tp);
-      setTransactions(txs);
-      setCurrentPage(page);
-    } catch (err) { console.error(err); }
-    finally { setLoadingOverview(false); }
-  }, [month, year, filterType, buildTxParams]);
-
-  // Windowed pagination: always show first, last, current ± 1, fill gaps with ellipsis
-  const getPaginationPages = () => {
-    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
-    const set = new Set([1, totalPages, currentPage]);
-    if (currentPage > 1) set.add(currentPage - 1);
-    if (currentPage < totalPages) set.add(currentPage + 1);
-    return [...set].sort((a, b) => a - b);
-  };
-
-
-  const fetchLedger = useCallback(async () => {
-    try {
-      setLoadingDues(true);
+      if (!silent) setLoadingDues(true);
       const res = await api.get('/funds/dues/ledger');
       setLedgerData(res.data);
-    } catch (err) { console.error(err); }
-    finally { setLoadingDues(false); }
-  }, [isPrivileged]);
+    } catch (err) {
+      console.error('Failed to load dues ledger:', err);
+    } finally {
+      if (!silent) setLoadingDues(false);
+    }
+  }, []);
 
-  const fetchDesignatedFunds = useCallback(async () => {
+  const fetchDesignatedFunds = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoadingFunds(true);
+      if (!silent) setLoadingFunds(true);
       const res = await api.get('/funds/designated');
       setDesignatedFunds(res.data);
-    } catch (err) { console.error(err); }
-    finally { setLoadingFunds(false); }
+    } catch (err) {
+      console.error('Failed to load designated funds:', err);
+    } finally {
+      if (!silent) setLoadingFunds(false);
+    }
+  }, []);
+
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      setLoadingAnalytics(true);
+      const res = await api.get('/funds/analytics?months=6');
+      setAnalytics(res.data);
+    } catch (err) {
+      console.error('Failed to load analytics:', err);
+    } finally {
+      setLoadingAnalytics(false);
+    }
   }, []);
 
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
   useEffect(() => { fetchLedger(); }, [fetchLedger]);
   useEffect(() => { fetchDesignatedFunds(); }, [fetchDesignatedFunds]);
+  useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
 
-  // Lock body scroll when any modal is open
+  // Debounce the search box so typing does not fire a request per keystroke
   useEffect(() => {
-    const anyOpen = showForm || showFellowshipForm || showFundForm || fundTxModal.isOpen || alertDialog.isOpen || confirmDialog.isOpen;
-    document.body.style.overflow = anyOpen ? 'hidden' : '';
-    return () => { document.body.style.overflow = ''; };
-  }, [showForm, showFellowshipForm, showFundForm, fundTxModal.isOpen, alertDialog.isOpen, confirmDialog.isOpen]);
+    const id = setTimeout(() => setSearch(searchInput), 350);
+    return () => clearTimeout(id);
+  }, [searchInput]);
 
-  // ── Overview handlers ──
+  // One coalesced refresh after a burst of ledger edits, instead of three
+  // full reloads per cell.
+  const scheduleRefresh = useCallback(() => {
+    clearTimeout(refreshTimer.current);
+    refreshTimer.current = setTimeout(() => {
+      fetchOverview({ silent: true });
+      fetchDesignatedFunds({ silent: true });
+      fetchAnalytics();
+    }, 1200);
+  }, [fetchOverview, fetchDesignatedFunds, fetchAnalytics]);
+
+  useEffect(() => () => clearTimeout(refreshTimer.current), []);
+
+  /* ── Derived values ───────────────────────────────────────────────────── */
+
+  const duesConfig = ledgerData.config;
+  const weeklyAmount = duesConfig?.weeklyAmount ?? 10;
+  const duesStart = useMemo(
+    () => (duesConfig?.startDate ? new Date(duesConfig.startDate) : new Date(2026, 4, 1)),
+    [duesConfig]
+  );
+  // Expected so far comes from the server, so the grid, the status pills and
+  // the emailed statements can never drift apart.
+  const expectedToDate = duesConfig?.expectedToDate ?? 0;
+
+  const sundays = useMemo(() => getSundays(ledgerYear, ledgerMonth), [ledgerYear, ledgerMonth]);
+  const today = useMemo(() => startOfDay(new Date()), []);
+
+  const paymentIndex = useMemo(() => {
+    const map = new Map();
+    for (const p of ledgerData.payments) {
+      map.set(`${p.member}|${getLocalYMD(new Date(p.collectionDate))}`, p.amount);
+    }
+    return map;
+  }, [ledgerData.payments]);
+
+  const getPaymentAmount = useCallback(
+    (memberId, dateStr) => paymentIndex.get(`${memberId}|${dateStr}`) || 0,
+    [paymentIndex]
+  );
+
+  const memberTotals = useMemo(() => {
+    const map = new Map();
+    for (const p of ledgerData.payments) {
+      map.set(p.member, (map.get(p.member) || 0) + p.amount);
+    }
+    return map;
+  }, [ledgerData.payments]);
+
+  const getMemberTotal = useCallback((id) => memberTotals.get(id) || 0, [memberTotals]);
+
+  // How many dues Sundays a member's total covers, counted from the start date
+  const getSundayIndexSinceStart = useCallback(
+    (targetDate) => {
+      const start = startOfDay(duesStart);
+      start.setDate(start.getDate() + ((7 - start.getDay()) % 7));
+      const diffDays = Math.round((startOfDay(targetDate).getTime() - start.getTime()) / 86400000);
+      return Math.floor(diffDays / 7) + 1;
+    },
+    [duesStart]
+  );
+
+  const visibleMembers = useMemo(() => {
+    const q = memberQuery.trim().toLowerCase();
+    const list = q
+      ? ledgerData.members.filter((m) => m.name.toLowerCase().includes(q))
+      : [...ledgerData.members];
+    if (memberSort === 'balance') {
+      list.sort((a, b) => (getMemberTotal(a._id) - expectedToDate) - (getMemberTotal(b._id) - expectedToDate));
+    } else if (memberSort === 'paid') {
+      list.sort((a, b) => getMemberTotal(b._id) - getMemberTotal(a._id));
+    } else {
+      list.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return list;
+  }, [ledgerData.members, memberQuery, memberSort, getMemberTotal, expectedToDate]);
+
+  // Collection health for the month currently on screen. Only Sundays that have
+  // actually happened count towards "expected".
+  const monthStats = useMemo(() => {
+    // Only Sundays that have happened *and* fall on or after the dues start
+    // date are owed — otherwise browsing back to March shows a false 0%.
+    const elapsed = sundays.filter((s) => startOfDay(s) <= today && getSundayIndexSinceStart(s) > 0);
+    const memberCount = ledgerData.members.length;
+    let collected = 0;
+    for (const m of ledgerData.members) {
+      for (const s of sundays) collected += getPaymentAmount(m._id, getLocalYMD(s));
+    }
+    const expected = elapsed.length * memberCount * weeklyAmount;
+    return {
+      collected,
+      expected,
+      rate: expected > 0 ? (collected / expected) * 100 : 0,
+      elapsedSundays: elapsed.length,
+      totalSundays: sundays.length,
+    };
+  }, [sundays, ledgerData.members, getPaymentAmount, today, weeklyAmount, getSundayIndexSinceStart]);
+
+  const duesStanding = useMemo(() => {
+    let updated = 0;
+    let ahead = 0;
+    let behind = 0;
+    let arrears = 0;
+    for (const m of ledgerData.members) {
+      const bal = getMemberTotal(m._id) - expectedToDate;
+      if (bal > 0) ahead += 1;
+      else if (bal === 0) updated += 1;
+      else {
+        behind += 1;
+        arrears += Math.abs(bal);
+      }
+    }
+    return { updated, ahead, behind, arrears };
+  }, [ledgerData.members, getMemberTotal, expectedToDate]);
+
+  const columnTotals = useMemo(
+    () =>
+      sundays.map((s) => {
+        const dateStr = getLocalYMD(s);
+        return ledgerData.members.reduce((sum, m) => sum + getPaymentAmount(m._id, dateStr), 0);
+      }),
+    [sundays, ledgerData.members, getPaymentAmount]
+  );
+
+  // Month-end balances, walked backwards from today's balance
+  const balanceTrend = useMemo(() => {
+    if (!analytics?.series?.length) return null;
+    const points = new Array(analytics.series.length);
+    let running = summary.currentBalance;
+    for (let i = analytics.series.length - 1; i >= 0; i--) {
+      points[i] = running;
+      running -= analytics.series[i].net;
+    }
+    return points;
+  }, [analytics, summary.currentBalance]);
+
+  const flowSplit = useMemo(() => {
+    const total = summary.totalIncome + summary.totalExpense;
+    if (total <= 0) return { inPct: 0, outPct: 0 };
+    return {
+      inPct: (summary.totalIncome / total) * 100,
+      outPct: (summary.totalExpense / total) * 100,
+    };
+  }, [summary.totalIncome, summary.totalExpense]);
+
+  const allocation = useMemo(() => {
+    const funds = designatedFunds
+      .map((f) => ({ name: f.name, color: f.color || '#3b82f6', value: Math.max(0, f.currentBalance) }))
+      .filter((f) => f.value > 0);
+    const unallocated = Math.max(0, summary.unallocated || 0);
+    const total = funds.reduce((s, f) => s + f.value, 0) + unallocated;
+    return { funds, unallocated, total };
+  }, [designatedFunds, summary.unallocated]);
+
+  const breakdown = useMemo(() => {
+    if (!analytics?.categories) return [];
+    const rows = analytics.categories.filter((c) => c.type === breakdownType).slice(0, 8);
+    const max = rows.reduce((m, r) => Math.max(m, r.total), 0) || 1;
+    return rows.map((r) => ({ ...r, pct: (r.total / max) * 100 }));
+  }, [analytics, breakdownType]);
+
+  const topContributors = useMemo(() => {
+    return ledgerData.members
+      .map((m) => ({ name: m.name, total: getMemberTotal(m._id) }))
+      .filter((m) => m.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5);
+  }, [ledgerData.members, getMemberTotal]);
+
+  const chartMax = useMemo(() => {
+    if (!analytics?.series?.length) return 1;
+    return Math.max(1, ...analytics.series.map((s) => Math.max(s.income, s.expense)));
+  }, [analytics]);
+
+  const groupedTransactions = useMemo(() => {
+    const groups = [];
+    for (const tx of transactions) {
+      const label = new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.items.push(tx);
+      else groups.push({ label, items: [tx] });
+    }
+    return groups;
+  }, [transactions]);
+
+  const hasFilters = Boolean(month || year || search.trim() || fundFilter || filterType !== 'OTHERS');
+
+  /* ── Transaction handlers ─────────────────────────────────────────────── */
+
   const handleInput = (e) => {
     const { name, value } = e.target;
     if (name === 'category') {
       if (value === '__CUSTOM__') {
         setCustomCategory(true);
-        setFormData(f => ({ ...f, category: '' }));
+        setFormData((f) => ({ ...f, category: '' }));
       } else {
         setCustomCategory(false);
-        setFormData(f => ({ ...f, category: value }));
+        setFormData((f) => ({ ...f, category: value }));
       }
     } else {
-      setFormData(f => ({ ...f, [name]: value }));
+      setFormData((f) => ({ ...f, [name]: value }));
     }
   };
 
@@ -273,11 +655,21 @@ export default function FundTrackerDashboard() {
     setEditingCategory(null);
     if (tx) {
       setEditingId(tx._id);
-      setFormData({ amount: tx.amount, type: tx.type, category: tx.category, description: tx.description || '', date: new Date(tx.date).toISOString().slice(0, 10), designatedFund: tx.designatedFund?._id || tx.designatedFund || '' });
+      setFormData({
+        amount: tx.amount,
+        type: tx.type,
+        category: tx.category,
+        description: tx.description || '',
+        date: getLocalYMD(new Date(tx.date)),
+        designatedFund: tx.designatedFund?._id || tx.designatedFund || '',
+      });
       setCustomCategory(!categories.includes(tx.category));
     } else {
       setEditingId(null);
-      setFormData({ amount: '', type: 'INCOME', category: categories[0] || '', description: '', date: new Date().toISOString().slice(0, 10), designatedFund: '' });
+      setFormData({
+        amount: '', type: 'INCOME', category: categories[0] || '', description: '',
+        date: new Date().toISOString().slice(0, 10), designatedFund: '',
+      });
       setCustomCategory(categories.length === 0);
     }
     setShowForm(true);
@@ -285,13 +677,19 @@ export default function FundTrackerDashboard() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
+    setSaving(true);
     try {
-      if (editingId) { await api.put(`/funds/${editingId}`, formData); }
-      else { await api.post('/funds', formData); }
-      setShowForm(false); 
-      fetchOverview();
-      fetchDesignatedFunds();
-    } catch (err) { showAlert('Error', 'Failed to save transaction.'); }
+      if (editingId) await api.put(`/funds/${editingId}`, formData);
+      else await api.post('/funds', formData);
+      setShowForm(false);
+      await Promise.all([fetchOverview(), fetchDesignatedFunds({ silent: true })]);
+      fetchAnalytics();
+    } catch (err) {
+      showAlert('Could not save', err.response?.data?.message || 'Failed to save the transaction. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleRenameCategory = async () => {
@@ -305,299 +703,103 @@ export default function FundTrackerDashboard() {
         oldName: editingCategory.original,
         newName: editingCategory.draft.trim(),
       });
-      // If the form currently uses the renamed category, update it
       if (formData.category === editingCategory.original) {
-        setFormData(f => ({ ...f, category: editingCategory.draft.trim() }));
+        setFormData((f) => ({ ...f, category: editingCategory.draft.trim() }));
       }
       setEditingCategory(null);
       await fetchOverview();
     } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to rename category.');
+      showAlert('Could not rename', err.response?.data?.message || 'Failed to rename the category.');
     }
   };
 
-
-  const handleDelete = (id) => {
+  const handleDelete = (tx) => {
     showConfirm(
-      'Delete Transaction',
-      'Are you sure you want to delete this transaction?',
-      async () => {
-        try { 
-          await api.delete(`/funds/${id}`); 
-          fetchOverview(); 
-          fetchDesignatedFunds(); // Update budget balances
-        }
-        catch (err) { console.error(err); }
-      }
-    );
-  };
-
-  // ── Designated Funds handlers ──
-  const openFundForm = (fund = null) => {
-    if (fund) {
-      setEditingFundId(fund._id);
-      setFundData({ name: fund.name, description: fund.description || '', targetAmount: fund.targetAmount || '', color: fund.color || '#3b82f6', autoAssignWeeklyDues: fund.autoAssignWeeklyDues || false });
-    } else {
-      setEditingFundId(null);
-      setFundData({ name: '', description: '', targetAmount: '', color: '#3b82f6', autoAssignWeeklyDues: false });
-    }
-    setShowFundForm(true);
-  };
-
-  const handleFundSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      if (editingFundId) { await api.put(`/funds/designated/${editingFundId}`, fundData); }
-      else { await api.post('/funds/designated', fundData); }
-      setShowFundForm(false); 
-      fetchDesignatedFunds();
-    } catch (err) { showAlert('Error', err.response?.data?.message || 'Failed to save designated fund.'); }
-  };
-
-  const handleDeleteFund = (id) => {
-    showConfirm(
-      'Delete Fund',
-      'Are you sure you want to delete this designated fund? This will not delete any transactions.',
-      async () => {
-        try { await api.delete(`/funds/designated/${id}`); fetchDesignatedFunds(); }
-        catch (err) { console.error(err); }
-      }
-    );
-  };
-
-  const openFundTxModal = async (fund) => {
-    setFundTxModal({ isOpen: true, fund, transactions: [], loading: true, page: 1, totalPages: 1 });
-    try {
-      const res = await api.get(`/funds?designatedFund=${fund._id}&page=1&limit=10`);
-      setFundTxModal(prev => ({ ...prev, transactions: res.data.transactions, totalPages: res.data.totalPages, loading: false }));
-    } catch (err) { console.error(err); setFundTxModal(prev => ({ ...prev, loading: false })); }
-  };
-
-  const loadFundTxPage = async (page) => {
-    if (!fundTxModal.fund) return;
-    setFundTxModal(prev => ({ ...prev, loading: true }));
-    try {
-      const res = await api.get(`/funds?designatedFund=${fundTxModal.fund._id}&page=${page}&limit=10`);
-      setFundTxModal(prev => ({ ...prev, transactions: res.data.transactions, totalPages: res.data.totalPages, page, loading: false }));
-    } catch (err) { console.error(err); setFundTxModal(prev => ({ ...prev, loading: false })); }
-  };
-
-  // ── Dues Ledger handlers ──
-  const handleCellClick = (memberId, dateStr, currentAmount) => {
-    setEditingCell({ memberId, dateStr, value: currentAmount || '' });
-  };
-
-  const handleCellBlur = async () => {
-    if (!editingCell) return;
-    const { memberId, dateStr, value } = editingCell;
-    setEditingCell(null); // Optimistic UI close
-
-    try {
-      await api.post('/funds/dues/ledger', {
-        memberId,
-        collectionDate: dateStr,
-        amount: value
-      });
-      fetchLedger();
-      fetchOverview(); // Update main balance
-      fetchDesignatedFunds(); // Update budget balances
-    } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to update payment');
-      fetchLedger(); // Revert on failure
-    }
-  };
-
-  const handleCellKeyDown = (e) => {
-    if (e.key === 'Enter') e.target.blur();
-    if (e.key === 'Escape') setEditingCell(null);
-  };
-
-  const handleAddMember = async (e) => {
-    e.preventDefault();
-    if (!newMemberName.trim()) return;
-    setAddError('');
-    try {
-      await api.post('/funds/dues/members', { name: newMemberName.trim() });
-      setNewMemberName('');
-      await fetchLedger();
-    } catch (err) {
-      console.error('Error adding member:', err);
-      setAddError(err.response?.data?.message || 'Failed to add member. Please try again.');
-    }
-  };
-
-  const handleRemoveMember = (id) => {
-    showConfirm(
-      'Remove Member',
-      'Are you sure you want to remove this member from the roster?',
-      async () => {
-        try { await api.delete(`/funds/dues/members/${id}`); fetchLedger(); }
-        catch (err) { console.error(err); }
-      }
-    );
-  };
-
-  // ── Link User handlers ──
-  const openLinkModal = (member) => {
-    setLinkModal({ isOpen: true, member });
-    setUserSearchQuery('');
-    setUserSearchResults([]);
-  };
-
-  const closeLinkModal = () => {
-    setLinkModal({ isOpen: false, member: null });
-    setUserSearchQuery('');
-    setUserSearchResults([]);
-  };
-
-  useEffect(() => {
-    if (!linkModal.isOpen) return;
-    clearTimeout(userSearchTimer.current);
-    if (!userSearchQuery.trim()) { setUserSearchResults([]); return; }
-    userSearchTimer.current = setTimeout(async () => {
-      try {
-        setSearchingUsers(true);
-        const res = await api.get(`/users/search?q=${encodeURIComponent(userSearchQuery)}`);
-        setUserSearchResults(res.data);
-      } catch (err) { console.error(err); }
-      finally { setSearchingUsers(false); }
-    }, 350);
-    return () => clearTimeout(userSearchTimer.current);
-  }, [userSearchQuery, linkModal.isOpen]);
-
-  const handleConfirmLink = async (userId) => {
-    try {
-      await api.put(`/funds/dues/members/${linkModal.member._id}/link-user`, { userId });
-      await fetchLedger();
-      closeLinkModal();
-      showAlert('Linked!', 'User successfully connected to this roster entry.');
-    } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to link user.');
-    }
-  };
-
-  const handleUnlinkUser = (member) => {
-    showConfirm(
-      'Unlink User',
-      `Disconnect ${member.linkedUser?.displayName} from "${member.name}"?`,
+      'Delete transaction',
+      `Delete "${tx.category}" for ${peso(tx.amount)}? Any weekly dues entry linked to it is cleared too.`,
       async () => {
         try {
-          await api.put(`/funds/dues/members/${member._id}/link-user`, { userId: null });
-          await fetchLedger();
-        } catch (err) { console.error(err); }
+          await api.delete(`/funds/${tx._id}`);
+          await Promise.all([fetchOverview(), fetchLedger({ silent: true }), fetchDesignatedFunds({ silent: true })]);
+          fetchAnalytics();
+        } catch (err) {
+          showAlert('Could not delete', err.response?.data?.message || 'Failed to delete the transaction.');
+        }
       }
     );
   };
 
-  const handleSendDuesEmail = async (member) => {
-    if (!member.linkedUser) return;
-    setSendingEmail(member._id);
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
     try {
-      const res = await api.post(`/funds/dues/members/${member._id}/send-dues-email`);
-      showAlert('Email Sent! 📧', res.data.message);
+      // Pulled in on demand so the sheet writer only loads when someone
+      // actually exports.
+      const [{ default: XLSX }, res] = await Promise.all([
+        import('xlsx'),
+        api.get(`/funds/export?${buildTxParams(1)}`),
+      ]);
+      const rows = res.data.transactions.map((tx) => ({
+        Date: new Date(tx.date).toLocaleDateString('en-PH'),
+        Type: tx.type,
+        Category: tx.category,
+        Description: tx.description || '',
+        Amount: tx.amount,
+        Signed: tx.type === 'INCOME' ? tx.amount : -tx.amount,
+        Fund: tx.designatedFund?.name || 'Unassigned',
+        'Recorded by': tx.createdBy?.displayName || '',
+      }));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Transactions');
+      XLSX.utils.book_append_sheet(
+        wb,
+        XLSX.utils.json_to_sheet([
+          { Metric: 'Total income', Amount: summary.totalIncome },
+          { Metric: 'Total expense', Amount: summary.totalExpense },
+          { Metric: 'Current balance', Amount: summary.currentBalance },
+          { Metric: 'Unallocated', Amount: summary.unallocated },
+          { Metric: 'Rows exported', Amount: rows.length },
+          { Metric: 'Generated', Amount: new Date().toLocaleString('en-PH') },
+        ]),
+        'Summary'
+      );
+      XLSX.writeFile(wb, `youth-fund-${getLocalYMD(new Date())}.xlsx`);
+
+      if (res.data.capped) {
+        showAlert('Export truncated', 'Only the 5,000 most recent matching transactions were exported. Narrow the filters for a complete slice.');
+      }
     } catch (err) {
-      showAlert('Error', err.response?.data?.message || 'Failed to send email.');
+      console.error('Export failed:', err);
+      showAlert('Export failed', 'The spreadsheet could not be generated. Please try again.');
     } finally {
-      setSendingEmail(null);
+      setExporting(false);
     }
   };
 
-
-  const sundays = getSundays(ledgerYear, ledgerMonth);
-  const totalCount = ledgerData.members.length;
-
-  const DUES_START_DATE = new Date(2026, 4, 1); // May 1, 2026
-
-  const getSundayIndexSinceStart = (targetDate) => {
-    const start = new Date(DUES_START_DATE);
-    start.setDate(start.getDate() + ((7 - start.getDay()) % 7)); // First Sunday
-    const diffTime = targetDate.getTime() - start.getTime();
-    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
-    return Math.floor(diffDays / 7) + 1;
-  };
-
-  const getExpectedDues = () => {
-    let expected = 0;
-    let current = new Date(DUES_START_DATE);
-    const end = new Date(ledgerYear, ledgerMonth + 1, 0); // last day of viewed month
-    // Cap the end date to today if we are viewing a future month, or just calculate up to end of month
-    // It's better to calculate up to end of viewed month so Treasurer knows what's due
-    while (current <= end) {
-      if (current.getDay() === 0) expected += 10;
-      current.setDate(current.getDate() + 1);
-    }
-    return expected;
-  };
-
-  const expectedDues = getExpectedDues();
-
-  // Helper to get payment amount for a specific cell
-  const getPaymentAmount = (memberId, dateStr) => {
-    const payment = ledgerData.payments.find(p => {
-      // Parse backend date and convert back to local YYYY-MM-DD
-      const pDate = new Date(p.collectionDate);
-      return p.member === memberId && getLocalYMD(pDate) === dateStr;
-    });
-    return payment ? payment.amount : 0;
-  };
-
-  // Helper to get all-time total for a member
-  const handleFellowshipSubmit = async (e) => {
-    e.preventDefault();
-    
-    const customList = fellowshipData.customParticipants
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    const totalParticipantsCount = fellowshipData.participants.length + customList.length;
-
-    if (!fellowshipData.eventName.trim() || totalParticipantsCount === 0 || fellowshipData.fee <= 0) {
-      showAlert('Error', 'Please fill all fields and select/add at least one participant.');
-      return;
-    }
-
-    const totalAmount = fellowshipData.fee * totalParticipantsCount;
-    
-    const rosterNames = fellowshipData.participants.map(id => {
-      const m = ledgerData.members.find(mem => mem._id === id);
-      return m ? `- ${m.name}` : '';
-    }).filter(Boolean);
-
-    const customNames = customList.map(name => `- ${name}`);
-    
-    const allNames = [...rosterNames, ...customNames].join('\n');
-    
-    const desc = `Registration fee (₱${fellowshipData.fee} each for ${totalParticipantsCount} participants)\n${allNames}`;
-
+  const handleExportLedger = async () => {
+    if (exporting) return;
+    setExporting(true);
     try {
-      const payload = {
-        type: 'EXPENSE',
-        amount: totalAmount,
-        category: fellowshipData.eventName.trim(),
-        description: desc,
-        date: fellowshipData.date
-      };
-      await api.post('/funds', payload);
-      setShowFellowshipForm(false);
-      fetchLedger();
-      fetchOverview();
-      fetchDesignatedFunds();
-      setFellowshipData({ eventName: '', fee: 30, date: new Date().toISOString().slice(0, 10), participants: [], customParticipants: '' });
-      showAlert('Success', 'Youth Fellowship expense added!');
-    } catch (error) {
-      console.error(error);
-      showAlert('Error', 'Failed to add Youth Fellowship expense.');
+      const { default: XLSX } = await import('xlsx');
+      const rows = visibleMembers.map((m) => {
+        const row = { Member: m.name };
+        for (const s of sundays) row[`${MONTHS_SHORT[ledgerMonth]} ${s.getDate()}`] = getPaymentAmount(m._id, getLocalYMD(s)) || '';
+        const paid = getMemberTotal(m._id);
+        row['Total paid'] = paid;
+        row['Expected to date'] = expectedToDate;
+        row.Balance = paid - expectedToDate;
+        return row;
+      });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Weekly dues');
+      XLSX.writeFile(wb, `weekly-dues-${ledgerYear}-${String(ledgerMonth + 1).padStart(2, '0')}.xlsx`);
+    } catch (err) {
+      console.error('Ledger export failed:', err);
+      showAlert('Export failed', 'The dues sheet could not be generated. Please try again.');
+    } finally {
+      setExporting(false);
     }
-  };
-
-  const toggleParticipant = (memberId) => {
-    setFellowshipData(prev => ({
-      ...prev,
-      participants: prev.participants.includes(memberId) 
-        ? prev.participants.filter(id => id !== memberId)
-        : [...prev.participants, memberId]
-    }));
   };
 
   const handleCopyAnnouncement = (tx) => {
@@ -611,9 +813,8 @@ export default function FundTrackerDashboard() {
     const descLines = (tx.description || 'Miscellaneous').split('\n');
     const firstLine = descLines[0];
     const restLines = descLines.slice(1).join('\n');
-    
-    const formattedDesc = restLines 
-      ? `1. ${firstLine}: ₱${tx.amount}\n${restLines}` 
+    const formattedDesc = restLines
+      ? `1. ${firstLine}: ₱${tx.amount}\n${restLines}`
       : `1. ${firstLine}: ₱${tx.amount}`;
 
     const text = `𝗘𝗩𝗘𝗡𝗧: ${tx.category}
@@ -629,334 +830,642 @@ ${formattedDesc}
 - Total ${typeLabelLower}: ₱${tx.amount}
 - Updated Balance: ₱${currentBal}`;
 
-    const copyToClipboardFallback = (textToCopy) => {
-      if (navigator.clipboard && window.isSecureContext) {
-        return navigator.clipboard.writeText(textToCopy);
-      } else {
-        return new Promise((resolve, reject) => {
-          const textArea = document.createElement('textarea');
-          textArea.value = textToCopy;
-          textArea.style.position = 'fixed';
-          textArea.style.left = '-999999px';
-          textArea.style.top = '-999999px';
-          document.body.appendChild(textArea);
-          textArea.focus();
-          textArea.select();
-          try {
-            document.execCommand('copy');
-            textArea.remove();
-            resolve();
-          } catch (error) {
-            textArea.remove();
-            reject(error);
-          }
-        });
-      }
+    const copy = (value) => {
+      if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(value);
+      return new Promise((resolve, reject) => {
+        const area = document.createElement('textarea');
+        area.value = value;
+        area.style.position = 'fixed';
+        area.style.left = '-999999px';
+        document.body.appendChild(area);
+        area.focus();
+        area.select();
+        try {
+          document.execCommand('copy');
+          area.remove();
+          resolve();
+        } catch (error) {
+          area.remove();
+          reject(error);
+        }
+      });
     };
 
-    copyToClipboardFallback(text).then(() => {
-      showAlert('Success', 'Announcement copied to clipboard!');
-    }).catch(err => {
-      console.error('Failed to copy text: ', err);
-      showAlert('Error', 'Failed to copy announcement. Your browser may not support this feature.');
-    });
+    copy(text)
+      .then(() => showAlert('Copied', 'The announcement is on your clipboard, ready to paste into the group chat.'))
+      .catch(() => showAlert('Could not copy', 'Your browser blocked clipboard access. Try again from a secure connection.'));
   };
 
-  const getMemberTotal = (memberId) => {
-    return ledgerData.payments
-      .filter(p => p.member === memberId)
-      .reduce((sum, p) => sum + p.amount, 0);
+  /* ── Fellowship expense ───────────────────────────────────────────────── */
+
+  const fellowshipGuests = useMemo(
+    () => fellowshipData.customParticipants.split(',').map((s) => s.trim()).filter(Boolean),
+    [fellowshipData.customParticipants]
+  );
+  const fellowshipCount = fellowshipData.participants.length + fellowshipGuests.length;
+  const fellowshipTotal = (Number(fellowshipData.fee) || 0) * fellowshipCount;
+
+  const toggleParticipant = (memberId) => {
+    setFellowshipData((prev) => ({
+      ...prev,
+      participants: prev.participants.includes(memberId)
+        ? prev.participants.filter((id) => id !== memberId)
+        : [...prev.participants, memberId],
+    }));
   };
+
+  const handleFellowshipSubmit = async (e) => {
+    e.preventDefault();
+    if (!fellowshipData.eventName.trim() || fellowshipCount === 0 || fellowshipData.fee <= 0) {
+      showAlert('Missing details', 'Name the event, set a fee above zero, and pick at least one participant.');
+      return;
+    }
+    const rosterNames = fellowshipData.participants
+      .map((id) => ledgerData.members.find((m) => m._id === id))
+      .filter(Boolean)
+      .map((m) => `- ${m.name}`);
+    const guestNames = fellowshipGuests.map((n) => `- ${n}`);
+    const description = `Registration fee (₱${fellowshipData.fee} each for ${fellowshipCount} participants)\n${[...rosterNames, ...guestNames].join('\n')}`;
+
+    try {
+      await api.post('/funds', {
+        type: 'EXPENSE',
+        amount: fellowshipTotal,
+        category: fellowshipData.eventName.trim(),
+        description,
+        date: fellowshipData.date,
+      });
+      setShowFellowshipForm(false);
+      setFellowshipData({ eventName: '', fee: 30, date: new Date().toISOString().slice(0, 10), participants: [], customParticipants: '' });
+      await Promise.all([fetchOverview(), fetchDesignatedFunds({ silent: true })]);
+      fetchAnalytics();
+      showAlert('Expense recorded', 'The fellowship expense was added to the ledger.');
+    } catch (err) {
+      showAlert('Could not save', err.response?.data?.message || 'Failed to add the fellowship expense.');
+    }
+  };
+
+  /* ── Designated fund handlers ─────────────────────────────────────────── */
+
+  const openFundForm = (fund = null) => {
+    if (fund) {
+      setEditingFundId(fund._id);
+      setFundData({
+        name: fund.name,
+        description: fund.description || '',
+        targetAmount: fund.targetAmount || '',
+        color: fund.color || '#3b82f6',
+        autoAssignWeeklyDues: fund.autoAssignWeeklyDues || false,
+      });
+    } else {
+      setEditingFundId(null);
+      setFundData({ name: '', description: '', targetAmount: '', color: '#3b82f6', autoAssignWeeklyDues: false });
+    }
+    setShowFundForm(true);
+  };
+
+  const handleFundSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingFundId) await api.put(`/funds/designated/${editingFundId}`, fundData);
+      else await api.post('/funds/designated', fundData);
+      setShowFundForm(false);
+      fetchDesignatedFunds();
+    } catch (err) {
+      showAlert('Could not save', err.response?.data?.message || 'Failed to save the designated fund.');
+    }
+  };
+
+  const handleDeleteFund = (fund) => {
+    showConfirm(
+      'Delete fund',
+      `Delete "${fund.name}"? Transactions assigned to it are kept and simply become unassigned.`,
+      async () => {
+        try {
+          await api.delete(`/funds/designated/${fund._id}`);
+          setShowFundForm(false);
+          await Promise.all([fetchDesignatedFunds(), fetchOverview({ silent: true })]);
+        } catch (err) {
+          showAlert('Could not delete', err.response?.data?.message || 'Failed to delete the fund.');
+        }
+      }
+    );
+  };
+
+  const openFundTxModal = async (fund) => {
+    setFundTxModal({ isOpen: true, fund, transactions: [], loading: true, page: 1, totalPages: 1 });
+    try {
+      const res = await api.get(`/funds?designatedFund=${fund._id}&page=1&limit=10`);
+      setFundTxModal((prev) => ({ ...prev, transactions: res.data.transactions, totalPages: res.data.totalPages, loading: false }));
+    } catch (err) {
+      console.error('Failed to load fund transactions:', err);
+      setFundTxModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  const loadFundTxPage = async (page) => {
+    if (!fundTxModal.fund) return;
+    setFundTxModal((prev) => ({ ...prev, loading: true }));
+    try {
+      const res = await api.get(`/funds?designatedFund=${fundTxModal.fund._id}&page=${page}&limit=10`);
+      setFundTxModal((prev) => ({ ...prev, transactions: res.data.transactions, totalPages: res.data.totalPages, page, loading: false }));
+    } catch (err) {
+      console.error('Failed to page fund transactions:', err);
+      setFundTxModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  /* ── Ledger cell editing ──────────────────────────────────────────────── */
+
+  const focusCell = useCallback((row, col) => {
+    const el = cellRefs.current.get(`${row}:${col}`);
+    if (el) el.focus();
+  }, []);
+
+  const openCell = useCallback(
+    (memberId, dateStr, amount, row, col) => {
+      if (!isPrivileged) return;
+      committedRef.current = null;
+      setEditingCell({
+        memberId,
+        dateStr,
+        // An empty cell opens pre-filled with the standard weekly amount, so
+        // the common case is click-Enter. It only saves if you actually
+        // confirm — see commitCell's `dirty` check.
+        value: amount ? String(amount) : String(weeklyAmount),
+        original: amount,
+        dirty: false,
+        row,
+        col,
+      });
+    },
+    [isPrivileged, weeklyAmount]
+  );
+
+  // Patch the ledger locally instead of refetching everything on each keystroke
+  const patchPayment = useCallback((memberId, dateStr, amount) => {
+    setLedgerData((prev) => {
+      const payments = prev.payments.filter(
+        (p) => !(p.member === memberId && getLocalYMD(new Date(p.collectionDate)) === dateStr)
+      );
+      if (amount > 0) {
+        payments.push({ _id: `local-${memberId}-${dateStr}`, member: memberId, collectionDate: dateStr, amount });
+      }
+      return { ...prev, payments };
+    });
+  }, []);
+
+  const commitCell = useCallback(
+    async (cell, { moveDown = false } = {}) => {
+      if (!cell) return;
+      const { memberId, dateStr, value, original, dirty, row, col } = cell;
+
+      // Enter commits and unmounts the input, which can also fire onBlur.
+      // Without this guard the same edit would post — and be added to the
+      // running totals — twice.
+      const token = `${memberId}|${dateStr}`;
+      if (committedRef.current === token) return;
+      committedRef.current = token;
+
+      setEditingCell(null);
+
+      const raw = String(value).trim();
+      const amount = raw === '' ? 0 : Number(raw);
+
+      if (moveDown) {
+        // Queue the focus move so it lands after the input unmounts
+        setTimeout(() => focusCell(row + 1, col), 0);
+      }
+
+      if (!dirty || Number.isNaN(amount) || amount < 0 || amount === original) return;
+
+      patchPayment(memberId, dateStr, amount);
+      const delta = amount - original;
+      setSummary((s) => ({
+        ...s,
+        totalIncome: s.totalIncome + delta,
+        currentBalance: s.currentBalance + delta,
+        monthIncome: s.monthIncome + delta,
+        monthNet: s.monthNet + delta,
+      }));
+
+      try {
+        await api.post('/funds/dues/ledger', { memberId, collectionDate: dateStr, amount });
+        scheduleRefresh();
+      } catch (err) {
+        showAlert('Could not save', err.response?.data?.message || 'The payment did not save. Refreshing the ledger.');
+        fetchLedger({ silent: true });
+        fetchOverview({ silent: true });
+      }
+    },
+    [patchPayment, scheduleRefresh, showAlert, fetchLedger, fetchOverview, focusCell]
+  );
+
+  const handleCellKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitCell(editingCell, { moveDown: true });
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      // Claim the token so the blur that follows unmounting cannot save the
+      // edit the user just abandoned.
+      committedRef.current = `${editingCell.memberId}|${editingCell.dateStr}`;
+      setEditingCell(null);
+      setTimeout(() => focusCell(editingCell.row, editingCell.col), 0);
+    }
+  };
+
+  // Arrow keys walk the grid the way a spreadsheet does
+  const handleCellNav = (e, row, col) => {
+    const moves = { ArrowUp: [row - 1, col], ArrowDown: [row + 1, col], ArrowLeft: [row, col - 1], ArrowRight: [row, col + 1] };
+    if (moves[e.key]) {
+      e.preventDefault();
+      focusCell(...moves[e.key]);
+    }
+  };
+
+  /* ── Roster handlers ──────────────────────────────────────────────────── */
+
+  const handleAddMember = async (e) => {
+    e.preventDefault();
+    if (!newMemberName.trim()) return;
+    setAddError('');
+    try {
+      await api.post('/funds/dues/members', { name: newMemberName.trim() });
+      setNewMemberName('');
+      await fetchLedger({ silent: true });
+    } catch (err) {
+      setAddError(err.response?.data?.message || 'Failed to add the member. Please try again.');
+    }
+  };
+
+  const handleRemoveMember = (member) => {
+    showConfirm(
+      'Remove from roster',
+      `Remove ${member.name} from the dues roster? Their recorded payments stay in the ledger.`,
+      async () => {
+        try {
+          await api.delete(`/funds/dues/members/${member._id}`);
+          fetchLedger({ silent: true });
+        } catch (err) {
+          showAlert('Could not remove', err.response?.data?.message || 'Failed to remove the member.');
+        }
+      }
+    );
+  };
+
+  const openLinkModal = (member) => {
+    setLinkModal({ isOpen: true, member });
+    setUserSearchQuery('');
+    setUserSearchResults([]);
+  };
+
+  const closeLinkModal = useCallback(() => {
+    setLinkModal({ isOpen: false, member: null });
+    setUserSearchQuery('');
+    setUserSearchResults([]);
+  }, []);
+
+  useEffect(() => {
+    if (!linkModal.isOpen) return undefined;
+    clearTimeout(userSearchTimer.current);
+    if (!userSearchQuery.trim()) return undefined;
+    userSearchTimer.current = setTimeout(async () => {
+      try {
+        setSearchingUsers(true);
+        const res = await api.get(`/users/search?q=${encodeURIComponent(userSearchQuery)}`);
+        setUserSearchResults(res.data);
+      } catch (err) {
+        console.error('User search failed:', err);
+      } finally {
+        setSearchingUsers(false);
+      }
+    }, 350);
+    return () => clearTimeout(userSearchTimer.current);
+  }, [userSearchQuery, linkModal.isOpen]);
+
+  const handleConfirmLink = async (userId) => {
+    try {
+      await api.put(`/funds/dues/members/${linkModal.member._id}/link-user`, { userId });
+      await fetchLedger({ silent: true });
+      closeLinkModal();
+    } catch (err) {
+      showAlert('Could not link', err.response?.data?.message || 'Failed to link the user.');
+    }
+  };
+
+  const handleUnlinkUser = (member) => {
+    showConfirm(
+      'Unlink user',
+      `Disconnect ${member.linkedUser?.displayName} from "${member.name}"? They stop receiving dues statements.`,
+      async () => {
+        try {
+          await api.put(`/funds/dues/members/${member._id}/link-user`, { userId: null });
+          fetchLedger({ silent: true });
+        } catch (err) {
+          showAlert('Could not unlink', err.response?.data?.message || 'Failed to unlink the user.');
+        }
+      }
+    );
+  };
+
+  const handleSendDuesEmail = async (member) => {
+    if (!member.linkedUser || sendingEmail) return;
+    setSendingEmail(member._id);
+    try {
+      const res = await api.post(`/funds/dues/members/${member._id}/send-dues-email`);
+      showAlert('Statement sent', res.data.message);
+    } catch (err) {
+      showAlert('Could not send', err.response?.data?.message || 'Failed to send the statement.');
+    } finally {
+      setSendingEmail(null);
+    }
+  };
+
+  /* ── Pagination window ────────────────────────────────────────────────── */
+
+  const paginationPages = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const set = new Set([1, totalPages, currentPage]);
+    if (currentPage > 1) set.add(currentPage - 1);
+    if (currentPage < totalPages) set.add(currentPage + 1);
+    return [...set].sort((a, b) => a - b);
+  }, [totalPages, currentPage]);
+
+  const shiftLedgerMonth = (step) => {
+    let y = ledgerYear;
+    let m = ledgerMonth + step;
+    if (m < 0) { m = 11; y -= 1; }
+    if (m > 11) { m = 0; y += 1; }
+    setLedgerMonth(m);
+    setLedgerYear(y);
+    setEditingCell(null);
+  };
+
+  const isCurrentLedgerMonth = ledgerYear === today.getFullYear() && ledgerMonth === today.getMonth();
+
+  const TABS = [
+    { id: 'overview', label: t('overview_tab') || 'Overview', icon: <Coins size={15} /> },
+    { id: 'dues', label: t('weekly_dues_tab') || 'Weekly Dues', icon: <Users size={15} />, count: ledgerData.members.length || null },
+    { id: 'budgets', label: 'Funds', icon: <Briefcase size={15} />, count: designatedFunds.length || null },
+    { id: 'insights', label: 'Insights', icon: <ChartColumn size={15} /> },
+  ];
+
+  /* ══════════════════════════════════════════════════════════════════════
+     Render
+     ══════════════════════════════════════════════════════════════════════ */
 
   return (
-    <div className="container" style={{ maxWidth: '1000px', padding: isMobile ? '0.5rem 0.35rem' : '1rem 0.5rem' }}>
-      {/* ── Back Button & Help ── */}
-      <div style={{ marginBottom: isMobile ? '0.4rem' : '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="back-btn" style={{ padding: isMobile ? '0.3rem 0.6rem' : '0.4rem 0.8rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }}>
-          <ChevronLeft size={isMobile ? 15 : 18} /> {t('back')}
-        </button>
-        <Link to="/docs/fund-tracker" className="back-btn" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem', padding: isMobile ? '0.3rem 0.6rem' : '0.4rem 0.8rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }} title="Help & Documentation">
-          <BookOpen size={isMobile ? 14 : 16} /> {t('read_docs') || 'Docs'}
+    <div className="ft-page">
+      {/* Back button is global — see components/BackBar.jsx */}
+      <div className="ft-topbar">
+        <Link to="/docs/fund-tracker" className="btn btn-secondary" style={{ padding: '0.4rem 0.9rem', fontSize: '0.8rem', borderRadius: '9999px' }}>
+          <BookOpen size={15} /> {t('read_docs') || 'Docs'}
         </Link>
       </div>
 
-      {/* ── Header Row ── */}
-      <div style={{ marginBottom: isMobile ? '0.85rem' : '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.15rem' }}>
-        <h1 className="text-gradient text-hero" style={{ fontSize: isMobile ? '1.4rem' : '1.75rem', margin: 0, lineHeight: 1.1, textAlign: 'center' }}>
-          {t('fund_dashboard')}
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.75rem' : '0.85rem', margin: 0, textAlign: 'center' }}>{t('fund_desc')}</p>
-      </div>
+      {/* ── Treasury hero ── */}
+      <section className="ft-hero">
+        <div className="ft-hero__grid">
+          <div>
+            <p className="ft-eyebrow">
+              <Landmark size={13} /> {t('fund_dashboard') || 'Youth Fund'}
+            </p>
 
-      {/* ── Summary Metrics Grid ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr 1fr' : 'repeat(auto-fit, minmax(240px, 1fr))', gap: isMobile ? '0.35rem' : '1rem', marginBottom: isMobile ? '0.85rem' : '1.5rem' }}>
-        
-        {/* CARD 1: Current Balance */}
-        <div style={{ 
-          background: 'var(--surface)', 
-          border: '1px solid var(--surface-border)', 
-          borderRadius: isMobile ? '0.75rem' : '1.25rem', 
-          padding: isMobile ? '0.5rem 0.6rem' : '1.25rem', 
-          backdropFilter: 'blur(16px)', 
-          boxShadow: 'var(--shadow-md)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <div style={{ zIndex: 1, width: '100%' }}>
-            <p style={{ fontSize: isMobile ? '0.58rem' : '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: isMobile ? '0.15rem' : '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {isMobile ? 'Balance' : t('current_balance')}
+            <h1 className={`ft-hero__amount ${summary.currentBalance < 0 ? 'is-negative' : ''}`}>
+              {peso(summary.currentBalance)}
+              {summary.monthNet !== 0 && (
+                <span className={`ft-delta ${summary.monthNet > 0 ? 'is-up' : 'is-down'}`}>
+                  {summary.monthNet > 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
+                  {pesoWhole(Math.abs(summary.monthNet))} this month
+                </span>
+              )}
+            </h1>
+
+            <p className="ft-hero__sub">
+              {t('fund_desc') || 'Keep track of the Youth Fund.'} · {summary.transactionCount} records
             </p>
-            <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.65rem', fontWeight: '800', color: summary.currentBalance >= 0 ? '#10b981' : '#ef4444', margin: 0, lineHeight: 1.1, letterSpacing: isMobile ? '-0.02em' : 'normal' }}>
-              {fmtCompact(summary.currentBalance)}
-            </h3>
-            <p style={{ fontSize: isMobile ? '0.62rem' : '0.75rem', color: 'var(--text-muted)', margin: '0.2rem 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {fmt(summary.currentBalance)}
-            </p>
-          </div>
-          {!isMobile && (
-            <div style={{ 
-              background: summary.currentBalance >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
-              borderRadius: '1rem', 
-              padding: '0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: summary.currentBalance >= 0 ? '#10b981' : '#ef4444'
-            }}>
-              <Coins size={24} />
+
+            <div className="ft-flowbar" role="img" aria-label={`Income ${peso(summary.totalIncome)}, expenses ${peso(summary.totalExpense)}`}>
+              <div className="ft-flowbar__seg ft-flowbar__seg--in" style={{ width: `${flowSplit.inPct}%` }} />
+              <div className="ft-flowbar__seg ft-flowbar__seg--out" style={{ width: `${flowSplit.outPct}%` }} />
             </div>
-          )}
-        </div>
 
-        {/* CARD 2: Total Income */}
-        <div style={{ 
-          background: 'var(--surface)', 
-          border: '1px solid var(--surface-border)', 
-          borderRadius: isMobile ? '0.75rem' : '1.25rem', 
-          padding: isMobile ? '0.5rem 0.6rem' : '1.25rem', 
-          backdropFilter: 'blur(16px)', 
-          boxShadow: 'var(--shadow-md)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <div style={{ zIndex: 1, width: '100%' }}>
-            <p style={{ fontSize: isMobile ? '0.58rem' : '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: isMobile ? '0.15rem' : '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {isMobile ? 'Income' : t('total_income')}
-            </p>
-            <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.65rem', fontWeight: '800', color: '#10b981', margin: 0, lineHeight: 1.1, letterSpacing: isMobile ? '-0.02em' : 'normal' }}>
-              +{fmtCompact(summary.totalIncome)}
-            </h3>
-            <p style={{ fontSize: isMobile ? '0.62rem' : '0.75rem', color: 'var(--text-muted)', margin: '0.2rem 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {fmt(summary.totalIncome)}
-            </p>
-          </div>
-          {!isMobile && (
-            <div style={{ 
-              background: 'rgba(16, 185, 129, 0.1)', 
-              borderRadius: '1rem', 
-              padding: '0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#10b981'
-            }}>
-              <TrendingUp size={24} />
-            </div>
-          )}
-        </div>
-
-        {/* CARD 3: Total Expense */}
-        <div style={{ 
-          background: 'var(--surface)', 
-          border: '1px solid var(--surface-border)', 
-          borderRadius: isMobile ? '0.75rem' : '1.25rem', 
-          padding: isMobile ? '0.5rem 0.6rem' : '1.25rem', 
-          backdropFilter: 'blur(16px)', 
-          boxShadow: 'var(--shadow-md)',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          <div style={{ zIndex: 1, width: '100%' }}>
-            <p style={{ fontSize: isMobile ? '0.58rem' : '0.75rem', fontWeight: '600', color: 'var(--text-muted)', marginBottom: isMobile ? '0.15rem' : '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {isMobile ? 'Expense' : t('total_expense')}
-            </p>
-            <h3 style={{ fontSize: isMobile ? '0.95rem' : '1.65rem', fontWeight: '800', color: '#ef4444', margin: 0, lineHeight: 1.1, letterSpacing: isMobile ? '-0.02em' : 'normal' }}>
-              -{fmtCompact(summary.totalExpense)}
-            </h3>
-            <p style={{ fontSize: isMobile ? '0.62rem' : '0.75rem', color: 'var(--text-muted)', margin: '0.2rem 0 0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {fmt(summary.totalExpense)}
-            </p>
-          </div>
-          {!isMobile && (
-            <div style={{ 
-              background: 'rgba(239, 68, 68, 0.1)', 
-              borderRadius: '1rem', 
-              padding: '0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#ef4444'
-            }}>
-              <TrendingDown size={24} />
-            </div>
-          )}
-        </div>
-
-      </div>
-
-      {/* Tabs */}
-      <div style={{ 
-        display: 'inline-flex', 
-        gap: '0.25rem', 
-        marginBottom: isMobile ? '0.85rem' : '1.5rem', 
-        overflowX: 'auto', 
-        padding: '0.2rem',
-        background: 'rgba(255, 255, 255, 0.03)',
-        border: '1px solid var(--surface-border)',
-        borderRadius: '9999px',
-        backdropFilter: 'blur(8px)',
-        maxWidth: '100%',
-        whiteSpace: 'nowrap'
-      }}>
-        {[
-          { id: 'overview', label: t('overview_tab') }, 
-          { id: 'dues', label: t('weekly_dues_tab') },
-          { id: 'budgets', label: 'Designated Funds' }
-        ].map(tab => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button 
-              key={tab.id} 
-              onClick={() => setActiveTab(tab.id)} 
-              style={{ 
-                background: isActive ? 'var(--primary)' : 'transparent', 
-                border: 'none',
-                borderRadius: '9999px', 
-                padding: isMobile ? '0.35rem 0.85rem' : '0.5rem 1.5rem', 
-                cursor: 'pointer', 
-                fontSize: isMobile ? '0.75rem' : '0.85rem', 
-                fontWeight: '600', 
-                color: isActive ? '#ffffff' : 'var(--text-muted)', 
-                transition: 'all 0.25s ease', 
-                whiteSpace: 'nowrap', 
-                boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
-                outline: 'none'
-              }}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
-          {/* ── OVERVIEW TAB ── */}
-          {activeTab === 'overview' && (
-            <div style={{ 
-              background: 'var(--surface)', 
-              border: '1px solid var(--surface-border)', 
-              borderRadius: isMobile ? '0.85rem' : '1.25rem', 
-              padding: isMobile ? '0.75rem' : '1.5rem', 
-              backdropFilter: 'blur(16px)', 
-              boxShadow: 'var(--shadow-md)' 
-            }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: isMobile ? '0.75rem' : '1.5rem' }}>
-                <h2 style={{ fontSize: isMobile ? '0.95rem' : '1.1rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Coins size={isMobile ? 15 : 18} style={{ color: 'var(--primary)' }} />
-                  {t('recent_transactions')}
-                </h2>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', alignItems: 'center' }}>
-                  <select value={month} onChange={e => setMonth(e.target.value)} style={{ ...selectStyle, padding: isMobile ? '0.3rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.75rem' : '0.9rem', height: 'auto' }}>
-                    <option value="">{t('all_months')}</option>
-                    {MONTHS.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
-                  </select>
-                  <select value={year} onChange={e => setYear(e.target.value)} style={{ ...selectStyle, padding: isMobile ? '0.3rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.75rem' : '0.9rem', height: 'auto' }}>
-                    <option value="">{t('all_years')}</option>
-                    {[new Date().getFullYear(), new Date().getFullYear()-1].map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
-                  <select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ ...selectStyle, padding: isMobile ? '0.3rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.75rem' : '0.9rem', height: 'auto' }}>
-                    <option value="ALL">All Types</option>
-                    <option value="WEEKLY_DUES">Weekly Dues</option>
-                    <option value="OTHERS">Others</option>
-                  </select>
-                  {isPrivileged && (
-                    <div style={{ display: 'flex', gap: '0.35rem' }}>
-                      <button onClick={() => setShowFellowshipForm(true)} className="btn btn-secondary" style={{ fontSize: isMobile ? '0.72rem' : '0.8rem', borderRadius: '9999px', padding: isMobile ? '0.3rem 0.75rem' : '0.4rem 1rem' }}>+ Fellowship Exp.</button>
-                      <button onClick={() => openForm()} className="btn btn-primary" style={{ fontSize: isMobile ? '0.72rem' : '0.8rem', borderRadius: '9999px', padding: isMobile ? '0.3rem 0.75rem' : '0.4rem 1rem' }}>+ {t('add_transaction')}</button>
-                    </div>
-                  )}
-                </div>
+            <div className="ft-legend">
+              <div className="ft-legend__item">
+                <span className="ft-legend__label">
+                  <span className="ft-legend__dot" style={{ background: 'var(--success)' }} />
+                  {t('total_income') || 'Total in'}
+                </span>
+                <p className="ft-legend__value is-in">{peso(summary.totalIncome)}</p>
               </div>
-              
-              <div className="hide-on-mobile" style={{ overflowX: 'auto', borderRadius: '0.75rem', border: '1px solid var(--border-color)' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+              <div className="ft-legend__item">
+                <span className="ft-legend__label">
+                  <span className="ft-legend__dot" style={{ background: 'var(--danger)' }} />
+                  {t('total_expense') || 'Total out'}
+                </span>
+                <p className="ft-legend__value is-out">{peso(summary.totalExpense)}</p>
+              </div>
+              <div className="ft-legend__item">
+                <span className="ft-legend__label">
+                  <span className="ft-legend__dot" style={{ background: 'var(--text-muted)' }} />
+                  Unallocated
+                </span>
+                <p className="ft-legend__value">{peso(summary.unallocated)}</p>
+              </div>
+            </div>
+          </div>
+
+          {balanceTrend && (
+            <div className="ft-spark">
+              <div className="ft-spark__head">
+                <span className="ft-eyebrow">Balance trend</span>
+                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                  {analytics.series.length} mo
+                </span>
+              </div>
+              <Sparkline points={balanceTrend} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.4rem', fontSize: '0.66rem', color: 'var(--text-muted)', fontWeight: 700 }}>
+                <span>{MONTHS_SHORT[analytics.series[0].month - 1]}</span>
+                <span>{MONTHS_SHORT[analytics.series[analytics.series.length - 1].month - 1]}</span>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── Tabs ── */}
+      <div className="ft-tabs">
+        <div className="ft-tabs__track" role="tablist">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`ft-tab ${activeTab === tab.id ? 'is-active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.icon}
+              {tab.label}
+              {tab.count ? <span className="ft-tab__count">{tab.count}</span> : null}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ══ OVERVIEW ══ */}
+      {activeTab === 'overview' && (
+        <section className="ft-panel">
+          <div className="ft-panel__head">
+            <div>
+              <h2 className="ft-panel__title">
+                <Coins size={18} /> {t('recent_transactions') || 'Transactions'}
+              </h2>
+              <p className="ft-panel__desc">
+                {totalResults} {totalResults === 1 ? 'record' : 'records'}
+                {hasFilters ? ' matching your filters' : ''}
+              </p>
+            </div>
+            {isPrivileged && (
+              <div className="ft-panel__actions">
+                <button onClick={() => setShowFellowshipForm(true)} className="btn btn-secondary" style={{ borderRadius: '9999px', padding: '0.45rem 1rem', fontSize: '0.8rem' }}>
+                  <Users size={15} /> Fellowship
+                </button>
+                <button onClick={() => openForm()} className="btn btn-primary" style={{ borderRadius: '9999px', padding: '0.45rem 1.1rem', fontSize: '0.8rem' }}>
+                  <Plus size={15} /> {t('add_transaction') || 'Add'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="ft-toolbar">
+            <div className="ft-search">
+              <Search size={15} />
+              <input
+                className="ft-input"
+                type="search"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search category or description…"
+                aria-label="Search transactions"
+              />
+              {searchInput && (
+                <button className="ft-search__clear" onClick={() => setSearchInput('')} aria-label="Clear search">
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            <select className="ft-select" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Filter by month">
+              <option value="">{t('all_months') || 'All months'}</option>
+              {MONTHS.map((m, i) => (
+                <option key={m} value={i + 1}>{m}</option>
+              ))}
+            </select>
+
+            <select className="ft-select" value={year} onChange={(e) => setYear(e.target.value)} aria-label="Filter by year">
+              <option value="">{t('all_years') || 'All years'}</option>
+              {[new Date().getFullYear(), new Date().getFullYear() - 1].map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+
+            <select className="ft-select" value={filterType} onChange={(e) => setFilterType(e.target.value)} aria-label="Filter by kind">
+              <option value="ALL">All types</option>
+              <option value="WEEKLY_DUES">Weekly dues</option>
+              <option value="OTHERS">Excluding dues</option>
+            </select>
+
+            {designatedFunds.length > 0 && (
+              <select className="ft-select" value={fundFilter} onChange={(e) => setFundFilter(e.target.value)} aria-label="Filter by fund">
+                <option value="">All funds</option>
+                <option value="UNASSIGNED">Unassigned</option>
+                {designatedFunds.map((f) => (
+                  <option key={f._id} value={f._id}>{f.name}</option>
+                ))}
+              </select>
+            )}
+
+            <span className="ft-spacer" />
+
+            <button className="btn btn-secondary" onClick={handleExport} disabled={exporting} style={{ borderRadius: '9999px', padding: '0.45rem 1rem', fontSize: '0.78rem' }}>
+              <Download size={14} /> {exporting ? 'Exporting…' : 'Export'}
+            </button>
+          </div>
+
+          {loadingOverview ? (
+            <SkeletonList rows={6} />
+          ) : transactions.length === 0 ? (
+            <EmptyState
+              icon={<Coins size={26} />}
+              title="Nothing here yet"
+              text={hasFilters ? 'No transactions match these filters. Try widening the date range or clearing the search.' : 'Once the treasurer records income or expenses, they show up here.'}
+              action={
+                hasFilters ? (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ borderRadius: '9999px' }}
+                    onClick={() => { setMonth(''); setYear(''); setFilterType('ALL'); setFundFilter(''); setSearchInput(''); }}
+                  >
+                    Clear filters
+                  </button>
+                ) : null
+              }
+            />
+          ) : (
+            <>
+              {/* Desktop table */}
+              <div className="ft-tablewrap">
+                <table className="ft-table">
                   <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)', background: 'rgba(255,255,255,0.02)' }}>
-                      {[t('date'), t('type'), t('category'), t('description'), t('amount'), 'Actions'].map(h => (
-                        <th key={h} style={{ padding: '1rem', textAlign: 'left', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.75rem', textTransform: 'uppercase' }}>{h}</th>
-                      ))}
+                    <tr>
+                      <th>{t('date') || 'Date'}</th>
+                      <th>{t('category') || 'Category'}</th>
+                      <th>{t('description') || 'Description'}</th>
+                      <th>Fund</th>
+                      <th style={{ textAlign: 'right' }}>{t('amount') || 'Amount'}</th>
+                      <th style={{ textAlign: 'right' }}>{isPrivileged ? 'Actions' : ''}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {transactions.length === 0 ? (
-                      <tr><td colSpan={6} style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--text-muted)' }}>No transactions found.</td></tr>
-                    ) : transactions.map(tx => (
-                      <tr key={tx._id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }}>
-                        <td style={{ padding: '1rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{new Date(tx.date).toLocaleDateString()}</td>
-                        <td style={{ padding: '1rem' }}>
-                          <span style={{ 
-                            padding: '0.25rem 0.65rem', 
-                            borderRadius: '9999px', 
-                            fontSize: '0.72rem', 
-                            fontWeight: '700', 
-                            background: tx.type === 'INCOME' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)', 
-                            color: tx.type === 'INCOME' ? '#10b981' : '#ef4444',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.03em'
-                          }}>
-                            {tx.type === 'INCOME' ? t('income') : t('expense')}
+                    {transactions.map((tx) => (
+                      <tr key={tx._id}>
+                        <td style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                          {new Date(tx.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })}
+                        </td>
+                        <td>
+                          <span className={`ft-chip ${tx.type === 'INCOME' ? 'ft-chip--in' : 'ft-chip--out'}`}>
+                            {tx.type === 'INCOME' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                            {tx.category}
                           </span>
                         </td>
-                        <td style={{ padding: '1rem' }}>
-                          <span style={{ 
-                            display: 'inline-flex',
-                            padding: '0.2rem 0.6rem', 
-                            borderRadius: '0.5rem', 
-                            fontSize: '0.78rem', 
-                            fontWeight: '600', 
-                            background: 'rgba(255, 255, 255, 0.04)', 
-                            border: '1px solid var(--border-color)', 
-                            color: 'var(--text-main)' 
-                          }}>{tx.category}</span>
+                        <td className="ft-td-desc">{tx.description || '—'}</td>
+                        <td>
+                          {tx.designatedFund ? (
+                            <span className="ft-chip ft-chip--cat">{tx.designatedFund.name}</span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>—</span>
+                          )}
                         </td>
-                        <td style={{ padding: '1rem', color: 'var(--text-muted)', whiteSpace: 'pre-wrap', maxWidth: '300px' }}>{tx.description || '—'}</td>
-                        <td style={{ padding: '1rem', fontWeight: '700', fontSize: '0.9rem', color: tx.type === 'INCOME' ? '#10b981' : '#ef4444' }}>{tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}</td>
-                        <td style={{ padding: '1rem', whiteSpace: 'nowrap' }}>
-                          <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                            {tx.description?.startsWith('Registration fee') && isPrivileged && (
-                              <button onClick={() => handleCopyAnnouncement(tx)} className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem', borderRadius: '9999px', background: 'transparent' }} title="Copy Announcement">
-                                <Copy size={12} /> Copy
-                              </button>
-                            )}
-                            {isPrivileged ? (
+                        <td style={{ textAlign: 'right' }}>
+                          <span className={`ft-amount ${tx.type === 'INCOME' ? 'is-in' : 'is-out'}`}>
+                            {tx.type === 'INCOME' ? '+' : '−'}{peso(tx.amount)}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="ft-rowactions">
+                            <button className="ft-iconbtn" title="Copy announcement" onClick={() => handleCopyAnnouncement(tx)}>
+                              <Copy size={14} />
+                            </button>
+                            {isPrivileged && (
                               <>
-                                <button onClick={() => openForm(tx)} className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem', color: 'var(--primary)', borderColor: 'rgba(59, 130, 246, 0.25)', borderRadius: '9999px', background: 'transparent' }}>
-                                  {t('edit')}
+                                <button className="ft-iconbtn is-primary" title={t('edit') || 'Edit'} onClick={() => openForm(tx)}>
+                                  <Pencil size={14} />
                                 </button>
-                                <button onClick={() => handleDelete(tx._id)} className="btn btn-secondary" style={{ padding: '0.25rem 0.6rem', fontSize: '0.72rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.25)', borderRadius: '9999px', background: 'transparent' }}>
-                                  {t('delete')}
+                                <button className="ft-iconbtn is-danger" title={t('delete') || 'Delete'} onClick={() => handleDelete(tx)}>
+                                  <Trash2 size={14} />
                                 </button>
                               </>
-                            ) : (
-                              <span style={{ color: 'var(--text-muted)' }}>—</span>
                             )}
                           </div>
                         </td>
@@ -965,779 +1474,1295 @@ ${formattedDesc}
                   </tbody>
                 </table>
               </div>
- 
-              {/* Mobile Card List */}
-              <div className="show-on-mobile" style={{ flexDirection: 'column', gap: '0.4rem' }}>
-                {transactions.length === 0 ? (
-                  <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                    No transactions found.
-                  </div>
-                ) : transactions.map(tx => (
-                  <div key={tx._id} style={{ 
-                    padding: '0.6rem 0.75rem', 
-                    background: 'rgba(255, 255, 255, 0.02)', 
-                    border: '1px solid var(--border-color)', 
-                    borderRadius: '0.75rem',
-                    backdropFilter: 'blur(8px)'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                        <span style={{ fontWeight: '700', color: 'var(--text-main)', fontSize: '0.82rem' }}>{tx.category}</span>
-                        <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{new Date(tx.date).toLocaleDateString()}</span>
-                          <span style={{ 
-                            padding: '0.08rem 0.35rem', 
-                            borderRadius: '9999px', 
-                            fontSize: '0.6rem', 
-                            fontWeight: '750', 
-                            background: tx.type === 'INCOME' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)', 
-                            color: tx.type === 'INCOME' ? '#10b981' : '#ef4444',
-                            textTransform: 'uppercase'
-                          }}>
-                            {tx.type === 'INCOME' ? t('income') : t('expense')}
+
+              {/* Mobile cards, grouped by day */}
+              <div className="ft-txlist">
+                {groupedTransactions.map((group) => (
+                  <React.Fragment key={group.label}>
+                    <p className="ft-daylabel">{group.label}</p>
+                    {group.items.map((tx) => (
+                      <article key={tx._id} className="ft-txcard">
+                        <div className="ft-txcard__top">
+                          <div style={{ minWidth: 0 }}>
+                            <h3 className="ft-txcard__title">{tx.category}</h3>
+                            <div className="ft-txcard__meta">
+                              <span className={`ft-chip ${tx.type === 'INCOME' ? 'ft-chip--in' : 'ft-chip--out'}`}>
+                                {tx.type === 'INCOME' ? (t('income') || 'In') : (t('expense') || 'Out')}
+                              </span>
+                              {tx.designatedFund && <span className="ft-chip ft-chip--cat">{tx.designatedFund.name}</span>}
+                            </div>
+                          </div>
+                          <span className={`ft-amount ${tx.type === 'INCOME' ? 'is-in' : 'is-out'}`}>
+                            {tx.type === 'INCOME' ? '+' : '−'}{peso(tx.amount)}
                           </span>
                         </div>
-                      </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                        <span style={{ fontWeight: '800', fontSize: '0.88rem', color: tx.type === 'INCOME' ? '#10b981' : '#ef4444' }}>
-                          {tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}
-                        </span>
-                      </div>
-                    </div>
-                    {tx.description && (
-                      <div style={{ 
-                        fontSize: '0.7rem', 
-                        color: 'var(--text-muted)', 
-                        marginTop: '0.35rem', 
-                        padding: '0.35rem 0.5rem', 
-                        background: 'rgba(0, 0, 0, 0.15)', 
-                        borderRadius: '0.4rem', 
-                        lineHeight: '1.3', 
-                        whiteSpace: 'pre-wrap',
-                        border: '1px solid rgba(255, 255, 255, 0.03)'
-                      }}>
-                        {tx.description}
-                      </div>
-                    )}
-                    {isPrivileged && (
-                      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.4rem', borderTop: '1px solid rgba(255,255,255,0.03)', paddingTop: '0.4rem' }}>
-                        {tx.description?.startsWith('Registration fee') && (
-                          <button onClick={() => handleCopyAnnouncement(tx)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '2px', outline: 'none' }} title="Copy Announcement">
-                            <Copy size={11} /> Copy
+                        {tx.description && <div className="ft-txcard__desc">{tx.description}</div>}
+                        <div className="ft-txcard__foot">
+                          <button className="ft-iconbtn" title="Copy announcement" onClick={() => handleCopyAnnouncement(tx)}>
+                            <Copy size={14} />
                           </button>
-                        )}
-                        <button onClick={() => openForm(tx)} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', outline: 'none' }}>{t('edit')}</button>
-                        <button onClick={() => handleDelete(tx._id)} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '600', cursor: 'pointer', fontSize: '0.7rem', outline: 'none' }}>{t('delete')}</button>
-                      </div>
-                    )}
-                  </div>
+                          {isPrivileged && (
+                            <>
+                              <button className="ft-iconbtn is-primary" title={t('edit') || 'Edit'} onClick={() => openForm(tx)}>
+                                <Pencil size={14} />
+                              </button>
+                              <button className="ft-iconbtn is-danger" title={t('delete') || 'Delete'} onClick={() => handleDelete(tx)}>
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </React.Fragment>
                 ))}
               </div>
- 
-              {/* Shared Pagination Controls */}
+
               {totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.3rem', paddingTop: isMobile ? '0.85rem' : '1.25rem', flexWrap: 'wrap', borderTop: '1px solid var(--border-color)', marginTop: '0.75rem' }}>
-                  <button
-                    onClick={() => goToPage(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    style={{ background: 'none', border: '1px solid var(--border-color)', color: currentPage === 1 ? 'var(--text-muted)' : 'var(--text-main)', borderRadius: '9999px', padding: isMobile ? '0.25rem 0.55rem' : '0.3rem 0.75rem', cursor: currentPage === 1 ? 'default' : 'pointer', fontSize: isMobile ? '0.72rem' : '0.85rem', opacity: currentPage === 1 ? 0.3 : 1, transition: 'all 0.2s', outline: 'none' }}
-                  >‹</button>
- 
-                  {getPaginationPages().map((p, i, arr) => (
+                <nav className="ft-pager" aria-label="Transaction pages">
+                  <button className="ft-pager__btn" onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 1} aria-label="Previous page">
+                    <ChevronLeft size={14} />
+                  </button>
+                  {paginationPages.map((p, i, arr) => (
                     <React.Fragment key={p}>
-                      {i > 0 && arr[i - 1] !== p - 1 && (
-                        <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', padding: '0 0.05rem' }}>…</span>
-                      )}
+                      {i > 0 && arr[i - 1] !== p - 1 && <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>…</span>}
                       <button
+                        className={`ft-pager__btn ${currentPage === p ? 'is-active' : ''}`}
                         onClick={() => goToPage(p)}
-                        style={{
-                          background: currentPage === p ? 'var(--primary)' : 'none',
-                          color: currentPage === p ? 'white' : 'var(--text-muted)',
-                          border: '1px solid ' + (currentPage === p ? 'var(--primary)' : 'var(--border-color)'),
-                          borderRadius: '9999px',
-                          padding: isMobile ? '0.25rem 0.55rem' : '0.3rem 0.75rem',
-                          cursor: 'pointer',
-                          fontWeight: currentPage === p ? '700' : '500',
-                          fontSize: isMobile ? '0.72rem' : '0.8rem',
-                          minWidth: isMobile ? '1.85rem' : '2.25rem',
-                          transition: 'all 0.2s',
-                          outline: 'none'
-                        }}
-                      >{p}</button>
+                        aria-current={currentPage === p ? 'page' : undefined}
+                      >
+                        {p}
+                      </button>
                     </React.Fragment>
                   ))}
- 
+                  <button className="ft-pager__btn" onClick={() => goToPage(currentPage + 1)} disabled={currentPage === totalPages} aria-label="Next page">
+                    <ChevronRight size={14} />
+                  </button>
+                  {!isMobile && <span className="ft-pager__info">Page {currentPage} of {totalPages}</span>}
+                </nav>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {/* ══ WEEKLY DUES ══ */}
+      {activeTab === 'dues' && (
+        <div className="ft-stack">
+          {/* Collection health */}
+          <section className="ft-panel">
+            <div className="ft-panel__head">
+              <div>
+                <h2 className="ft-panel__title">
+                  <Wallet size={18} /> Collection health
+                </h2>
+                <p className="ft-panel__desc">
+                  {pesoWhole(weeklyAmount)} every Sunday since {duesStart.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
+                </p>
+              </div>
+            </div>
+
+            <div className="ft-stats">
+              <div className="ft-stat">
+                <div className="ft-ringstat">
+                  <Ring value={monthStats.rate} />
+                  <div style={{ minWidth: 0 }}>
+                    <span className="ft-stat__label">Collected</span>
+                    <p className="ft-stat__value">{pesoWhole(monthStats.collected)}</p>
+                    <p className="ft-stat__hint">of {pesoWhole(monthStats.expected)} due</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="ft-stat">
+                <span className="ft-stat__label"><Check size={12} /> Updated</span>
+                <p className="ft-stat__value is-in">{duesStanding.updated + duesStanding.ahead}</p>
+                <p className="ft-stat__hint">{duesStanding.ahead} paid in advance</p>
+              </div>
+
+              <div className="ft-stat">
+                <span className="ft-stat__label"><Info size={12} /> In arrears</span>
+                <p className={`ft-stat__value ${duesStanding.behind ? 'is-out' : 'is-in'}`}>{duesStanding.behind}</p>
+                <p className="ft-stat__hint">{pesoWhole(duesStanding.arrears)} outstanding</p>
+              </div>
+
+              <div className="ft-stat">
+                <span className="ft-stat__label"><Users size={12} /> Roster</span>
+                <p className="ft-stat__value">{ledgerData.members.length}</p>
+                <p className="ft-stat__hint">
+                  {monthStats.elapsedSundays} of {monthStats.totalSundays} Sundays elapsed
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* Ledger grid */}
+          <section className="ft-panel">
+            <div className="ft-ledgerbar">
+              <div className="ft-monthnav">
+                <button className="ft-monthnav__btn" onClick={() => shiftLedgerMonth(-1)} aria-label="Previous month">
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="ft-monthnav__label">
+                  {MONTHS[ledgerMonth]} {ledgerYear}
+                </span>
+                <button className="ft-monthnav__btn" onClick={() => shiftLedgerMonth(1)} aria-label="Next month">
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' }}>
+                {!isCurrentLedgerMonth && (
                   <button
-                    onClick={() => goToPage(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    style={{ background: 'none', border: '1px solid var(--border-color)', color: currentPage === totalPages ? 'var(--text-muted)' : 'var(--text-main)', borderRadius: '9999px', padding: isMobile ? '0.25rem 0.55rem' : '0.3rem 0.75rem', cursor: currentPage === totalPages ? 'default' : 'pointer', fontSize: isMobile ? '0.72rem' : '0.85rem', opacity: currentPage === totalPages ? 0.3 : 1, transition: 'all 0.2s', outline: 'none' }}
-                  >›</button>
- 
-                  <span style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.72rem' : '0.78rem', marginLeft: '0.3rem' }}>
-                    Page {currentPage} of {totalPages}
-                  </span>
+                    className="btn btn-secondary"
+                    style={{ borderRadius: '9999px', padding: '0.35rem 0.9rem', fontSize: '0.75rem' }}
+                    onClick={() => { setLedgerMonth(today.getMonth()); setLedgerYear(today.getFullYear()); }}
+                  >
+                    Today
+                  </button>
+                )}
+                <div className="ft-search" style={{ flex: '0 1 11rem' }}>
+                  <Search size={14} />
+                  <input
+                    className="ft-input"
+                    type="search"
+                    value={memberQuery}
+                    onChange={(e) => setMemberQuery(e.target.value)}
+                    placeholder="Find member…"
+                    aria-label="Find roster member"
+                  />
+                </div>
+                <select className="ft-select" value={memberSort} onChange={(e) => setMemberSort(e.target.value)} aria-label="Sort roster">
+                  <option value="name">A–Z</option>
+                  <option value="balance">Most behind</option>
+                  <option value="paid">Most paid</option>
+                </select>
+                <button className="btn btn-secondary" onClick={handleExportLedger} disabled={exporting} style={{ borderRadius: '9999px', padding: '0.4rem 0.9rem', fontSize: '0.75rem' }}>
+                  <Download size={14} />
+                </button>
+              </div>
+            </div>
+
+            {isPrivileged && !loadingDues && ledgerData.members.length > 0 && (
+              <p className="ft-note" style={{ marginBottom: '0.85rem' }}>
+                <Info size={14} />
+                <span>
+                  Click a cell to record a payment — it opens at {pesoWhole(weeklyAmount)} so <kbd>Enter</kbd> confirms the standard amount.
+                  Arrow keys move around the grid, <kbd>Esc</kbd> cancels.
+                </span>
+              </p>
+            )}
+
+            {loadingDues ? (
+              <SkeletonList rows={6} />
+            ) : ledgerData.members.length === 0 ? (
+              <EmptyState
+                icon={<Users size={26} />}
+                title={t('no_roster') || 'No roster yet'}
+                text="Add members below to start tracking weekly dues. Each name gets its own row in the collection grid."
+              />
+            ) : visibleMembers.length === 0 ? (
+              <EmptyState icon={<Search size={26} />} title="No matches" text={`No roster member matches "${memberQuery}".`} />
+            ) : (
+              <div className="ft-ledgerwrap">
+                <table className="ft-ledger">
+                  <thead>
+                    <tr>
+                      <th className="ft-col-name">{t('member_name') || 'Member'}</th>
+                      {sundays.map((date, i) => {
+                        const isToday = getLocalYMD(date) === getLocalYMD(today);
+                        return (
+                          <th key={i} className={`ft-col-sunday ${isToday ? 'is-today' : ''}`} scope="col">
+                            {date.getDate()}
+                          </th>
+                        );
+                      })}
+                      <th className="ft-col-total">Total</th>
+                      <th className="ft-col-status">Standing</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleMembers.map((m, row) => {
+                      const totalPaid = getMemberTotal(m._id);
+                      const coveredSundays = Math.floor(totalPaid / weeklyAmount);
+                      const balance = totalPaid - expectedToDate;
+
+                      return (
+                        <tr key={m._id}>
+                          <th className="ft-col-name" scope="row">{m.name}</th>
+
+                          {sundays.map((date, col) => {
+                            const dateStr = getLocalYMD(date);
+                            const amount = getPaymentAmount(m._id, dateStr);
+                            const isEditing = editingCell?.memberId === m._id && editingCell?.dateStr === dateStr;
+                            const sundayIndex = getSundayIndexSinceStart(date);
+                            const isCovered = sundayIndex > 0 && sundayIndex <= coveredSundays;
+                            const isPast = startOfDay(date) <= today;
+                            const isFuture = !isPast;
+
+                            let state = '';
+                            if (amount > 0) state = 'is-paid';
+                            else if (isCovered) state = 'is-covered';
+                            else if (isFuture) state = 'is-future';
+                            else if (sundayIndex > 0) state = 'is-due';
+
+                            return (
+                              <td key={col} className={`ft-cell ${state}`}>
+                                {isEditing ? (
+                                  <input
+                                    autoFocus
+                                    className="ft-cell__input"
+                                    type="number"
+                                    min="0"
+                                    inputMode="numeric"
+                                    value={editingCell.value}
+                                    onFocus={(e) => e.target.select()}
+                                    onChange={(e) => setEditingCell((c) => ({ ...c, value: e.target.value, dirty: true }))}
+                                    onBlur={() => commitCell(editingCell)}
+                                    onKeyDown={handleCellKeyDown}
+                                    aria-label={`${m.name}, ${MONTHS_SHORT[ledgerMonth]} ${date.getDate()}`}
+                                  />
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="ft-cell__btn"
+                                    data-editable={isPrivileged}
+                                    ref={(el) => {
+                                      if (el) cellRefs.current.set(`${row}:${col}`, el);
+                                      else cellRefs.current.delete(`${row}:${col}`);
+                                    }}
+                                    onClick={() => openCell(m._id, dateStr, amount, row, col)}
+                                    onKeyDown={(e) => handleCellNav(e, row, col)}
+                                    aria-label={`${m.name}, ${MONTHS_SHORT[ledgerMonth]} ${date.getDate()}: ${amount ? peso(amount) : isCovered ? 'covered in advance' : 'unpaid'}`}
+                                  >
+                                    {amount > 0 ? amount : isCovered ? '✓' : isFuture ? '·' : '—'}
+                                  </button>
+                                )}
+                              </td>
+                            );
+                          })}
+
+                          <td className="ft-col-total">
+                            <span className="ft-amount">{totalPaid > 0 ? pesoWhole(totalPaid) : '—'}</span>
+                          </td>
+                          <td className="ft-col-status">
+                            {balance > 0 ? (
+                              <span className="ft-pill ft-pill--ahead">+{Math.round(balance)}</span>
+                            ) : balance === 0 ? (
+                              <span className="ft-pill ft-pill--ok">Updated</span>
+                            ) : (
+                              <span className="ft-pill ft-pill--behind">{Math.round(balance)}</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td className="ft-col-name">Sunday total</td>
+                      {columnTotals.map((total, i) => (
+                        <td key={i}>{total > 0 ? total : '—'}</td>
+                      ))}
+                      <td style={{ textAlign: 'right' }}>{pesoWhole(monthStats.collected)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Roster management */}
+          {isPrivileged && (
+            <section className="ft-panel">
+              <button className="ft-disclosure" aria-expanded={showRoster} onClick={() => setShowRoster((v) => !v)}>
+                <span className="ft-disclosure__caret"><ChevronRight size={16} /></span>
+                {t('dues_roster') || 'Dues roster'}
+                <span className="ft-chip" style={{ marginLeft: 'auto' }}>{ledgerData.members.length}</span>
+              </button>
+
+              {showRoster && (
+                <>
+                  <div className="ft-rosterlist">
+                    {ledgerData.members.map((m) => (
+                      <div key={m._id} className="ft-rosteritem">
+                        <div className="ft-rosteritem__name">
+                          <span className="ft-avatar" aria-hidden="true">{initials(m.name)}</span>
+                          <span style={{ minWidth: 0 }}>
+                            {m.name}
+                            <span className="ft-rosteritem__sub">
+                              {m.linkedUser ? `Linked to ${m.linkedUser.displayName}` : 'No account linked'}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="ft-rosteritem__actions">
+                          {m.linkedUser ? (
+                            <>
+                              <button
+                                className="ft-iconbtn is-primary"
+                                title={`Email statement to ${m.linkedUser.email}`}
+                                onClick={() => handleSendDuesEmail(m)}
+                                disabled={sendingEmail === m._id}
+                              >
+                                <Mail size={14} />
+                              </button>
+                              <button className="ft-iconbtn" title="Unlink account" onClick={() => handleUnlinkUser(m)}>
+                                <Unlink size={14} />
+                              </button>
+                            </>
+                          ) : (
+                            <button className="ft-iconbtn is-primary" title="Link a registered account" onClick={() => openLinkModal(m)}>
+                              <LinkIcon size={14} />
+                            </button>
+                          )}
+                          <button className="ft-iconbtn is-danger" title="Remove from roster" onClick={() => handleRemoveMember(m)}>
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <form onSubmit={handleAddMember} className="ft-addrow">
+                    <input
+                      className="ft-input"
+                      type="text"
+                      placeholder="New roster member name…"
+                      value={newMemberName}
+                      onChange={(e) => setNewMemberName(e.target.value)}
+                      required
+                      aria-label="New roster member name"
+                    />
+                    <button type="submit" className="btn btn-primary" style={{ borderRadius: '0.75rem', whiteSpace: 'nowrap' }}>
+                      {t('add_member') || 'Add'}
+                    </button>
+                  </form>
+                  {addError && <p style={{ color: 'var(--danger)', fontSize: '0.8rem', marginTop: '0.5rem' }}>{addError}</p>}
+                </>
+              )}
+            </section>
+          )}
+        </div>
+      )}
+
+      {/* ══ DESIGNATED FUNDS ══ */}
+      {activeTab === 'budgets' && (
+        <div className="ft-stack">
+          <section className="ft-panel">
+            <div className="ft-panel__head">
+              <div>
+                <h2 className="ft-panel__title">
+                  <Briefcase size={18} /> Designated funds
+                </h2>
+                <p className="ft-panel__desc">Earmark money for a purpose and watch its balance move on its own.</p>
+              </div>
+              {isPrivileged && (
+                <div className="ft-panel__actions">
+                  <button onClick={() => openFundForm()} className="btn btn-primary" style={{ borderRadius: '9999px', padding: '0.45rem 1.1rem', fontSize: '0.8rem' }}>
+                    <Plus size={15} /> New fund
+                  </button>
                 </div>
               )}
             </div>
-          )}
 
+            {loadingFunds ? (
+              <SkeletonList rows={3} />
+            ) : designatedFunds.length === 0 ? (
+              <EmptyState
+                icon={<PiggyBank size={26} />}
+                title="No funds yet"
+                text="Designated funds let you split the treasury into purposes — camp, outreach, equipment — and track each balance automatically."
+                action={
+                  isPrivileged ? (
+                    <button onClick={() => openFundForm()} className="btn btn-primary" style={{ borderRadius: '9999px' }}>
+                      Create the first fund
+                    </button>
+                  ) : null
+                }
+              />
+            ) : (
+              <div className="ft-fundgrid">
+                {designatedFunds.map((fund) => {
+                  const color = fund.color || '#3b82f6';
+                  const hasTarget = fund.targetAmount > 0;
+                  const progress = hasTarget ? Math.min(100, Math.max(0, (fund.currentBalance / fund.targetAmount) * 100)) : 0;
 
-          {/* ── WEEKLY DUES LEDGER TAB ── */}
-          {activeTab === 'dues' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1.25rem' }}>
-              
-              {/* Ledger Matrix */}
-              <div style={{ 
-                background: 'var(--surface)', 
-                border: '1px solid var(--surface-border)', 
-                borderRadius: isMobile ? '0.85rem' : '1.25rem', 
-                padding: isMobile ? '0.75rem' : '1.5rem', 
-                backdropFilter: 'blur(16px)', 
-                boxShadow: 'var(--shadow-md)' 
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.4rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <button 
-                      onClick={() => {
-                        let y = ledgerYear; let m = ledgerMonth - 1;
-                        if (m < 0) { m = 11; y -= 1; }
-                        setLedgerMonth(m); setLedgerYear(y);
-                      }} 
-                      className="btn btn-secondary" style={{ padding: isMobile ? '0.2rem 0.45rem' : '0.3rem 0.6rem', fontSize: isMobile ? '0.78rem' : '0.85rem', borderRadius: '9999px' }}>‹
-                    </button>
-                    <span style={{ fontWeight: 'bold', color: 'var(--text-main)', fontSize: isMobile ? '0.88rem' : '0.95rem', minWidth: isMobile ? '80px' : '100px', textAlign: 'center' }}>
-                      {MONTHS[ledgerMonth]} {ledgerYear}
-                    </span>
-                    <button 
-                      onClick={() => {
-                        let y = ledgerYear; let m = ledgerMonth + 1;
-                        if (m > 11) { m = 0; y += 1; }
-                        setLedgerMonth(m); setLedgerYear(y);
-                      }} 
-                      className="btn btn-secondary" style={{ padding: isMobile ? '0.2rem 0.45rem' : '0.3rem 0.6rem', fontSize: isMobile ? '0.78rem' : '0.85rem', borderRadius: '9999px' }}>›
-                    </button>
-                  </div>
-                  {isPrivileged && (
-                    <span style={{ fontSize: isMobile ? '0.68rem' : '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                      <Info size={isMobile ? 11 : 13} style={{ color: 'var(--primary)' }} />
-                      Click cell to edit
-                    </span>
-                  )}
-                </div>
- 
-                {loadingDues ? (
-                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2.5rem 0', fontSize: '0.85rem' }}>{t('loading')}</p>
-                ) : ledgerData.members.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2.5rem 0', fontSize: '0.85rem' }}>{t('no_roster')}</p>
-                ) : (
-                  <div style={{ overflowX: 'auto', borderRadius: '0.75rem', border: '1px solid var(--border-color)', WebkitOverflowScrolling: 'touch' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
-                      <thead>
-                        <tr style={{ background: 'rgba(255,255,255,0.02)', borderBottom: '2px solid var(--border-color)' }}>
-                          <th style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'left', color: 'var(--text-main)', fontWeight: 'bold', position: 'sticky', left: 0, background: 'var(--surface)', backdropFilter: 'blur(8px)', zIndex: 2, boxShadow: '2px 0 5px rgba(0,0,0,0.05)' }}>{t('member_name')}</th>
-                          {sundays.map((date, i) => (
-                            <th key={i} style={{ padding: '0.45rem 0.2rem', textAlign: 'center', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.7rem', borderLeft: '1px solid var(--border-color)', minWidth: '34px' }}>
-                              {date.getDate()}
-                            </th>
-                          ))}
-                          <th style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'right', color: 'var(--text-main)', fontWeight: 'bold', borderLeft: '2px solid var(--border-color)' }}>TOTAL</th>
-                          <th style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'center', color: 'var(--text-main)', fontWeight: 'bold' }}>STATUS</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ledgerData.members.map(m => {
-                          const totalPaid = getMemberTotal(m._id);
-                          const coveredSundays = Math.floor(totalPaid / 10);
-                          
-                          return (
-                          <tr key={m._id} style={{ borderBottom: '1px solid var(--border-color)', transition: 'background 0.2s' }}>
-                            <td style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', color: 'var(--text-main)', fontWeight: '600', position: 'sticky', left: 0, background: 'var(--surface)', backdropFilter: 'blur(8px)', zIndex: 1, boxShadow: '2px 0 5px rgba(0,0,0,0.05)', fontSize: isMobile ? '0.72rem' : '0.75rem' }}>
-                              {m.name}
-                            </td>
-                            {sundays.map((date, i) => {
-                              const dateStr = getLocalYMD(date);
-                              const isEditing = editingCell?.memberId === m._id && editingCell?.dateStr === dateStr;
-                              const amt = getPaymentAmount(m._id, dateStr);
-                              const sundayIndex = getSundayIndexSinceStart(date);
-                              const isCovered = sundayIndex > 0 && sundayIndex <= coveredSundays;
-                              
-                              let bg = 'transparent';
-                              if (isEditing) {
-                                bg = 'rgba(255, 255, 255, 0.05)';
-                              } else if (isCovered) {
-                                bg = amt > 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.05)';
-                              }
- 
-                              return (
-                                <td 
-                                  key={i} 
-                                  onClick={() => isPrivileged && !isEditing && handleCellClick(m._id, dateStr, amt)}
-                                  style={{ 
-                                    padding: '0.05rem', 
-                                    textAlign: 'center', 
-                                    borderLeft: '1px solid var(--border-color)',
-                                    cursor: (isPrivileged && !isEditing) ? 'pointer' : 'default',
-                                    background: bg,
-                                    minWidth: '36px',
-                                    transition: 'background 0.25s'
-                                  }}
-                                >
-                                  {isEditing ? (
-                                    <input 
-                                      autoFocus
-                                      type="number"
-                                      min="0"
-                                      style={{ width: '100%', minWidth: '36px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--primary)', color: 'var(--text-main)', padding: '0.15rem', borderRadius: '4px', textAlign: 'center', fontSize: '13px', outline: 'none' }}
-                                      value={editingCell.value}
-                                      onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-                                      onBlur={handleCellBlur}
-                                      onKeyDown={handleCellKeyDown}
-                                    />
-                                  ) : (
-                                    <div style={{ padding: '0.25rem', color: amt > 0 ? '#10b981' : isCovered ? 'rgba(16,185,129,0.5)' : 'transparent', fontWeight: 'bold', fontSize: '0.72rem' }}>
-                                      {amt > 0 ? amt : isCovered ? '✓' : '-'}
-                                    </div>
-                                  )}
-                                </td>
-                              );
-                            })}
-                            <td style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'right', fontWeight: '700', color: 'var(--primary)', borderLeft: '2px solid var(--border-color)', fontSize: isMobile ? '0.72rem' : '0.75rem' }}>
-                              {totalPaid > 0 ? fmt(totalPaid) : '—'}
-                            </td>
-                            <td style={{ padding: isMobile ? '0.45rem 0.5rem' : '0.6rem 0.75rem', textAlign: 'center' }}>
-                              {(() => {
-                                const bal = totalPaid - expectedDues;
-                                if (bal > 0) {
-                                  return <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '0.65rem', background: 'rgba(16,185,129,0.12)', padding: '0.12rem 0.35rem', borderRadius: '9999px', whiteSpace: 'nowrap' }}>+{bal}</span>;
-                                } else if (bal === 0) {
-                                  return <span style={{ color: '#10b981', fontWeight: 'bold', fontSize: '0.65rem', background: 'rgba(16,185,129,0.12)', padding: '0.12rem 0.35rem', borderRadius: '9999px', whiteSpace: 'nowrap' }}>0</span>;
-                                } else {
-                                  return <span style={{ color: '#ef4444', fontWeight: 'bold', fontSize: '0.65rem', background: 'rgba(239,68,68,0.12)', padding: '0.12rem 0.35rem', borderRadius: '9999px', whiteSpace: 'nowrap' }}>{bal}</span>;
-                                }
-                              })()}
-                            </td>
-                          </tr>
-                        )})}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
- 
-              {/* Roster management (Privileged only) */}
-              {isPrivileged && (
-                <div style={{ 
-                  background: 'var(--surface)', 
-                  border: '1px solid var(--surface-border)', 
-                  borderRadius: isMobile ? '0.85rem' : '1.25rem', 
-                  padding: isMobile ? '0.75rem' : '1.5rem', 
-                  backdropFilter: 'blur(16px)', 
-                  boxShadow: 'var(--shadow-md)' 
-                }}>
-                  <button type="button" onClick={() => setShowRoster(v => !v)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', fontWeight: '700', fontSize: isMobile ? '0.88rem' : '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem', width: '100%', textAlign: 'left', outline: 'none' }}>
-                    <span style={{ fontSize: '0.7rem', transform: showRoster ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', display: 'inline-block' }}>▶</span>
-                    {t('dues_roster')} ({totalCount} {t('member_name').toLowerCase()}s)
-                  </button>
-                  {showRoster && (
-                    <div style={{ marginTop: isMobile ? '0.75rem' : '1.25rem', display: 'flex', flexDirection: 'column', gap: isMobile ? '0.6rem' : '0.85rem' }}>
-                      {ledgerData.members.map(m => (
-                        <div key={m._id} style={{ paddingBottom: isMobile ? '0.5rem' : '0.85rem', borderBottom: '1px solid rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', gap: isMobile ? '0.2rem' : '0.35rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            <span style={{ color: 'var(--text-main)', fontWeight: '600', fontSize: isMobile ? '0.82rem' : '0.9rem' }}>{m.name}</span>
-                            <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
-                              <button onClick={() => openLinkModal(m)} style={{ background: 'none', border: 'none', color: m.linkedUser ? 'var(--text-muted)' : 'var(--primary)', cursor: 'pointer', fontSize: isMobile ? '0.72rem' : '0.78rem', display: 'flex', alignItems: 'center', gap: '2px', outline: 'none' }}>
-                                <LinkIcon size={isMobile ? 11 : 13} /> {m.linkedUser ? 'Linked' : 'Link User'}
-                              </button>
-                              <button onClick={() => handleDeleteMember(m._id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: isMobile ? '0.72rem' : '0.78rem', display: 'flex', alignItems: 'center', gap: '2px', outline: 'none' }}>
-                                <Trash2 size={isMobile ? 11 : 13} /> {t('delete')}
-                              </button>
+                  return (
+                    <article key={fund._id} className="ft-fundcard" style={{ '--fund': color }}>
+                      <div className="ft-fundcard__accent" />
+                      <div className="ft-fundcard__body">
+                        <div className="ft-fundcard__head">
+                          <h3 className="ft-fundcard__name">
+                            {fund.name}
+                            {fund.autoAssignWeeklyDues && (
+                              <span className="ft-chip" title="New weekly dues are routed here automatically">
+                                <Wallet size={10} /> Auto
+                              </span>
+                            )}
+                          </h3>
+                          {isPrivileged && (
+                            <button className="ft-iconbtn" title="Edit fund" onClick={() => openFundForm(fund)}>
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                        </div>
+
+                        {fund.description && <p className="ft-fundcard__desc">{fund.description}</p>}
+
+                        <p className={`ft-fundcard__amount ${fund.currentBalance < 0 ? 'is-negative' : ''}`}>
+                          {peso(fund.currentBalance)}
+                          {hasTarget && <span className="ft-fundcard__target">of {peso(fund.targetAmount)}</span>}
+                        </p>
+
+                        {hasTarget && (
+                          <>
+                            <div className="ft-progress">
+                              <div className="ft-progress__fill" style={{ width: `${progress}%` }} />
                             </div>
+                            <div className="ft-progress__meta">
+                              <span>{Math.round(progress)}% of goal</span>
+                              <span>
+                                {fund.currentBalance >= fund.targetAmount
+                                  ? 'Goal reached'
+                                  : `${peso(fund.targetAmount - fund.currentBalance)} to go`}
+                              </span>
+                            </div>
+                          </>
+                        )}
+
+                        <div className="ft-fundcard__split">
+                          <div>
+                            <span className="ft-stat__label">In</span>
+                            <p className="ft-stat__value is-in" style={{ fontSize: '0.95rem' }}>+{pesoWhole(fund.totalIncome)}</p>
+                          </div>
+                          <div>
+                            <span className="ft-stat__label">Out</span>
+                            <p className="ft-stat__value is-out" style={{ fontSize: '0.95rem' }}>−{pesoWhole(fund.totalExpense)}</p>
+                          </div>
+                          <div>
+                            <span className="ft-stat__label">Records</span>
+                            <p className="ft-stat__value" style={{ fontSize: '0.95rem' }}>{fund.transactionCount ?? '—'}</p>
+                          </div>
+                        </div>
+
+                        <div className="ft-fundcard__foot">
+                          <button
+                            className="btn btn-secondary"
+                            style={{ width: '100%', borderRadius: '9999px', padding: '0.45rem', fontSize: '0.78rem' }}
+                            onClick={() => openFundTxModal(fund)}
+                          >
+                            View transactions
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+
+                {/* The general pot, shown alongside the earmarked ones so the
+                    numbers on this screen add up to the hero balance. */}
+                <article className="ft-fundcard" style={{ '--fund': 'var(--text-muted)' }}>
+                  <div className="ft-fundcard__accent" />
+                  <div className="ft-fundcard__body">
+                    <div className="ft-fundcard__head">
+                      <h3 className="ft-fundcard__name">Unallocated</h3>
+                    </div>
+                    <p className="ft-fundcard__desc">Money in the treasury that has not been earmarked to any fund.</p>
+                    <p className={`ft-fundcard__amount ${summary.unallocated < 0 ? 'is-negative' : ''}`}>
+                      {peso(summary.unallocated)}
+                    </p>
+                    <div className="ft-fundcard__split">
+                      <div>
+                        <span className="ft-stat__label">Share of balance</span>
+                        <p className="ft-stat__value" style={{ fontSize: '0.95rem' }}>
+                          {summary.currentBalance > 0
+                            ? `${Math.round((summary.unallocated / summary.currentBalance) * 100)}%`
+                            : '—'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="ft-fundcard__foot">
+                      <button
+                        className="btn btn-secondary"
+                        style={{ width: '100%', borderRadius: '9999px', padding: '0.45rem', fontSize: '0.78rem' }}
+                        onClick={() => { setFundFilter('UNASSIGNED'); setFilterType('ALL'); setActiveTab('overview'); }}
+                      >
+                        View transactions
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* ══ INSIGHTS ══ */}
+      {activeTab === 'insights' && (
+        <div className="ft-stack">
+          {loadingAnalytics && !analytics ? (
+            <section className="ft-panel"><SkeletonList rows={6} /></section>
+          ) : !analytics ? (
+            <section className="ft-panel">
+              <EmptyState icon={<ChartColumn size={26} />} title="No data yet" text="Insights appear once the ledger has a few months of activity." />
+            </section>
+          ) : (
+            <>
+              <section className="ft-panel">
+                <div className="ft-panel__head">
+                  <div>
+                    <h2 className="ft-panel__title"><ChartColumn size={18} /> Cash flow</h2>
+                    <p className="ft-panel__desc">Income against expenses, last {analytics.series.length} months</p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <span className="ft-legend__label"><span className="ft-legend__dot" style={{ background: 'var(--success)' }} /> In</span>
+                    <span className="ft-legend__label"><span className="ft-legend__dot" style={{ background: 'var(--danger)' }} /> Out</span>
+                  </div>
+                </div>
+
+                <div className="ft-bars">
+                  {analytics.series.map((s) => (
+                    <div key={`${s.year}-${s.month}`} className="ft-barcol">
+                      <div className="ft-barcol__pair">
+                        <div
+                          className="ft-bar ft-bar--in"
+                          style={{ height: `${(s.income / chartMax) * 100}%` }}
+                          title={`${MONTHS_SHORT[s.month - 1]} in: ${peso(s.income)}`}
+                        />
+                        <div
+                          className="ft-bar ft-bar--out"
+                          style={{ height: `${(s.expense / chartMax) * 100}%` }}
+                          title={`${MONTHS_SHORT[s.month - 1]} out: ${peso(s.expense)}`}
+                        />
+                      </div>
+                      <span className="ft-barcol__label">{MONTHS_SHORT[s.month - 1]}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <div className="ft-chartgrid">
+                <section className="ft-panel">
+                  <div className="ft-panel__head">
+                    <h2 className="ft-panel__title" style={{ fontSize: '1rem' }}>
+                      <Target size={16} /> By category
+                    </h2>
+                    <select className="ft-select" value={breakdownType} onChange={(e) => setBreakdownType(e.target.value)} aria-label="Breakdown type">
+                      <option value="EXPENSE">Expenses</option>
+                      <option value="INCOME">Income</option>
+                    </select>
+                  </div>
+
+                  {breakdown.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nothing recorded in this window.</p>
+                  ) : (
+                    <div className="ft-breakdown">
+                      {breakdown.map((row) => (
+                        <div key={row.category} className="ft-breakdown__row">
+                          <div className="ft-breakdown__head">
+                            <span className="ft-breakdown__name">{row.category}</span>
+                            <span className="ft-breakdown__value">{peso(row.total)} · {row.count}×</span>
+                          </div>
+                          <div className="ft-breakdown__track">
+                            <div
+                              className="ft-breakdown__fill"
+                              style={{
+                                width: `${row.pct}%`,
+                                background: breakdownType === 'INCOME' ? 'var(--success)' : 'var(--danger)',
+                              }}
+                            />
                           </div>
                         </div>
                       ))}
-                      
-                      <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.5rem' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <input type="text" placeholder="New roster member name..." value={newMemberName} onChange={e => setNewMemberName(e.target.value)} required style={{ ...inputStyle, padding: isMobile ? '0.35rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }} />
-                          <button type="submit" className="btn btn-primary" style={{ whiteSpace: 'nowrap', borderRadius: '0.75rem', padding: isMobile ? '0.35rem 0.75rem' : '0.5rem 1rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }}>{t('add_member')}</button>
-                        </div>
-                        {addError && <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: 0 }}>{addError}</p>}
-                      </form>
                     </div>
                   )}
-                </div>
-              )}
-            </div>
-          )}
+                </section>
 
-          {/* ── BUDGETS / DESIGNATED FUNDS TAB ── */}
-          {activeTab === 'budgets' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1.25rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <div>
-                  <h2 style={{ fontSize: isMobile ? '1rem' : '1.25rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Briefcase size={isMobile ? 16 : 20} style={{ color: 'var(--primary)' }} />
-                    Designated Funds
-                  </h2>
-                  <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.75rem' : '0.85rem', margin: '0.15rem 0 0' }}>Track and manage budgets for specific use cases.</p>
-                </div>
-                {isPrivileged && (
-                  <button onClick={() => openFundForm()} className="btn btn-primary" style={{ fontSize: isMobile ? '0.72rem' : '0.8rem', padding: isMobile ? '0.35rem 0.85rem' : '0.5rem 1.25rem', borderRadius: '9999px' }}>+ Create Budget</button>
-                )}
-              </div>
- 
-              {loadingFunds ? (
-                <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2.5rem 0', fontSize: '0.85rem' }}>{t('loading')}</p>
-              ) : designatedFunds.length === 0 ? (
-                <div style={{ 
-                  background: 'var(--surface)', 
-                  border: '1px solid var(--surface-border)', 
-                  borderRadius: isMobile ? '0.85rem' : '1.25rem', 
-                  padding: isMobile ? '2rem 1rem' : '3rem 1.5rem', 
-                  textAlign: 'center',
-                  backdropFilter: 'blur(16px)',
-                  boxShadow: 'var(--shadow-md)'
-                }}>
-                  <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>📊</div>
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.5rem' }}>No Budgets Yet</h3>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '1.25rem', maxWidth: '340px', margin: '0 auto 1.25rem', lineHeight: '1.4' }}>Designated funds let you allocate income to specific causes and track their balances automatically.</p>
-                  {isPrivileged && <button onClick={() => openFundForm()} className="btn btn-secondary" style={{ borderRadius: '9999px', padding: '0.4rem 1.25rem', fontSize: '0.8rem' }}>Set up a budget</button>}
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(260px, 1fr))' : 'repeat(auto-fill, minmax(320px, 1fr))', gap: isMobile ? '0.75rem' : '1.25rem' }}>
-                  {designatedFunds.map(fund => {
-                    const progress = fund.targetAmount > 0 ? Math.min(100, Math.max(0, (fund.currentBalance / fund.targetAmount) * 100)) : 0;
-                    return (
-                      <div key={fund._id} style={{ 
-                        background: 'var(--surface)', 
-                        border: '1px solid var(--surface-border)', 
-                        borderRadius: isMobile ? '0.85rem' : '1.25rem', 
-                        overflow: 'hidden', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        backdropFilter: 'blur(16px)',
-                        boxShadow: 'var(--shadow-md)',
-                        transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-                      }}>
-                        <div style={{ height: '5px', background: fund.color || '#3b82f6' }} />
-                        <div style={{ padding: isMobile ? '1rem' : '1.5rem', display: 'flex', flexDirection: 'column', flex: 1 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                            <h3 style={{ fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '700', color: 'var(--text-main)', margin: 0, wordBreak: 'break-word' }}>{fund.name}</h3>
-                            {isPrivileged && (
-                              <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
-                                <button onClick={() => openFundForm(fund)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.2rem', outline: 'none' }} title="Edit"><Pencil size={14} /></button>
-                              </div>
-                            )}
+                <section className="ft-panel">
+                  <div className="ft-panel__head">
+                    <h2 className="ft-panel__title" style={{ fontSize: '1rem' }}>
+                      <PiggyBank size={16} /> Where the balance sits
+                    </h2>
+                  </div>
+
+                  {allocation.total === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nothing to allocate yet.</p>
+                  ) : (
+                    <div className="ft-breakdown">
+                      {allocation.funds.map((f) => (
+                        <div key={f.name} className="ft-breakdown__row">
+                          <div className="ft-breakdown__head">
+                            <span className="ft-breakdown__name">{f.name}</span>
+                            <span className="ft-breakdown__value">
+                              {peso(f.value)} · {Math.round((f.value / allocation.total) * 100)}%
+                            </span>
                           </div>
-                          {fund.description && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: isMobile ? '0 0 0.75rem' : '0 0 1.25rem', lineHeight: '1.4' }}>{fund.description}</p>}
-                          
-                          <div style={{ marginTop: 'auto', paddingTop: '0.35rem' }}>
-                            <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.15rem' }}>Available Balance</p>
-                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem', marginBottom: isMobile ? '0.6rem' : '1rem' }}>
-                              <span style={{ fontSize: isMobile ? '1.35rem' : '1.75rem', fontWeight: '850', color: fund.currentBalance >= 0 ? fund.color || '#3b82f6' : '#ef4444', lineHeight: 1 }}>
-                                {fmt(fund.currentBalance)}
-                              </span>
-                              {fund.targetAmount > 0 && <span style={{ fontSize: isMobile ? '0.78rem' : '0.85rem', color: 'var(--text-muted)' }}>/ {fmt(fund.targetAmount)}</span>}
-                            </div>
-                            
-                            {fund.targetAmount > 0 && (
-                              <div style={{ marginBottom: isMobile ? '0.6rem' : '1rem' }}>
-                                <div style={{ height: '5px', background: 'rgba(255,255,255,0.05)', borderRadius: '99px', overflow: 'hidden' }}>
-                                  <div style={{ height: '100%', width: `${progress}%`, background: fund.color || '#3b82f6', transition: 'width 0.5s ease-out' }} />
-                                </div>
-                              </div>
-                            )}
- 
-                            <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid var(--border-color)', paddingTop: isMobile ? '0.5rem' : '0.75rem', marginBottom: '0.25rem' }}>
-                              <div style={{ flex: 1 }}>
-                                <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginBottom: '0.1rem', textTransform: 'uppercase' }}>Total In</p>
-                                <p style={{ fontSize: isMobile ? '0.78rem' : '0.85rem', fontWeight: '750', color: '#10b981' }}>+{fmt(fund.totalIncome)}</p>
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <p style={{ fontSize: '0.6rem', color: 'var(--text-muted)', marginBottom: '0.1rem', textTransform: 'uppercase' }}>Total Out</p>
-                                <p style={{ fontSize: isMobile ? '0.78rem' : '0.85rem', fontWeight: '750', color: '#ef4444' }}>-{fmt(fund.totalExpense)}</p>
-                              </div>
-                            </div>
-                            <button onClick={() => openFundTxModal(fund)} className="btn btn-secondary" style={{ width: '100%', marginTop: '0.5rem', padding: isMobile ? '0.35rem 0.85rem' : '0.45rem 1rem', borderRadius: '9999px', fontSize: isMobile ? '0.75rem' : '0.8rem', fontWeight: '600', background: 'transparent' }}>
-                              View Transactions
-                            </button>
+                          <div className="ft-breakdown__track">
+                            <div className="ft-breakdown__fill" style={{ width: `${(f.value / allocation.total) * 100}%`, background: f.color }} />
                           </div>
                         </div>
+                      ))}
+                      <div className="ft-breakdown__row">
+                        <div className="ft-breakdown__head">
+                          <span className="ft-breakdown__name">Unallocated</span>
+                          <span className="ft-breakdown__value">
+                            {peso(allocation.unallocated)} · {Math.round((allocation.unallocated / allocation.total) * 100)}%
+                          </span>
+                        </div>
+                        <div className="ft-breakdown__track">
+                          <div
+                            className="ft-breakdown__fill"
+                            style={{ width: `${(allocation.unallocated / allocation.total) * 100}%`, background: 'var(--text-muted)' }}
+                          />
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                    </div>
+                  )}
+                </section>
 
-      {/* Transaction Modal */}
-      {showForm && (() => {
-        const isIncome = formData.type === 'INCOME';
-        const accentColor = isIncome ? '#22c55e' : '#ef4444';
-        return (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
-            <div style={{ width: '100%', maxWidth: '520px', maxHeight: '95vh', background: 'var(--surface)', borderRadius: '1.25rem', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', border: '1px solid var(--surface-border)', backdropFilter: 'blur(16px)', display: 'flex', flexDirection: 'column' }}>
-
-              {/* Colored top accent bar */}
-              <div style={{ height: '4px', background: `linear-gradient(90deg, ${accentColor}, ${isIncome ? '#16a34a' : '#dc2626'})`, transition: 'background 0.3s', flexShrink: 0 }} />
-
-               {/* Header */}
-              <div style={{ padding: isMobile ? '1rem 1rem 0' : '1.5rem 1.5rem 0', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? '0.75rem' : '1.25rem' }}>
-                  <div>
-                    <h3 style={{ fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
-                      {editingId ? t('edit_transaction') : t('add_transaction')}
-                    </h3>
-                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>
-                      {editingId ? 'Update the transaction details below.' : 'Fill in the details to record a new transaction.'}
-                    </p>
+                <section className="ft-panel">
+                  <div className="ft-panel__head">
+                    <h2 className="ft-panel__title" style={{ fontSize: '1rem' }}>
+                      <Users size={16} /> Top dues contributors
+                    </h2>
                   </div>
-                  <button type="button" onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', lineHeight: 1, padding: '0.1rem 0.3rem', marginTop: '-0.1rem', outline: 'none' }}>✕</button>
-                </div>
+                  {topContributors.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No dues recorded yet.</p>
+                  ) : (
+                    <div>
+                      {topContributors.map((m, i) => (
+                        <div key={m.name} className="ft-rank">
+                          <span className="ft-rank__no">{i + 1}</span>
+                          <span className="ft-rank__name">{m.name}</span>
+                          <span className="ft-rank__value">{pesoWhole(m.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </section>
 
-                {/* Type toggle pills */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: isMobile ? '0.75rem' : '1.25rem' }}>
-                  {[{ val: 'INCOME', label: t('income'), icon: '↑', color: '#22c55e', bg: 'rgba(34,197,94,0.12)' }, { val: 'EXPENSE', label: t('expense'), icon: '↓', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' }].map(({ val, label, icon, color, bg }) => {
-                    const active = formData.type === val;
-                    return (
-                      <button key={val} type="button" onClick={() => handleInput({ target: { name: 'type', value: val } })} style={{ padding: isMobile ? '0.45rem' : '0.65rem', borderRadius: '9999px', border: `1.5px solid ${active ? color : 'var(--border-color)'}`, background: active ? bg : 'transparent', color: active ? color : 'var(--text-muted)', fontWeight: active ? '700' : '500', fontSize: isMobile ? '0.8rem' : '0.9rem', cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', outline: 'none' }}>
-                        <span style={{ fontWeight: '700' }}>{icon}</span>{label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-                <div style={{ padding: isMobile ? '0 1rem' : '0 1.5rem', display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-
-                  {/* Amount */}
-                  <div>
-                    <label style={labelStyle}>{t('amount')}</label>
-                    <div style={{ position: 'relative' }}>
-                      <span style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: accentColor, fontWeight: '700', fontSize: '1rem', pointerEvents: 'none', transition: 'color 0.3s' }}>₱</span>
-                      <input type="number" name="amount" value={formData.amount} onChange={handleInput} required min="0.01" step="0.01" placeholder="0.00" style={{ ...inputStyle, paddingLeft: '2rem', fontWeight: '600', fontSize: isMobile ? '0.95rem' : '1.05rem' }} />
+                <section className="ft-panel">
+                  <div className="ft-panel__head">
+                    <h2 className="ft-panel__title" style={{ fontSize: '1rem' }}>
+                      <Coins size={16} /> This month
+                    </h2>
+                  </div>
+                  <div className="ft-stats">
+                    <div className="ft-stat">
+                      <span className="ft-stat__label">Income</span>
+                      <p className="ft-stat__value is-in">{pesoWhole(summary.monthIncome)}</p>
+                    </div>
+                    <div className="ft-stat">
+                      <span className="ft-stat__label">Expenses</span>
+                      <p className="ft-stat__value is-out">{pesoWhole(summary.monthExpense)}</p>
+                    </div>
+                    <div className="ft-stat">
+                      <span className="ft-stat__label">Net</span>
+                      <p className={`ft-stat__value ${summary.monthNet >= 0 ? 'is-in' : 'is-out'}`}>
+                        {summary.monthNet >= 0 ? '+' : '−'}{pesoWhole(Math.abs(summary.monthNet))}
+                      </p>
+                      <p className="ft-stat__hint">
+                        Last month {summary.prevMonthNet >= 0 ? '+' : '−'}{pesoWhole(Math.abs(summary.prevMonthNet))}
+                      </p>
                     </div>
                   </div>
+                </section>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
-                  {/* Category */}
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                      <label style={labelStyle}>{t('category')}</label>
-                      {categories.length > 0 && !customCategory && (
-                        <button type="button" onClick={() => { setShowManageCategories(v => !v); setEditingCategory(null); }} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px', outline: 'none' }}>
-                          {showManageCategories ? 'Done' : <><Pencil size={11} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />Manage</>}
+      {/* ══════════════ MODALS ══════════════ */}
+
+      {/* Transaction form */}
+      {showForm && (() => {
+        const isIncome = formData.type === 'INCOME';
+        const accent = isIncome ? 'var(--success)' : 'var(--danger)';
+        return (
+          <Modal onClose={() => setShowForm(false)} accent={accent} titleId="ft-tx-title">
+            <div className="ft-modal__head">
+              <div>
+                <h3 className="ft-modal__title" id="ft-tx-title">
+                  {editingId ? (t('edit_transaction') || 'Edit transaction') : (t('add_transaction') || 'Add transaction')}
+                </h3>
+                <p className="ft-modal__sub">
+                  {editingId ? 'Update the details below.' : 'Record money moving in or out of the youth fund.'}
+                </p>
+              </div>
+              <button className="ft-iconbtn" onClick={() => setShowForm(false)} aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} style={{ display: 'contents' }}>
+              <div className="ft-modal__body">
+                <div className="ft-segment">
+                  {[
+                    { val: 'INCOME', label: t('income') || 'Income', cls: 'is-in', icon: <TrendingUp size={15} /> },
+                    { val: 'EXPENSE', label: t('expense') || 'Expense', cls: 'is-out', icon: <TrendingDown size={15} /> },
+                  ].map(({ val, label, cls, icon }) => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`ft-segment__btn ${cls} ${formData.type === val ? 'is-active' : ''}`}
+                      onClick={() => setFormData((f) => ({ ...f, type: val }))}
+                      aria-pressed={formData.type === val}
+                    >
+                      {icon} {label}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="ft-field">
+                  <span className="ft-field__label">{t('amount') || 'Amount'}</span>
+                  <div className="ft-amountfield">
+                    <span className="ft-amountfield__sign">₱</span>
+                    <input
+                      className="ft-input"
+                      type="number"
+                      name="amount"
+                      value={formData.amount}
+                      onChange={handleInput}
+                      required
+                      min="0.01"
+                      step="0.01"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </label>
+
+                <div className="ft-field">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span className="ft-field__label">{t('category') || 'Category'}</span>
+                    {categories.length > 0 && !customCategory && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowManageCategories((v) => !v); setEditingCategory(null); }}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700 }}
+                      >
+                        {showManageCategories ? 'Done' : 'Rename…'}
+                      </button>
+                    )}
+                  </div>
+
+                  {showManageCategories && !customCategory && (
+                    <div className="ft-scrollbox" style={{ marginBottom: '0.5rem' }}>
+                      {categories.map((cat) => (
+                        <div key={cat} className="ft-catrow">
+                          {editingCategory?.original === cat ? (
+                            <>
+                              <input
+                                autoFocus
+                                className="ft-input"
+                                style={{ flex: 1 }}
+                                value={editingCategory.draft}
+                                onChange={(e) => setEditingCategory((ec) => ({ ...ec, draft: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') { e.preventDefault(); handleRenameCategory(); }
+                                  if (e.key === 'Escape') setEditingCategory(null);
+                                }}
+                              />
+                              <button type="button" className="btn btn-primary" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem', borderRadius: '9999px' }} onClick={handleRenameCategory}>
+                                Save
+                              </button>
+                              <button type="button" className="ft-iconbtn" onClick={() => setEditingCategory(null)} aria-label="Cancel rename">
+                                <X size={14} />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <span className="ft-catrow__name">{cat}</span>
+                              <button type="button" className="ft-iconbtn" onClick={() => setEditingCategory({ original: cat, draft: cat })} title={`Rename ${cat}`}>
+                                <Pencil size={13} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!customCategory && categories.length > 0 ? (
+                    <select className="ft-select" style={{ width: '100%' }} name="category" value={formData.category} onChange={handleInput} required>
+                      {categories.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                      <option value="__CUSTOM__">+ New category…</option>
+                    </select>
+                  ) : (
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input
+                        className="ft-input"
+                        style={{ flex: 1 }}
+                        type="text"
+                        name="category"
+                        value={formData.category}
+                        onChange={(e) => setFormData((f) => ({ ...f, category: e.target.value }))}
+                        placeholder="e.g. Donations, Snacks"
+                        required
+                      />
+                      {categories.length > 0 && (
+                        <button type="button" className="btn btn-secondary" style={{ borderRadius: '0.75rem' }} onClick={() => setCustomCategory(false)}>
+                          Cancel
                         </button>
                       )}
                     </div>
-                    {showManageCategories && !customCategory && (
-                      <div style={{ background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', borderRadius: '0.75rem', padding: '0.5rem', marginBottom: '0.6rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', maxHeight: isMobile ? '100px' : '160px', overflowY: 'auto' }}>
-                        {categories.map(cat => (
-                          <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {editingCategory?.original === cat ? (
-                              <>
-                                <input autoFocus type="text" value={editingCategory.draft} onChange={e => setEditingCategory(ec => ({ ...ec, draft: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleRenameCategory(); } if (e.key === 'Escape') setEditingCategory(null); }} style={{ ...inputStyle, flex: 1, padding: '0.3rem 0.5rem', fontSize: '0.85rem' }} />
-                                <button type="button" onClick={handleRenameCategory} style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '9999px', padding: '0.25rem 0.6rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Save</button>
-                                <button type="button" onClick={() => setEditingCategory(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.78rem' }}>✕</button>
-                              </>
-                            ) : (
-                              <>
-                                <span style={{ flex: 1, fontSize: '0.85rem', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cat}</span>
-                                <button type="button" onClick={() => setEditingCategory({ original: cat, draft: cat })} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', padding: '0 0.2rem', flexShrink: 0 }} title={`Rename "${cat}"`}><Pencil size={13} /></button>
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {!customCategory && categories.length > 0 ? (
-                      <select name="category" value={formData.category} onChange={handleInput} required style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>
-                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                        <option value="__CUSTOM__">+ Add New Category</option>
-                      </select>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <input type="text" name="category" value={formData.category} onChange={e => setFormData(f => ({ ...f, category: e.target.value }))} placeholder="e.g. Donations, Food" required style={{ ...inputStyle, flex: 1, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
-                        {categories.length > 0 && <button type="button" onClick={() => setCustomCategory(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem' }}>Cancel</button>}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Designated Fund */}
-                  {designatedFunds.length > 0 && (
-                    <div>
-                      <label style={labelStyle}>Designated Fund <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
-                      <select name="designatedFund" value={formData.designatedFund} onChange={handleInput} style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>
-                        <option value="">-- No Designated Fund --</option>
-                        {designatedFunds.map(fund => (
-                          <option key={fund._id} value={fund._id}>{fund.name}</option>
-                        ))}
-                      </select>
-                    </div>
                   )}
-
-                  {/* Description */}
-                  <div>
-                    <label style={labelStyle}>{t('description')} <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
-                    <textarea name="description" value={formData.description} onChange={e => setFormData(f => ({ ...f, description: e.target.value }))} style={{ ...inputStyle, minHeight: isMobile ? '60px' : '80px', resize: 'vertical', padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} placeholder={`E.g. Registration fee\n- John\n- Jane`} />
-                  </div>
-
-                  {/* Date */}
-                  <div>
-                    <label style={labelStyle}>{t('date')}</label>
-                    <input type="date" name="date" value={formData.date} onChange={handleInput} required style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem', maxWidth: isMobile ? '160px' : '200px', display: 'block', boxSizing: 'border-box' }} />
-                  </div>
                 </div>
 
-                {/* Footer */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', padding: isMobile ? '0.75rem 1rem' : '1.25rem 1.5rem', marginTop: isMobile ? '0.75rem' : '1.25rem', borderTop: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.1)', flexShrink: 0 }}>
-                  <button type="button" onClick={() => setShowForm(false)} style={{ padding: isMobile ? '0.45rem 1.1rem' : '0.6rem 1.25rem', borderRadius: '9999px', border: '1px solid var(--border-color)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '600', fontSize: isMobile ? '0.8rem' : '0.9rem', outline: 'none' }}>{t('cancel')}</button>
-                  <button type="submit" style={{ padding: isMobile ? '0.45rem 1.35rem' : '0.6rem 1.5rem', borderRadius: '9999px', border: 'none', background: accentColor, color: 'white', cursor: 'pointer', fontWeight: '700', fontSize: isMobile ? '0.85rem' : '0.9rem', transition: 'background 0.3s', boxShadow: `0 4px 14px ${accentColor}55`, outline: 'none' }}>{t('save')}</button>
-                </div>
-              </form>
-            </div>
-          </div>
+                {designatedFunds.length > 0 && (
+                  <label className="ft-field">
+                    <span className="ft-field__label">Designated fund <span>(optional)</span></span>
+                    <select className="ft-select" name="designatedFund" value={formData.designatedFund} onChange={handleInput}>
+                      <option value="">Unassigned — general pot</option>
+                      {designatedFunds.map((f) => (
+                        <option key={f._id} value={f._id}>{f.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                <label className="ft-field">
+                  <span className="ft-field__label">{t('description') || 'Description'} <span>(optional)</span></span>
+                  <textarea
+                    className="ft-input"
+                    name="description"
+                    value={formData.description}
+                    onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
+                    placeholder={'E.g. Registration fee\n- John\n- Jane'}
+                  />
+                </label>
+
+                <label className="ft-field">
+                  <span className="ft-field__label">{t('date') || 'Date'}</span>
+                  <input className="ft-input" type="date" name="date" value={formData.date} onChange={handleInput} required style={{ maxWidth: '12rem' }} />
+                </label>
+              </div>
+
+              <div className="ft-modal__foot">
+                <button type="button" className="btn btn-secondary" style={{ borderRadius: '9999px' }} onClick={() => setShowForm(false)}>
+                  {t('cancel') || 'Cancel'}
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={saving}
+                  style={{ borderRadius: '9999px', background: accent, borderColor: 'transparent' }}
+                >
+                  {saving ? 'Saving…' : (t('save') || 'Save')}
+                </button>
+              </div>
+            </form>
+          </Modal>
         );
       })()}
- 
-      {/* Fellowship Modal */}
- 
+
+      {/* Fellowship expense */}
       {showFellowshipForm && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-          <div style={{ width: '100%', maxWidth: '560px', maxHeight: '95vh', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', padding: isMobile ? '1rem' : '1.5rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-lg)', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
-            <h3 style={{ fontSize: isMobile ? '1.15rem' : '1.35rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: isMobile ? '0.75rem' : '1.25rem' }}>Youth Fellowship Expense</h3>
-            <form onSubmit={handleFellowshipSubmit} style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem', overflowY: 'auto', overflowX: 'hidden' }}>
-              <div>
-                <label style={labelStyle}>Event Name</label>
-                <input type="text" value={fellowshipData.eventName} onChange={e => setFellowshipData(f => ({...f, eventName: e.target.value}))} placeholder="E.g. Binhi #Pru-Task" required style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
-              </div>
-              <div>
-                <label style={labelStyle}>Fee per Participant (₱)</label>
-                <input type="number" value={fellowshipData.fee} onChange={e => setFellowshipData(f => ({...f, fee: Number(e.target.value)}))} required min="1" style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
-              </div>
-              <div>
-                <label style={labelStyle}>{t('date')}</label>
-                <input type="date" value={fellowshipData.date} onChange={e => setFellowshipData(f => ({...f, date: e.target.value}))} required style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.5rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem', maxWidth: isMobile ? '160px' : '200px', display: 'block', boxSizing: 'border-box' }} />
-              </div>
-              <div>
-                <label style={labelStyle}>Select Participants from Roster ({fellowshipData.participants.length} selected)</label>
-                <div style={{ maxHeight: isMobile ? '100px' : '160px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '0.75rem', padding: '0.5rem', background: 'rgba(0,0,0,0.15)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                  {ledgerData.members.map(m => (
-                    <label key={m._id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', color: 'var(--text-main)' }}>
-                      <input type="checkbox" checked={fellowshipData.participants.includes(m._id)} onChange={() => toggleParticipant(m._id)} />
-                      {m.name}
-                    </label>
-                  ))}
-                  {ledgerData.members.length === 0 && <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>No members in roster.</span>}
-                </div>
-              </div>
-              <div>
-                <label style={labelStyle}>Additional / Guest Participants (Comma separated)</label>
-                <input type="text" value={fellowshipData.customParticipants} onChange={e => setFellowshipData(f => ({...f, customParticipants: e.target.value}))} placeholder="E.g. Guest 1, Mark, Anna's Friend" style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.5rem' }}>
-                <div style={{ fontWeight: '800', fontSize: isMobile ? '0.9rem' : '1rem', color: '#ef4444' }}>Total: ₱{fellowshipData.fee * (fellowshipData.participants.length + fellowshipData.customParticipants.split(',').map(s=>s.trim()).filter(Boolean).length)}</div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button type="button" onClick={() => setShowFellowshipForm(false)} className="btn btn-secondary" style={{ borderRadius: '9999px', padding: isMobile ? '0.4rem 1rem' : '0.5rem 1.25rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>{t('cancel')}</button>
-                  <button type="submit" className="btn btn-primary" style={{ borderRadius: '9999px', padding: isMobile ? '0.4rem 1rem' : '0.5rem 1.25rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }}>Submit</button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
- 
-      {/* Designated Fund Form Modal */}
-      {showFundForm && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
-          <div style={{ width: '100%', maxWidth: '560px', maxHeight: '95vh', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', boxShadow: '0 24px 60px rgba(0,0,0,0.4)', overflow: 'hidden', display: 'flex', flexDirection: 'column', backdropFilter: 'blur(16px)' }}>
-            <div style={{ height: '4px', background: fundData.color || '#3b82f6', transition: 'background 0.3s', flexShrink: 0 }} />
-            <div style={{ padding: isMobile ? '1rem 1rem 0' : '1.5rem 1.5rem 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: isMobile ? '0.75rem' : '1rem', flexShrink: 0 }}>
-              <div>
-                <h3 style={{ fontSize: isMobile ? '1.15rem' : '1.2rem', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
-                  {editingFundId ? 'Edit Designated Fund' : 'Create Designated Fund'}
-                </h3>
-                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>Configure a budget bucket based on transaction categories.</p>
-              </div>
-              <button type="button" onClick={() => setShowFundForm(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '0.1rem 0.3rem', outline: 'none' }}>✕</button>
+        <Modal onClose={() => setShowFellowshipForm(false)} size="ft-modal--lg" accent="var(--danger)" titleId="ft-fellow-title">
+          <div className="ft-modal__head">
+            <div>
+              <h3 className="ft-modal__title" id="ft-fellow-title">Fellowship expense</h3>
+              <p className="ft-modal__sub">Split one event fee across everyone who joined — the breakdown is written into the ledger for you.</p>
             </div>
-            
-            <form onSubmit={handleFundSubmit} style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', flex: 1 }}>
-              <div style={{ padding: isMobile ? '0 1rem 0.75rem' : '0 1.5rem 1rem', display: 'flex', flexDirection: 'column', gap: isMobile ? '0.75rem' : '1rem', flex: 1 }}>
-                <div>
-                  <label style={labelStyle}>Fund Name</label>
-                  <input type="text" value={fundData.name} onChange={e => setFundData(f => ({ ...f, name: e.target.value }))} required placeholder="e.g. Fellowship Fund" style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Description <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
-                  <textarea value={fundData.description} onChange={e => setFundData(f => ({ ...f, description: e.target.value }))} placeholder="What is this fund for?" style={{ ...inputStyle, minHeight: isMobile ? '50px' : '60px', resize: 'vertical', padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
-                </div>
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                  <div style={{ flex: 1 }}>
-                    <label style={labelStyle}>Target / Budget Goal <span style={{ color: 'var(--text-muted)', fontWeight: '400', fontSize: '0.8rem' }}>(Optional)</span></label>
-                    <input type="number" value={fundData.targetAmount} onChange={e => setFundData(f => ({ ...f, targetAmount: e.target.value }))} min="0" placeholder="0.00" style={{ ...inputStyle, padding: isMobile ? '0.45rem 0.65rem' : '0.5rem 0.75rem', fontSize: isMobile ? '0.8rem' : '0.9rem' }} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Color</label>
-                    <input type="color" value={fundData.color} onChange={e => setFundData(f => ({ ...f, color: e.target.value }))} style={{ width: '45px', height: isMobile ? '32px' : '38px', padding: 0, border: 'none', background: 'none', cursor: 'pointer' }} />
-                  </div>
-                </div>
-
-                {/* Auto-assign toggle */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: isMobile ? '0.6rem' : '0.75rem', background: 'rgba(0,0,0,0.15)', border: '1px solid var(--border-color)', borderRadius: '0.75rem', marginTop: '0.25rem' }}>
-                  <label style={{ position: 'relative', display: 'inline-block', width: '42px', height: '22px', flexShrink: 0, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={fundData.autoAssignWeeklyDues} onChange={e => setFundData(f => ({ ...f, autoAssignWeeklyDues: e.target.checked }))} style={{ opacity: 0, width: 0, height: 0 }} />
-                    <span style={{ position: 'absolute', cursor: 'pointer', inset: 0, background: fundData.autoAssignWeeklyDues ? (fundData.color || '#3b82f6') : '#94a3b8', borderRadius: '99px', transition: '0.3s' }}>
-                      <span style={{ position: 'absolute', content: '""', height: '16px', width: '16px', left: fundData.autoAssignWeeklyDues ? '22px' : '3px', bottom: '3px', background: 'white', borderRadius: '50%', transition: '0.3s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                    </span>
-                  </label>
-                  <div>
-                    <p style={{ fontSize: isMobile ? '0.8rem' : '0.85rem', fontWeight: '600', color: 'var(--text-main)', margin: 0 }}>Auto-assign Weekly Dues</p>
-                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: '0.15rem 0 0', lineHeight: 1.3 }}>Automatically link all new weekly dues payments to this budget.</p>
-                  </div>
-                </div>
-
-                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.4, marginTop: '0.25rem' }}>Any transactions manually assigned to this budget will also update its balance.</p>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', padding: isMobile ? '0.75rem 1rem' : '1.25rem 1.5rem', borderTop: '1px solid var(--surface-border)', background: 'rgba(0,0,0,0.1)', marginTop: 'auto', flexShrink: 0 }}>
-                {editingFundId ? (
-                  <button type="button" onClick={() => handleDeleteFund(editingFundId)} style={{ padding: isMobile ? '0.45rem 0.8rem' : '0.6rem 1rem', border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontWeight: '600', fontSize: isMobile ? '0.8rem' : '0.85rem', outline: 'none' }}>Delete</button>
-                ) : <div />}
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button type="button" onClick={() => setShowFundForm(false)} style={{ padding: isMobile ? '0.45rem 1.1rem' : '0.6rem 1.25rem', borderRadius: '9999px', border: '1px solid var(--border-color)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontWeight: '600', fontSize: isMobile ? '0.8rem' : '0.9rem', outline: 'none' }}>Cancel</button>
-                  <button type="submit" style={{ padding: isMobile ? '0.45rem 1.35rem' : '0.6rem 1.5rem', borderRadius: '9999px', border: 'none', background: fundData.color || 'var(--primary)', color: 'white', cursor: 'pointer', fontWeight: '700', fontSize: isMobile ? '0.85rem' : '0.9rem', boxShadow: `0 4px 14px ${fundData.color || 'var(--primary)'}55`, outline: 'none' }}>Save Budget</button>
-                </div>
-              </div>
-            </form>
+            <button className="ft-iconbtn" onClick={() => setShowFellowshipForm(false)} aria-label="Close">
+              <X size={18} />
+            </button>
           </div>
-        </div>
-      )}
- 
-      {fundTxModal.isOpen && fundTxModal.fund && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)' }}>
-          <div style={{ width: '100%', maxWidth: '600px', maxHeight: '95vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', backdropFilter: 'blur(16px)', boxShadow: '0 24px 60px rgba(0,0,0,0.4)' }}>
-            <div style={{ height: '4px', background: fundTxModal.fund.color || '#3b82f6', flexShrink: 0 }} />
-            <div style={{ padding: isMobile ? '0.85rem 1rem' : '1.25rem', borderBottom: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-              <div>
-                <h3 style={{ fontSize: isMobile ? '1.1rem' : '1.2rem', fontWeight: 'bold', color: 'var(--text-main)', margin: 0 }}>{fundTxModal.fund.name}</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', margin: '0.2rem 0 0' }}>Associated Transactions</p>
+
+          <form onSubmit={handleFellowshipSubmit} style={{ display: 'contents' }}>
+            <div className="ft-modal__body">
+              <label className="ft-field">
+                <span className="ft-field__label">Event name</span>
+                <input
+                  className="ft-input"
+                  type="text"
+                  value={fellowshipData.eventName}
+                  onChange={(e) => setFellowshipData((f) => ({ ...f, eventName: e.target.value }))}
+                  placeholder="E.g. Binhi #Pru-Task"
+                  required
+                />
+              </label>
+
+              <div className="ft-row">
+                <label className="ft-field">
+                  <span className="ft-field__label">Fee each (₱)</span>
+                  <input
+                    className="ft-input"
+                    type="number"
+                    min="1"
+                    value={fellowshipData.fee}
+                    onChange={(e) => setFellowshipData((f) => ({ ...f, fee: Number(e.target.value) }))}
+                    required
+                  />
+                </label>
+                <label className="ft-field">
+                  <span className="ft-field__label">{t('date') || 'Date'}</span>
+                  <input
+                    className="ft-input"
+                    type="date"
+                    value={fellowshipData.date}
+                    onChange={(e) => setFellowshipData((f) => ({ ...f, date: e.target.value }))}
+                    required
+                  />
+                </label>
               </div>
-              <button onClick={() => setFundTxModal({ ...fundTxModal, isOpen: false })} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '1.2rem', padding: '0.1rem 0.3rem', outline: 'none' }}>✕</button>
-            </div>
-            
-            <div style={{ padding: isMobile ? '0.75rem' : '1rem', overflowY: 'auto', flex: 1, background: 'transparent' }}>
-              {fundTxModal.loading ? (
-                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>Loading...</p>
-              ) : fundTxModal.transactions.length === 0 ? (
-                <p style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>No transactions found for this budget.</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {fundTxModal.transactions.map(tx => (
-                    <div key={tx._id} style={{ padding: isMobile ? '0.6rem' : '0.75rem', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-color)', borderRadius: '0.75rem', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <p style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: isMobile ? '0.85rem' : '0.9rem', margin: '0 0 0.25rem' }}>{tx.category}</p>
-                          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: 0 }}>{new Date(tx.date).toLocaleDateString()}</p>
-                        </div>
-                        <span style={{ fontWeight: '750', fontSize: isMobile ? '0.9rem' : '1rem', color: tx.type === 'INCOME' ? '#10b981' : '#ef4444' }}>
-                          {tx.type === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}
-                        </span>
-                      </div>
-                      {tx.description && <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.5rem 0 0', whiteSpace: 'pre-wrap', lineHeight: 1.4, background: 'rgba(0,0,0,0.15)', padding: '0.4rem 0.5rem', borderRadius: '4px' }}>{tx.description}</p>}
+
+              <div className="ft-field">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="ft-field__label">Participants <span>({fellowshipData.participants.length} selected)</span></span>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700 }}
+                      onClick={() => setFellowshipData((f) => ({ ...f, participants: ledgerData.members.map((m) => m._id) }))}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 700 }}
+                      onClick={() => setFellowshipData((f) => ({ ...f, participants: [] }))}
+                    >
+                      None
+                    </button>
+                  </div>
+                </div>
+                <div className="ft-scrollbox">
+                  {ledgerData.members.length === 0 ? (
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>No members in the roster yet.</p>
+                  ) : (
+                    <div className="ft-checkgrid">
+                      {ledgerData.members.map((m) => (
+                        <label key={m._id} className="ft-check">
+                          <input
+                            type="checkbox"
+                            checked={fellowshipData.participants.includes(m._id)}
+                            onChange={() => toggleParticipant(m._id)}
+                          />
+                          {m.name}
+                        </label>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
+              </div>
+
+              <label className="ft-field">
+                <span className="ft-field__label">Guests <span>(comma separated)</span></span>
+                <input
+                  className="ft-input"
+                  type="text"
+                  value={fellowshipData.customParticipants}
+                  onChange={(e) => setFellowshipData((f) => ({ ...f, customParticipants: e.target.value }))}
+                  placeholder="E.g. Mark, Anna's friend"
+                />
+              </label>
             </div>
-            
-            {fundTxModal.totalPages > 1 && (
-              <div style={{ padding: isMobile ? '0.6rem 1rem' : '1rem', borderTop: '1px solid var(--surface-border)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', flexShrink: 0, background: 'transparent' }}>
-                <button disabled={fundTxModal.page === 1} onClick={() => loadFundTxPage(fundTxModal.page - 1)} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', borderRadius: '9999px', opacity: fundTxModal.page === 1 ? 0.4 : 1 }}>‹</button>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Page {fundTxModal.page} of {fundTxModal.totalPages}</span>
-                <button disabled={fundTxModal.page === fundTxModal.totalPages} onClick={() => loadFundTxPage(fundTxModal.page + 1)} className="btn btn-secondary" style={{ padding: '0.3rem 0.6rem', borderRadius: '9999px', opacity: fundTxModal.page === fundTxModal.totalPages ? 0.4 : 1 }}>›</button>
+
+            <div className="ft-modal__foot ft-modal__foot--split">
+              <div>
+                <span className="ft-eyebrow">Total</span>
+                <p style={{ margin: 0, fontSize: '1.15rem', fontWeight: 900, color: 'var(--danger)' }}>
+                  {peso(fellowshipTotal)}
+                </p>
+                <p style={{ margin: 0, fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                  {fellowshipCount} participant{fellowshipCount === 1 ? '' : 's'}
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" className="btn btn-secondary" style={{ borderRadius: '9999px' }} onClick={() => setShowFellowshipForm(false)}>
+                  {t('cancel') || 'Cancel'}
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ borderRadius: '9999px' }}>
+                  Record expense
+                </button>
+              </div>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Designated fund form */}
+      {showFundForm && (
+        <Modal onClose={() => setShowFundForm(false)} accent={fundData.color || 'var(--primary)'} titleId="ft-fund-title">
+          <div className="ft-modal__head">
+            <div>
+              <h3 className="ft-modal__title" id="ft-fund-title">
+                {editingFundId ? 'Edit fund' : 'New designated fund'}
+              </h3>
+              <p className="ft-modal__sub">A fund is a labelled pocket of the treasury. Assign transactions to it and its balance keeps itself current.</p>
+            </div>
+            <button className="ft-iconbtn" onClick={() => setShowFundForm(false)} aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
+
+          <form onSubmit={handleFundSubmit} style={{ display: 'contents' }}>
+            <div className="ft-modal__body">
+              <label className="ft-field">
+                <span className="ft-field__label">Fund name</span>
+                <input
+                  className="ft-input"
+                  type="text"
+                  value={fundData.name}
+                  onChange={(e) => setFundData((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Camp Fund"
+                  required
+                />
+              </label>
+
+              <label className="ft-field">
+                <span className="ft-field__label">Description <span>(optional)</span></span>
+                <textarea
+                  className="ft-input"
+                  style={{ minHeight: '4rem' }}
+                  value={fundData.description}
+                  onChange={(e) => setFundData((f) => ({ ...f, description: e.target.value }))}
+                  placeholder="What is this fund for?"
+                />
+              </label>
+
+              <div className="ft-row">
+                <label className="ft-field">
+                  <span className="ft-field__label">Goal <span>(optional)</span></span>
+                  <input
+                    className="ft-input"
+                    type="number"
+                    min="0"
+                    value={fundData.targetAmount}
+                    onChange={(e) => setFundData((f) => ({ ...f, targetAmount: e.target.value }))}
+                    placeholder="0.00"
+                  />
+                </label>
+                <label className="ft-field" style={{ flex: '0 0 6rem' }}>
+                  <span className="ft-field__label">Colour</span>
+                  <input
+                    type="color"
+                    value={fundData.color}
+                    onChange={(e) => setFundData((f) => ({ ...f, color: e.target.value }))}
+                    style={{ width: '100%', height: '2.4rem', padding: 0, border: '1px solid var(--hairline)', borderRadius: 'var(--r-sm)', background: 'none', cursor: 'pointer' }}
+                    aria-label="Fund colour"
+                  />
+                </label>
+              </div>
+
+              <label className={`ft-switch ${fundData.autoAssignWeeklyDues ? 'is-on' : ''}`} style={{ '--accent': fundData.color }}>
+                <input
+                  type="checkbox"
+                  checked={fundData.autoAssignWeeklyDues}
+                  onChange={(e) => setFundData((f) => ({ ...f, autoAssignWeeklyDues: e.target.checked }))}
+                />
+                <span className="ft-switch__track"><span className="ft-switch__thumb" /></span>
+                <span className="ft-switch__text">
+                  <span className="ft-switch__title">Collect weekly dues here</span>
+                  <span className="ft-switch__hint">Every new dues payment is routed into this fund. Only one fund can hold this at a time.</span>
+                </span>
+              </label>
+
+              <p className="ft-note">
+                <Info size={14} />
+                <span>Deleting a fund never deletes money. Its transactions simply return to the unallocated pot.</span>
+              </p>
+            </div>
+
+            <div className="ft-modal__foot ft-modal__foot--split">
+              {editingFundId ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ borderRadius: '9999px', color: 'var(--danger)' }}
+                  onClick={() => handleDeleteFund({ _id: editingFundId, name: fundData.name })}
+                >
+                  <Trash2 size={15} /> Delete
+                </button>
+              ) : <span />}
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button type="button" className="btn btn-secondary" style={{ borderRadius: '9999px' }} onClick={() => setShowFundForm(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ borderRadius: '9999px', background: fundData.color, borderColor: 'transparent' }}>
+                  Save fund
+                </button>
+              </div>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Fund transactions */}
+      {fundTxModal.isOpen && fundTxModal.fund && (
+        <Modal
+          onClose={() => setFundTxModal({ isOpen: false, fund: null, transactions: [], loading: false, page: 1, totalPages: 1 })}
+          size="ft-modal--lg"
+          accent={fundTxModal.fund.color || 'var(--primary)'}
+          titleId="ft-fundtx-title"
+        >
+          <div className="ft-modal__head">
+            <div>
+              <h3 className="ft-modal__title" id="ft-fundtx-title">{fundTxModal.fund.name}</h3>
+              <p className="ft-modal__sub">
+                {peso(fundTxModal.fund.currentBalance)} available · {fundTxModal.fund.transactionCount ?? 0} records
+              </p>
+            </div>
+            <button
+              className="ft-iconbtn"
+              onClick={() => setFundTxModal({ isOpen: false, fund: null, transactions: [], loading: false, page: 1, totalPages: 1 })}
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="ft-modal__body">
+            {fundTxModal.loading ? (
+              <SkeletonList rows={5} />
+            ) : fundTxModal.transactions.length === 0 ? (
+              <EmptyState icon={<Coins size={24} />} title="No transactions" text="Nothing has been assigned to this fund yet." />
+            ) : (
+              <div className="ft-txlist" style={{ display: 'flex' }}>
+                {fundTxModal.transactions.map((tx) => (
+                  <article key={tx._id} className="ft-txcard">
+                    <div className="ft-txcard__top">
+                      <div style={{ minWidth: 0 }}>
+                        <h4 className="ft-txcard__title">{tx.category}</h4>
+                        <div className="ft-txcard__meta">
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                            {new Date(tx.date).toLocaleDateString()}
+                          </span>
+                          <span className={`ft-chip ${tx.type === 'INCOME' ? 'ft-chip--in' : 'ft-chip--out'}`}>
+                            {tx.type === 'INCOME' ? 'In' : 'Out'}
+                          </span>
+                        </div>
+                      </div>
+                      <span className={`ft-amount ${tx.type === 'INCOME' ? 'is-in' : 'is-out'}`}>
+                        {tx.type === 'INCOME' ? '+' : '−'}{peso(tx.amount)}
+                      </span>
+                    </div>
+                    {tx.description && <div className="ft-txcard__desc">{tx.description}</div>}
+                  </article>
+                ))}
               </div>
             )}
           </div>
-        </div>
-      )}
- 
-      {/* Link User Modal */}
-      {linkModal.isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)' }}>
-          <div style={{ width: '100%', maxWidth: '440px', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', padding: '1.5rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-lg)' }}>
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.25rem' }}>🔗 Link User to Roster Entry</h3>
-            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Connecting a user ensures their exact arrears amount is emailed to their account.</p>
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '0.75rem', padding: '0.6rem 0.85rem', marginBottom: '1rem', fontSize: '0.85rem', color: 'var(--text-main)' }}>
-              Roster entry: <strong>{linkModal.member?.name}</strong>
-              {linkModal.member?.linkedUser && <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>(currently linked to <strong>{linkModal.member.linkedUser.displayName}</strong>)</span>}
-            </div>
-            <input
-              autoFocus
-              type="text"
-              placeholder="Search by name..."
-              value={userSearchQuery}
-              onChange={e => setUserSearchQuery(e.target.value)}
-              style={{ ...inputStyle, marginBottom: '0.75rem' }}
-            />
-            <div style={{ minHeight: '80px', maxHeight: '220px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '0.75rem', background: 'rgba(0,0,0,0.15)' }}>
-              {searchingUsers ? (
-                <p style={{ padding: '1rem', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.85rem' }}>Searching…</p>
-              ) : userSearchResults.length === 0 ? (
-                <p style={{ padding: '1rem', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.85rem' }}>{userSearchQuery ? 'No users found.' : 'Start typing to search registered users.'}</p>
-              ) : userSearchResults.map(u => (
-                <button
-                  key={u._id}
-                  onClick={() => handleConfirmLink(u._id)}
-                  style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 0.85rem', background: 'none', border: 'none', borderBottom: '1px solid var(--border-color)', cursor: 'pointer', textAlign: 'left', outline: 'none' }}
-                >
-                  <span style={{ color: 'var(--text-main)', fontWeight: '600', fontSize: '0.9rem' }}>{u.displayName}</span>
-                  <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>{u.role}</span>
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
-              <button onClick={closeLinkModal} className="btn btn-secondary" style={{ borderRadius: '9999px' }}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
- 
-      {/* Alert Modal */}
-      {alertDialog.isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-          <div style={{ width: '100%', maxWidth: '400px', textAlign: 'center', padding: '2rem', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-lg)' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.75rem' }}>{alertDialog.title}</h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5', fontSize: '0.9rem' }}>{alertDialog.message}</p>
-            <button onClick={() => setAlertDialog({ ...alertDialog, isOpen: false })} className="btn btn-primary" style={{ width: '100%', borderRadius: '9999px' }}>OK</button>
-          </div>
-        </div>
-      )}
- 
-      {/* Confirm Modal */}
-      {confirmDialog.isOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}>
-          <div style={{ width: '100%', maxWidth: '400px', textAlign: 'center', padding: '2rem', background: 'var(--surface)', border: '1px solid var(--surface-border)', borderRadius: '1.25rem', backdropFilter: 'blur(16px)', boxShadow: 'var(--shadow-lg)' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: 'var(--text-main)', marginBottom: '0.75rem' }}>{confirmDialog.title}</h3>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: '1.5', fontSize: '0.9rem' }}>{confirmDialog.message}</p>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
-              <button onClick={() => setConfirmDialog({ ...confirmDialog, isOpen: false })} className="btn btn-secondary" style={{ flex: 1, borderRadius: '9999px' }}>Cancel</button>
-              <button 
-                onClick={() => {
-                  if (confirmDialog.onConfirm) confirmDialog.onConfirm();
-                  setConfirmDialog({ ...confirmDialog, isOpen: false });
-                }} 
-                className="btn btn-primary" 
-                style={{ flex: 1, backgroundColor: '#ef4444', borderRadius: '9999px' }}
-              >
-                Confirm
+
+          {fundTxModal.totalPages > 1 && (
+            <div className="ft-modal__foot" style={{ justifyContent: 'center' }}>
+              <button className="ft-pager__btn" disabled={fundTxModal.page === 1} onClick={() => loadFundTxPage(fundTxModal.page - 1)}>
+                <ChevronLeft size={14} />
+              </button>
+              <span className="ft-pager__info">Page {fundTxModal.page} of {fundTxModal.totalPages}</span>
+              <button className="ft-pager__btn" disabled={fundTxModal.page === fundTxModal.totalPages} onClick={() => loadFundTxPage(fundTxModal.page + 1)}>
+                <ChevronRight size={14} />
               </button>
             </div>
-          </div>
-        </div>
+          )}
+        </Modal>
       )}
 
+      {/* Link user */}
+      {linkModal.isOpen && (
+        <Modal onClose={closeLinkModal} size="ft-modal--sm" accent="var(--primary)" titleId="ft-link-title">
+          <div className="ft-modal__head">
+            <div>
+              <h3 className="ft-modal__title" id="ft-link-title">Link an account</h3>
+              <p className="ft-modal__sub">
+                Linking lets <strong>{linkModal.member?.name}</strong> receive their own dues statement by email.
+              </p>
+            </div>
+            <button className="ft-iconbtn" onClick={closeLinkModal} aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
+
+          <div className="ft-modal__body">
+            <div className="ft-search">
+              <Search size={15} />
+              <input
+                autoFocus
+                className="ft-input"
+                type="search"
+                value={userSearchQuery}
+                onChange={(e) => {
+                  setUserSearchQuery(e.target.value);
+                  if (!e.target.value.trim()) setUserSearchResults([]);
+                }}
+                placeholder="Search registered members…"
+                aria-label="Search users"
+              />
+            </div>
+
+            <div className="ft-scrollbox" style={{ padding: 0, maxHeight: '14rem' }}>
+              {searchingUsers ? (
+                <p style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>Searching…</p>
+              ) : userSearchResults.length === 0 ? (
+                <p style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>
+                  {userSearchQuery ? 'No accounts found.' : 'Start typing to search.'}
+                </p>
+              ) : (
+                userSearchResults.map((u) => (
+                  <button key={u._id} className="ft-userrow" onClick={() => handleConfirmLink(u._id)}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                      <span className="ft-avatar" aria-hidden="true">{initials(u.displayName)}</span>
+                      <span style={{ fontWeight: 700, color: 'var(--text-main)', fontSize: '0.85rem' }}>{u.displayName}</span>
+                    </span>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{u.role}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="ft-modal__foot">
+            <button className="btn btn-secondary" style={{ borderRadius: '9999px' }} onClick={closeLinkModal}>
+              Cancel
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Alert */}
+      {alertDialog.isOpen && (
+        <Modal onClose={closeAlert} size="ft-modal--sm" titleId="ft-alert-title">
+          <div className="ft-modal__body" style={{ padding: '2rem 1.5rem 1rem', textAlign: 'center' }}>
+            <h3 className="ft-modal__title" id="ft-alert-title">{alertDialog.title}</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5, margin: 0 }}>{alertDialog.message}</p>
+          </div>
+          <div className="ft-modal__foot">
+            <button autoFocus className="btn btn-primary" style={{ width: '100%', borderRadius: '9999px' }} onClick={closeAlert}>
+              OK
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Confirm */}
+      {confirmDialog.isOpen && (
+        <Modal onClose={closeConfirm} size="ft-modal--sm" accent="var(--danger)" titleId="ft-confirm-title">
+          <div className="ft-modal__body" style={{ padding: '1.75rem 1.5rem 1rem', textAlign: 'center' }}>
+            <h3 className="ft-modal__title" id="ft-confirm-title">{confirmDialog.title}</h3>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.88rem', lineHeight: 1.5, margin: 0 }}>{confirmDialog.message}</p>
+          </div>
+          <div className="ft-modal__foot">
+            <button className="btn btn-secondary" style={{ flex: 1, borderRadius: '9999px' }} onClick={closeConfirm}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-danger"
+              style={{ flex: 1, borderRadius: '9999px' }}
+              onClick={() => {
+                if (confirmDialog.onConfirm) confirmDialog.onConfirm();
+                closeConfirm();
+              }}
+            >
+              Confirm
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

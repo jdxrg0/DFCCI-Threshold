@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Sun } from 'lucide-react';
+import { Sun } from 'lucide-react';
 import api from '../api';
 import TimerButton from '../components/TimerButton';
 import useFormPersist from '../hooks/useFormPersist';
 import { useLanguage } from '../context/LanguageContext';
+import PageHeader from '../components/PageHeader';
 
 const SendAffirmation = () => {
   const [users, setUsers] = useState([]);
@@ -75,16 +76,11 @@ const SendAffirmation = () => {
 
   return (
     <div className="container" style={{ maxWidth: '620px' }}>
-      <div className="btn-back-wrapper">
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/affirm/dashboard')} className="btn-back-pill">
-          <ChevronLeft size={16} /> {t('back')}
-        </button>
-      </div>
-
       <div style={{ padding: 0 }}>
-        <h2 style={{ fontSize: '2.1rem', color: 'var(--text-main)', fontWeight: '850', margin: '0 0 1.5rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem', justifyContent: 'center', letterSpacing: '-0.03em' }}>
-          <Sun size={28} style={{ color: 'var(--primary)', flexShrink: 0 }} /> {t('send_shining_light')}
-        </h2>
+        <PageHeader
+          icon={Sun}
+          title={t('send_shining_light')}
+        />
 
         {/* Scripture quote */}
         <div className="ff-quote-glass" style={{ borderLeft: '4px solid var(--primary)', marginBottom: '2rem' }}>

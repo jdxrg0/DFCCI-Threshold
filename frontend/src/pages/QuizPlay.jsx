@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft, Play, Clock, Target, RotateCcw, Trophy, CheckCircle2, XCircle, ArrowRight, Gamepad2 } from 'lucide-react';
 import api from '../api';
 import { useLanguage } from '../context/LanguageContext';
@@ -70,7 +70,6 @@ const TimerRing = ({ timeLeft, maxTime }) => {
 // ── Main QuizPlay Component ─────────────────────────────────────────────────
 const QuizPlay = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { t } = useLanguage();
 
   // State machine: loading → preview → playing → submitting → results
@@ -253,11 +252,6 @@ const QuizPlay = () => {
     const totalTime = quiz.questions.reduce((sum, q) => sum + (q.timeLimit || 15), 0);
     return (
       <div className="container" style={{ maxWidth: '600px', padding: '2rem 1rem' }}>
-        <div className="btn-back-wrapper">
-          <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/games')} className="btn-back-pill">
-            <ChevronLeft size={16} /> {t('back')}
-          </button>
-        </div>
         <div className="games-card-glass" style={{ textAlign: 'center', padding: '3rem 2rem', borderLeft: 'none' }}>
           <div style={{ display: 'inline-flex', padding: '1.25rem', backgroundColor: 'color-mix(in srgb, var(--primary) 12%, transparent)', borderRadius: '50%', marginBottom: '1.5rem', boxShadow: '0 4px 20px color-mix(in srgb, var(--primary) 15%, transparent)' }}>
             <Gamepad2 size={42} style={{ color: 'var(--primary)' }} />

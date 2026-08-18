@@ -1,12 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, Plus, Trash2, X, MessageSquare, Clock, Link as LinkIcon, Edit2, Upload, List, Timer, ChevronRight, ChevronLeft, BookOpen, Key, Copy } from 'lucide-react';
+import {
+  Calendar, Plus, Trash2, X, MessageSquare, Clock, Link as LinkIcon, Edit2, List,
+  Timer, BookOpen, Key, Copy, Play, Eye, Search, Users, RotateCcw, CheckCircle2,
+  AlertTriangle, XCircle, Info, Send, Target, Zap, RefreshCw, Pause
+} from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../api';
-import { parseExcelSchedule, generateQueueFromAssignments } from '../utils/excelParser';
-import '../components/MessengerAutomation.css';
+import { generateQueueFromAssignments } from '../utils/excelParser';
 import MemberDirectory from '../components/MemberDirectory';
+import PopupModal from '../components/PopupModal';
+import PageHeader from '../components/PageHeader';
+import { useAuth } from '../context/AuthContext';
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Automation Hub — the admin console for scheduled Messenger dispatches.
 
+   Each schedule owns a GitHub Actions workflow file; the backend scheduler
+   fires that workflow on a UTC cron with a fully resolved message. This page
+   is where an admin answers the three operational questions:
+
+     1. Will it fire?     → status rail + per-card next-run countdown
+     2. What will it say? → the Preview action, resolved by the same backend
+                            code path the cron uses
+     3. Did it work?      → last-run state on the card, full history behind it
+
+   Times are entered and displayed in the browser's local zone and stored as
+   UTC crons, which is why every cron string round-trips through the helpers
+   below rather than being shown raw.
+   ────────────────────────────────────────────────────────────────────────── */
 
 const DAYS_OF_WEEK = [
   { value: 0, label: 'Sun' },
@@ -18,64 +40,318 @@ const DAYS_OF_WEEK = [
   { value: 6, label: 'Sat' }
 ];
 
-import PopupModal from '../components/PopupModal';
-import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+const DAY_PRESETS = [
+  { label: 'Weekdays', days: [1, 2, 3, 4, 5] },
+  { label: 'Weekend', days: [0, 6] },
+  { label: 'Every day', days: [0, 1, 2, 3, 4, 5, 6] }
+];
+
+/* Placeholders the backend replaces on every run, whatever the roles are. */
+const BUILTIN_TOKENS = ['Date', 'WeeklyCode'];
+
+const EMPTY_FORM = {
+  name: '',
+  targetUrl: '',
+  targetRole: '',
+  advanceWeeks: 1,
+  message: '',
+  time: '12:00',
+  selectedDays: [],
+  enableCodeBroadcast: false,
+  codeTime: '08:00',
+  codeSelectedDays: [],
+  codeTemplate: 'DFCCI-S-LU-{DATE}'
+};
+
+const LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+/* ── Cron helpers ─────────────────────────────────────────────────────────
+   The stored cron is always `m h * * d[,d…]` in UTC. Converting a local
+   weekday to UTC can shift the day, which is why the day set is rebuilt from
+   a real Date rather than by offsetting numbers. */
+
+const localToUtcCron = (timeString, localDays) => {
+  if (!timeString || !localDays || localDays.length === 0) return '';
+
+  const [hours, minutes] = timeString.split(':').map(Number);
+  const utcDays = new Set();
+  let utcHours = 0;
+  let utcMinutes = 0;
+
+  localDays.forEach(localDayOfWeek => {
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    date.setDate(date.getDate() + (localDayOfWeek - date.getDay()));
+
+    utcMinutes = date.getUTCMinutes();
+    utcHours = date.getUTCHours();
+    utcDays.add(date.getUTCDay());
+  });
+
+  return `${utcMinutes} ${utcHours} * * ${Array.from(utcDays).sort().join(',')}`;
+};
+
+const utcCronToLocal = (cronString) => {
+  const parts = (cronString || '').split(' ');
+  if (parts.length !== 5) return { time: '12:00', days: [] };
+
+  const utcMinutes = parseInt(parts[0], 10);
+  const utcHours = parseInt(parts[1], 10);
+  if (Number.isNaN(utcHours) || Number.isNaN(utcMinutes)) return { time: '12:00', days: [] };
+
+  const days = new Set();
+  let time = '';
+
+  parts[4].split(',').map(Number).forEach(utcDay => {
+    // 1 Jan 2023 was a Sunday, so +utcDay lands on the matching weekday.
+    const date = new Date(Date.UTC(2023, 0, 1 + utcDay, utcHours, utcMinutes));
+    days.add(date.getDay());
+    if (!time) {
+      time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    }
+  });
+
+  return { time: time || '12:00', days: Array.from(days).sort() };
+};
+
+const describeCron = (cronString) => {
+  const { time, days } = utcCronToLocal(cronString);
+  if (days.length === 0) return 'No schedule';
+
+  const [h, m] = time.split(':').map(Number);
+  const label = new Date(2023, 0, 1, h, m).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  let when;
+  if (days.length === 7) when = 'day';
+  else if (days.length === 2 && days.includes(0) && days.includes(6)) when = 'weekend';
+  else if (days.length === 5 && !days.includes(0) && !days.includes(6)) when = 'weekday';
+  else when = days.map(d => DAYS_OF_WEEK[d].label).join(', ');
+
+  return `Every ${when} at ${label}`;
+};
+
+const nextRunAt = (cronString, from = new Date()) => {
+  const parts = (cronString || '').split(' ');
+  if (parts.length !== 5) return null;
+
+  const utcMinutes = parseInt(parts[0], 10);
+  const utcHours = parseInt(parts[1], 10);
+  if (Number.isNaN(utcHours) || Number.isNaN(utcMinutes)) return null;
+
+  const utcDays = parts[4].split(',').map(Number);
+
+  for (let offset = 0; offset <= 7; offset++) {
+    const candidate = new Date(from);
+    candidate.setUTCDate(candidate.getUTCDate() + offset);
+    candidate.setUTCHours(utcHours, utcMinutes, 0, 0);
+    if (utcDays.includes(candidate.getUTCDay()) && candidate > from) return candidate;
+  }
+  return null;
+};
+
+const formatCountdown = (target, from = new Date()) => {
+  if (!target) return '';
+  const diff = target - from;
+  if (diff <= 0) return 'now';
+
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${mins}m`;
+  return `${mins}m`;
+};
+
+const countdownLabel = (target, from) => {
+  const value = formatCountdown(target, from);
+  return value === 'now' ? 'due now' : `in ${value}`;
+};
+
+const todayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const formatDateKey = (key) => {
+  if (!key) return '';
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1)
+    .toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+};
+
+const formatTimestamp = (value) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+
+/* ── Token helpers ───────────────────────────────────────────────────────── */
+
+const TOKEN_RE = /\{([^{}]+)\}/g;
+
+const tokensIn = (text) => {
+  const found = [];
+  let match;
+  TOKEN_RE.lastIndex = 0;
+  while ((match = TOKEN_RE.exec(text || '')) !== null) found.push(match[1].trim());
+  return found;
+};
+
+const isKnownToken = (token, knownRoles) => {
+  const needle = token.trim().toLowerCase();
+  if (BUILTIN_TOKENS.some(t => t.toLowerCase() === needle)) return true;
+  if (['date next sunday', 'date_next_sunday', 'date_today', 'date_tomorrow', 'name', 'role']
+    .includes(needle)) return true;
+  return knownRoles.some(role => role.toLowerCase() === needle);
+};
+
+/* Renders {Presider} as a chip so a typo'd tag is visible at a glance. */
+const renderWithTokens = (text, knownRoles) => {
+  const nodes = [];
+  let cursor = 0;
+  let match;
+  TOKEN_RE.lastIndex = 0;
+
+  while ((match = TOKEN_RE.exec(text || '')) !== null) {
+    if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
+    const known = isKnownToken(match[1], knownRoles);
+    nodes.push(
+      <span key={`${match.index}-${match[1]}`} className={`ah-token${known ? '' : ' is-unknown'}`}>
+        {match[0]}
+      </span>
+    );
+    cursor = match.index + match[0].length;
+  }
+
+  if (cursor < (text || '').length) nodes.push(text.slice(cursor));
+  return nodes;
+};
+
+/* Mirrors the substitution the scheduler performs, for the composer preview. */
+const resolveSample = (template, roles, dateKey, weeklyCode) => {
+  if (!template) return '';
+  let out = template;
+
+  if (dateKey) {
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const formatted = new Date(y, (m || 1) - 1, d || 1)
+      .toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' })
+      .toUpperCase();
+    out = out
+      .replace(/{Date Next Sunday}/gi, formatted)
+      .replace(/{DATE_NEXT_SUNDAY}/gi, formatted)
+      .replace(/{DATE_TOMORROW}/gi, formatted)
+      .replace(/{DATE_TODAY}/gi, formatted)
+      .replace(/{Date}/gi, formatted);
+  }
+
+  Object.keys(roles || {}).forEach(role => {
+    const safe = role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`{${safe}}`, 'gi'), roles[role]);
+  });
+
+  return out.replace(/{WeeklyCode}/gi, weeklyCode || 'DFCCI-S-LU-…');
+};
+
+/* ── Shared modal shell ──────────────────────────────────────────────────── */
+
+function Modal({ icon: Icon, title, subtitle, onClose, children, footer, size = '' }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      className="ah-overlay"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className={`ah-panel ${size}`} role="dialog" aria-modal="true" aria-label={title}>
+        <div className="ah-panel-head">
+          <div>
+            <h3>{Icon && <Icon size={20} />}{title}</h3>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+          <button type="button" className="ah-icon-btn" onClick={onClose} aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="ah-panel-body">{children}</div>
+        {footer && <div className="ah-panel-foot">{footer}</div>}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* A refresh in the middle of composing should not lose the draft. Read it once,
+   as initial state, rather than patching state in after the first render. */
+const readDraft = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('ma_draft') || 'null');
+    return parsed && parsed.isModalOpen ? parsed : null;
+  } catch {
+    return null; // a corrupt draft is not worth surfacing
+  }
+};
+
+/* ── Page ────────────────────────────────────────────────────────────────── */
 
 export default function AutomationDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   useEffect(() => {
-    if (user && user.role !== 'ADMIN') {
-      navigate('/dashboard');
-    }
+    if (user && user.role !== 'ADMIN') navigate('/dashboard');
   }, [user, navigate]);
 
-  const [popup, setPopup] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false, isPrompt: false, promptValue: '' });
-  const showAlert = (title, message) => setPopup({ isOpen: true, title, message, onConfirm: null, isAlert: true, isPrompt: false, promptValue: '' });
-  const showConfirm = (title, message, onConfirm) => setPopup({ isOpen: true, title, message, onConfirm, isAlert: false, isPrompt: false, promptValue: '' });
-  
-  const [showMembersModal, setShowMembersModal] = useState(false);
-
+  // ── Data ────────────────────────────────────────────────────────────────
   const [schedules, setSchedules] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  
-  // Form State
-  const [formData, setFormData] = useState({
-    name: '',
-    targetUrl: '',
-    targetRole: '',
-    advanceWeeks: 1,
-    message: '',
-    time: '12:00',
-    selectedDays: [],
-    enableCodeBroadcast: false,
-    codeTime: '08:00',
-    codeSelectedDays: [],
-    codeTemplate: 'DFCCI-S-LU-{DATE}'
-  });
-  const [messageQueue, setMessageQueue] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [assignments, setAssignments] = useState({});
-  const [members, setMembers] = useState([]);
-  const [isParsingExcel, setIsParsingExcel] = useState(false);
-  const [showQueueModal, setShowQueueModal] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [queueToView, setQueueToView] = useState([]);
-  const [queueEditingId, setQueueEditingId] = useState(null); // Used to patch an item
-
-  const [showCodeGenerator, setShowCodeGenerator] = useState(false);
   const [weeklyCodeConfig, setWeeklyCodeConfig] = useState(null);
-  
-  // Dispatch Form State
+
+  // ── Chrome ──────────────────────────────────────────────────────────────
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [now, setNow] = useState(() => new Date());
+  const [toasts, setToasts] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+  const [popup, setPopup] = useState({ isOpen: false, title: '', message: '', onConfirm: null, isAlert: false });
+
+  // ── Editor ──────────────────────────────────────────────────────────────
+  const [draft] = useState(readDraft);
+  const [isEditorOpen, setIsEditorOpen] = useState(Boolean(draft));
+  const [editingId, setEditingId] = useState(draft?.editingId || null);
+  const [formData, setFormData] = useState(draft ? { ...EMPTY_FORM, ...draft.formData } : EMPTY_FORM);
+  const [isRoleMode, setIsRoleMode] = useState(Boolean(draft?.isRoleMode));
+  // True when this schedule's per-date queue tracks the message template.
+  const [autoQueue, setAutoQueue] = useState(Boolean(draft?.autoQueue));
+  const [loadedQueue, setLoadedQueue] = useState(draft?.messageQueue || []);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const [queueFor, setQueueFor] = useState(null);      // schedule id
+  const [queueDraft, setQueueDraft] = useState([]);
+  const [queueSearch, setQueueSearch] = useState('');
+  const [queueTab, setQueueTab] = useState('upcoming');
+  const [openQueueDate, setOpenQueueDate] = useState(null);
+
+  const [runsFor, setRunsFor] = useState(null);        // schedule id
+  const [preview, setPreview] = useState(null);        // { schedule, data }
+  const [showCodePanel, setShowCodePanel] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
+
+  // Weekly-code panel form
+  const [codeTemplateDraft, setCodeTemplateDraft] = useState('DFCCI-S-LU-{DATE}');
   const [enableDispatch, setEnableDispatch] = useState(false);
   const [dispatchUrl, setDispatchUrl] = useState('');
   const [dispatchDay, setDispatchDay] = useState('0');
@@ -83,11 +359,42 @@ export default function AutomationDashboard() {
   const [dispatchMessage, setDispatchMessage] = useState('Here is the weekly code: {WeeklyCode}');
   const [isSavingDispatch, setIsSavingDispatch] = useState(false);
 
-  const fetchWeeklyCodeConfig = async () => {
+  const messageRef = useRef(null);
+
+  const showAlert = (title, message) =>
+    setPopup({ isOpen: true, title, message, onConfirm: null, isAlert: true });
+  const showConfirm = (title, message, onConfirm) =>
+    setPopup({ isOpen: true, title, message, onConfirm, isAlert: false });
+
+  const toast = useCallback((message, tone = 'info') => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setToasts(prev => [...prev, { id, message, tone }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5200);
+  }, []);
+
+  // Countdowns stay honest without hammering re-renders.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // ── Loading ─────────────────────────────────────────────────────────────
+  const fetchSchedules = useCallback(async () => {
+    try {
+      const res = await api.get('/automation/schedules');
+      setSchedules(Array.isArray(res.data) ? res.data : []);
+    } catch (error) {
+      console.error('Failed to load schedules', error);
+      toast('Could not load schedules.', 'error');
+    }
+  }, [toast]);
+
+  const fetchWeeklyCodeConfig = useCallback(async () => {
     try {
       const res = await api.get('/settings/weekly-code');
       setWeeklyCodeConfig(res.data);
       if (res.data) {
+        setCodeTemplateDraft(res.data.template || 'DFCCI-S-LU-{DATE}');
         setEnableDispatch(res.data.enableDispatch || false);
         setDispatchUrl(res.data.dispatchUrl || '');
         const cronParts = (res.data.dispatchCron || '0 13 * * 0').split(' ');
@@ -100,887 +407,1335 @@ export default function AutomationDashboard() {
     } catch (err) {
       console.error('Failed to fetch weekly code config:', err);
     }
-  };
-
-  const handleSaveDispatchConfig = async () => {
-    try {
-      setIsSavingDispatch(true);
-      const [hr, min] = dispatchTime.split(':');
-      const formattedCron = `${parseInt(min)} ${parseInt(hr)} * * ${dispatchDay}`;
-      
-      const res = await api.put('/settings/weekly-code', {
-        enableDispatch,
-        dispatchUrl,
-        dispatchCron: formattedCron,
-        dispatchMessage
-      });
-      setWeeklyCodeConfig(res.data);
-      showAlert('Success', 'Weekly Code Dispatch Configuration Saved!');
-    } catch (err) {
-      console.error('Failed to save config', err);
-      showAlert('Error', 'Failed to save configuration');
-    } finally {
-      setIsSavingDispatch(false);
-    }
-  };
-
-  useEffect(() => {
-    if (showCodeGenerator) {
-      fetchWeeklyCodeConfig();
-    }
-  }, [showCodeGenerator]);
-
-  useEffect(() => {
-    const fetchSchedules = async () => {
-      try {
-        const response = await api.get('/automation/schedules');
-        setSchedules(response.data);
-      } catch (error) {
-        console.error('Failed to load schedules', error);
-      }
-    };
-    fetchSchedules();
-
-    const fetchRoles = async () => {
-      try {
-        const res = await api.get('/calendar');
-        const rolesSet = new Set();
-        const assignmentsMap = {};
-        res.data.forEach(item => {
-          Object.keys(item.roles || {}).forEach(r => rolesSet.add(r));
-          if (Object.keys(item.roles || {}).length > 0) {
-            assignmentsMap[item.targetDate] = item.roles;
-          }
-        });
-        setAvailableRoles(Array.from(rolesSet));
-        setAssignments(assignmentsMap);
-      } catch (err) {
-        console.error('Failed to load roles', err);
-      }
-    };
-    fetchRoles();
-
-    const fetchMembers = async () => {
-      try {
-        const response = await api.get('/members');
-        setMembers(response.data);
-      } catch (error) {
-        console.error('Failed to load members', error);
-      }
-    };
-    fetchMembers();
-
-    // Restore draft if page refreshed
-    const savedDraft = localStorage.getItem('ma_draft');
-    if (savedDraft) {
-      try {
-        const parsed = JSON.parse(savedDraft);
-        if (parsed.isModalOpen) {
-          setFormData(parsed.formData);
-          setEditingId(parsed.editingId);
-          setMessageQueue(parsed.messageQueue || []);
-          setIsModalOpen(true);
-        }
-      } catch(e) {}
-    }
   }, []);
 
-  // Auto-save draft
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      setIsLoading(true);
+      await Promise.all([
+        fetchSchedules(),
+        fetchWeeklyCodeConfig(),
+        (async () => {
+          try {
+            const res = await api.get('/calendar');
+            if (cancelled) return;
+            const roles = new Set();
+            const map = {};
+            res.data.forEach(item => {
+              Object.keys(item.roles || {}).forEach(r => roles.add(r));
+              if (Object.keys(item.roles || {}).length > 0) map[item.targetDate] = item.roles;
+            });
+            setAvailableRoles(Array.from(roles));
+            setAssignments(map);
+          } catch (err) {
+            console.error('Failed to load roles', err);
+          }
+        })()
+      ]);
+      if (!cancelled) setIsLoading(false);
+    };
+
+    load();
+
+    return () => { cancelled = true; };
+  }, [fetchSchedules, fetchWeeklyCodeConfig]);
+
+  /* Role schedules rebuild their per-date queue from the serving calendar every
+     time the template changes, so it is derived rather than stored. */
+  const messageQueue = useMemo(() => {
+    if (!autoQueue) return loadedQueue;
+    if (!formData.message) return [];
+    return generateQueueFromAssignments(assignments, formData.message, formData.codeTemplate);
+  }, [autoQueue, loadedQueue, formData.message, formData.codeTemplate, assignments]);
+
+  // Auto-save the editor draft
   useEffect(() => {
     localStorage.setItem('ma_draft', JSON.stringify({
-      isModalOpen, formData, editingId, messageQueue
+      isModalOpen: isEditorOpen, formData, editingId, messageQueue, isRoleMode, autoQueue
     }));
-  }, [isModalOpen, formData, editingId, messageQueue]);
+  }, [isEditorOpen, formData, editingId, messageQueue, isRoleMode, autoQueue]);
 
-  // Auto-generate queue for advanced mode
-  useEffect(() => {
-    if (showAdvanced && formData.message && Object.keys(assignments).length > 0) {
-      const queue = generateQueueFromAssignments(assignments, formData.message, formData.codeTemplate);
-      setMessageQueue(queue);
-    } else if (showAdvanced && !formData.message) {
-      setMessageQueue([]);
+  // ── Derived state ───────────────────────────────────────────────────────
+  const today = todayKey();
+
+  const decorated = useMemo(() => schedules.map(schedule => {
+    const upcoming = (schedule.messageQueue || [])
+      .filter(q => !q.isSent && q.targetDate >= today)
+      .sort((a, b) => a.targetDate.localeCompare(b.targetDate));
+
+    return {
+      ...schedule,
+      isActive: schedule.isActive !== false,
+      nextRun: schedule.isActive === false ? null : nextRunAt(schedule.cronTime, now),
+      upcomingCount: upcoming.length,
+      nextItem: upcoming[0] || null
+    };
+  }), [schedules, now, today]);
+
+  const counts = useMemo(() => ({
+    all: decorated.length,
+    group: decorated.filter(s => !s.targetRole).length,
+    role: decorated.filter(s => s.targetRole).length,
+    paused: decorated.filter(s => !s.isActive).length
+  }), [decorated]);
+
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return decorated
+      .filter(s => {
+        if (filter === 'group' && s.targetRole) return false;
+        if (filter === 'role' && !s.targetRole) return false;
+        if (filter === 'paused' && s.isActive) return false;
+        if (!needle) return true;
+        return `${s.scheduleName} ${s.message} ${s.targetRole || ''}`.toLowerCase().includes(needle);
+      })
+      .sort((a, b) => {
+        if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+        if (a.nextRun && b.nextRun) return a.nextRun - b.nextRun;
+        if (a.nextRun) return -1;
+        if (b.nextRun) return 1;
+        return a.scheduleName.localeCompare(b.scheduleName);
+      });
+  }, [decorated, filter, search]);
+
+  const nextUp = useMemo(
+    () => decorated.filter(s => s.isActive && s.nextRun).sort((a, b) => a.nextRun - b.nextRun)[0] || null,
+    [decorated]
+  );
+
+  const queuedTotal = useMemo(
+    () => decorated.reduce((sum, s) => sum + s.upcomingCount, 0),
+    [decorated]
+  );
+
+  const sampleDate = useMemo(
+    () => Object.keys(assignments).filter(k => k >= today).sort()[0] || Object.keys(assignments).sort().pop() || '',
+    [assignments, today]
+  );
+
+  const unknownTokens = useMemo(
+    () => Array.from(new Set(tokensIn(formData.message).filter(t => !isKnownToken(t, availableRoles)))),
+    [formData.message, availableRoles]
+  );
+
+  const composerPreview = useMemo(
+    () => resolveSample(formData.message, assignments[sampleDate], sampleDate, weeklyCodeConfig?.currentCode),
+    [formData.message, assignments, sampleDate, weeklyCodeConfig]
+  );
+
+  // ── Editor ──────────────────────────────────────────────────────────────
+  const openEditor = (schedule = null) => {
+    if (schedule) {
+      const main = utcCronToLocal(schedule.cronTime);
+      const code = schedule.codeCronTime ? utcCronToLocal(schedule.codeCronTime) : { time: '08:00', days: [] };
+      setEditingId(schedule._id);
+      setFormData({
+        name: schedule.scheduleName,
+        targetUrl: schedule.chatUrl || '',
+        targetRole: schedule.targetRole || '',
+        advanceWeeks: schedule.advanceWeeks || 1,
+        message: schedule.message,
+        time: main.time,
+        selectedDays: main.days,
+        enableCodeBroadcast: schedule.enableCodeBroadcast || false,
+        codeTime: code.time,
+        codeSelectedDays: code.days,
+        codeTemplate: schedule.codeTemplate || 'DFCCI-S-LU-{DATE}'
+      });
+      setLoadedQueue(schedule.messageQueue || []);
+      setIsRoleMode(Boolean(schedule.targetRole));
+      setAutoQueue(Boolean(schedule.targetRole) || (schedule.messageQueue || []).length > 0);
+    } else {
+      setEditingId(null);
+      setFormData(EMPTY_FORM);
+      setLoadedQueue([]);
+      setIsRoleMode(false);
+      setAutoQueue(false);
     }
-  }, [showAdvanced, formData.message, formData.codeTemplate, assignments]);
-
-  const handleOpenModal = (mode = 'simple') => {
-    setIsModalOpen(true);
-    setShowAdvanced(mode === 'dynamic');
-    setEditingId(null);
-    setFormData({ name: '', targetUrl: '', targetRole: '', advanceWeeks: 1, message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
-    setMessageQueue([]);
+    setIsEditorOpen(true);
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
+  const closeEditor = () => {
+    setIsEditorOpen(false);
     setEditingId(null);
-    setFormData({ name: '', targetUrl: '', targetRole: '', advanceWeeks: 1, message: '', time: '12:00', selectedDays: [], enableCodeBroadcast: false, codeTime: '08:00', codeSelectedDays: [], codeTemplate: 'DFCCI-S-LU-{DATE}' });
-    setMessageQueue([]);
+    setFormData(EMPTY_FORM);
+    setLoadedQueue([]);
+    setIsRoleMode(false);
+    setAutoQueue(false);
   };
 
-  const handleToggleDay = (dayValue, isCodeSchedule = false) => {
+  const toggleDay = (dayValue, isCode = false) => {
     setFormData(prev => {
-      if (isCodeSchedule) {
-        return {
-          ...prev,
-          codeSelectedDays: prev.codeSelectedDays.includes(dayValue)
-            ? prev.codeSelectedDays.filter(d => d !== dayValue)
-            : [...prev.codeSelectedDays, dayValue]
-        };
-      }
+      const key = isCode ? 'codeSelectedDays' : 'selectedDays';
+      const current = prev[key];
       return {
         ...prev,
-        selectedDays: prev.selectedDays.includes(dayValue)
-          ? prev.selectedDays.filter(d => d !== dayValue)
-          : [...prev.selectedDays, dayValue]
+        [key]: current.includes(dayValue) ? current.filter(d => d !== dayValue) : [...current, dayValue]
       };
     });
   };
 
-  // Convert local time and day to UTC Cron
-  const convertLocalTimeToUTCCron = (timeString, localDays) => {
-    if (!timeString || localDays.length === 0) return '';
-    
-    const [hours, minutes] = timeString.split(':').map(Number);
-    
-    const utcDays = new Set();
-    let utcHours = 0;
-    let utcMinutes = 0;
-
-    localDays.forEach(localDayOfWeek => {
-      const date = new Date();
-      date.setHours(hours, minutes, 0, 0);
-      
-      const currentLocalDay = date.getDay();
-      const dayDifference = localDayOfWeek - currentLocalDay;
-      
-      date.setDate(date.getDate() + dayDifference);
-      
-      utcMinutes = date.getUTCMinutes();
-      utcHours = date.getUTCHours();
-      utcDays.add(date.getUTCDay());
-    });
-    
-    const sortedUtcDays = Array.from(utcDays).sort().join(',');
-    return `${utcMinutes} ${utcHours} * * ${sortedUtcDays}`;
-  };
-
-  // Convert UTC Cron back to human-readable Local time
-  const parseUTCCronToLocalString = (cronString) => {
-    if (!cronString) return 'Invalid Schedule';
-    const parts = cronString.split(' ');
-    if (parts.length !== 5) return cronString;
-    
-    const [minutes, hours, , , daysOfWeekStr] = parts;
-    const utcHours = parseInt(hours, 10);
-    const utcMinutes = parseInt(minutes, 10);
-    
-    if (isNaN(utcHours) || isNaN(utcMinutes)) return cronString;
-    
-    const utcDays = daysOfWeekStr.split(',').map(Number);
-    const localDaysSet = new Set();
-    
-    let localTimeStr = '';
-    
-    utcDays.forEach(utcDay => {
-      // Jan 1, 2023 was a Sunday (0). So Jan 1 + utcDay gives us the correct day of week in UTC.
-      const date = new Date(Date.UTC(2023, 0, 1 + utcDay, utcHours, utcMinutes));
-      localDaysSet.add(date.getDay());
-      // The local time is the same for all days
-      if (!localTimeStr) {
-        localTimeStr = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      }
-    });
-    
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const localDaysArray = Array.from(localDaysSet).sort();
-    
-    // Format the days string
-    let daysStr = '';
-    if (localDaysArray.length === 7) {
-      daysStr = 'Day';
-    } else if (localDaysArray.length === 2 && localDaysArray.includes(0) && localDaysArray.includes(6)) {
-      daysStr = 'Weekend';
-    } else if (localDaysArray.length === 5 && !localDaysArray.includes(0) && !localDaysArray.includes(6)) {
-      daysStr = 'Weekday';
-    } else {
-      daysStr = localDaysArray.map(d => dayNames[d]).join(', ');
+  const insertToken = (token) => {
+    const field = messageRef.current;
+    const snippet = `{${token}}`;
+    if (!field) {
+      setFormData(prev => ({ ...prev, message: `${prev.message}${snippet}` }));
+      return;
     }
-    
-    return `Every ${daysStr} at ${localTimeStr}`;
-  };
-
-  const getTimeUntilNextRun = (cronString) => {
-    try {
-      const parts = cronString.split(' ');
-      if (parts.length !== 5) return '';
-      const utcMinutes = parseInt(parts[0]);
-      const utcHours = parseInt(parts[1]);
-      const utcDays = parts[4].split(',').map(Number);
-      
-      const now = new Date();
-      let nextDate = null;
-      
-      for (let offset = 0; offset <= 7; offset++) {
-        const testDate = new Date(Date.now());
-        testDate.setUTCDate(testDate.getUTCDate() + offset);
-        testDate.setUTCHours(utcHours, utcMinutes, 0, 0);
-        
-        if (utcDays.includes(testDate.getUTCDay()) && testDate > now) {
-          nextDate = testDate;
-          break;
-        }
-      }
-      
-      if (!nextDate) return '';
-      
-      const diffMs = nextDate - now;
-      if (diffMs < 0) return 'Running soon...';
-      
-      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-      const diffHrs = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-      
-      if (diffDays > 0) return `Next in: ${diffDays}d ${diffHrs}h`;
-      if (diffHrs > 0) return `Next in: ${diffHrs}h ${diffMins}m`;
-      return `Next in: ${diffMins}m`;
-    } catch (err) {
-      return '';
-    }
-  };
-
-  const parseUTCCronToFormValues = (cronString) => {
-    const parts = cronString.split(' ');
-    if (parts.length !== 5) return { time: '12:00', selectedDays: [] };
-    
-    const [minutes, hours, , , daysOfWeekStr] = parts;
-    const utcHours = parseInt(hours, 10);
-    const utcMinutes = parseInt(minutes, 10);
-    
-    const utcDays = daysOfWeekStr.split(',').map(Number);
-    const localDaysSet = new Set();
-    
-    let localHoursStr = '';
-    let localMinutesStr = '';
-    
-    utcDays.forEach(utcDay => {
-      const date = new Date(Date.UTC(2023, 0, 1 + utcDay, utcHours, utcMinutes));
-      localDaysSet.add(date.getDay());
-      if (!localHoursStr) {
-        localHoursStr = date.getHours().toString().padStart(2, '0');
-        localMinutesStr = date.getMinutes().toString().padStart(2, '0');
-      }
+    const { selectionStart, selectionEnd, value } = field;
+    const next = `${value.slice(0, selectionStart)}${snippet}${value.slice(selectionEnd)}`;
+    setFormData(prev => ({ ...prev, message: next }));
+    requestAnimationFrame(() => {
+      field.focus();
+      const caret = selectionStart + snippet.length;
+      field.setSelectionRange(caret, caret);
     });
-    
-    return {
-      time: `${localHoursStr}:${localMinutesStr}`,
-      selectedDays: Array.from(localDaysSet)
-    };
-  };
-
-  const handleEdit = (schedule) => {
-    const { time, selectedDays } = parseUTCCronToFormValues(schedule.cronTime);
-    const codeScheduleForm = schedule.codeCronTime ? parseUTCCronToFormValues(schedule.codeCronTime) : { time: '08:00', selectedDays: [] };
-    
-    setEditingId(schedule._id);
-    setFormData({
-      name: schedule.scheduleName,
-      targetUrl: schedule.chatUrl || '',
-      targetRole: schedule.targetRole || '',
-      advanceWeeks: schedule.advanceWeeks || 1,
-      message: schedule.message,
-      time,
-      selectedDays,
-      enableCodeBroadcast: schedule.enableCodeBroadcast || false,
-      codeTime: codeScheduleForm.time,
-      codeSelectedDays: codeScheduleForm.selectedDays,
-      codeTemplate: schedule.codeTemplate || 'DFCCI-S-LU-{DATE}'
-    });
-    setMessageQueue(schedule.messageQueue || []);
-    setShowAdvanced((schedule.messageQueue && schedule.messageQueue.length > 0));
-    setIsModalOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (formData.selectedDays.length === 0) {
-      if (showAlert) showAlert('Validation Error', 'Please select at least one day for the schedule.');
+      showAlert('Pick a day', 'Choose at least one day for this schedule to run on.');
+      return;
+    }
+    if (formData.enableCodeBroadcast && formData.codeSelectedDays.length === 0) {
+      showAlert('Pick a day', 'Choose at least one day for the confirmation code broadcast.');
       return;
     }
 
-    const cronString = convertLocalTimeToUTCCron(formData.time, formData.selectedDays);
-    let codeCronString = '';
-    
-    if (formData.enableCodeBroadcast) {
-      if (formData.codeSelectedDays.length === 0) {
-        if (showAlert) showAlert('Validation Error', 'Please select at least one day for the Confirmation Code broadcast.');
-        return;
-      }
-      codeCronString = convertLocalTimeToUTCCron(formData.codeTime, formData.codeSelectedDays);
-    }
-    
     const payload = {
       scheduleName: formData.name,
-      cronTime: cronString,
-      codeCronTime: codeCronString,
+      cronTime: localToUtcCron(formData.time, formData.selectedDays),
+      codeCronTime: formData.enableCodeBroadcast
+        ? localToUtcCron(formData.codeTime, formData.codeSelectedDays)
+        : '',
       enableCodeBroadcast: formData.enableCodeBroadcast,
       codeTemplate: formData.codeTemplate,
       chatUrl: formData.targetUrl,
-      targetRole: showAdvanced ? formData.targetRole : '',
-      advanceWeeks: showAdvanced ? parseInt(formData.advanceWeeks, 10) : 1,
+      targetRole: isRoleMode ? formData.targetRole : '',
+      advanceWeeks: isRoleMode ? parseInt(formData.advanceWeeks, 10) : 1,
       message: formData.message,
-      messageQueue: messageQueue
+      messageQueue
     };
 
     try {
+      setIsSaving(true);
       if (editingId) {
-        const response = await api.put(`/automation/schedule/${editingId}`, payload);
-        const updatedSchedule = response.data.data;
-        const currentSchedules = Array.isArray(schedules) ? schedules : [];
-        setSchedules(currentSchedules.map(s => s._id === editingId ? updatedSchedule : s));
+        const res = await api.put(`/automation/schedule/${editingId}`, payload);
+        setSchedules(prev => prev.map(s => (s._id === editingId ? res.data.data : s)));
+        toast('Schedule updated.', 'success');
       } else {
-        const response = await api.post('/automation/schedule', payload);
-        const newSchedule = response.data.data;
-        setSchedules([newSchedule, ...(Array.isArray(schedules) ? schedules : [])]);
+        const res = await api.post('/automation/schedule', payload);
+        setSchedules(prev => [res.data.data, ...prev]);
+        toast('Schedule created.', 'success');
       }
-      
-      handleCloseModal();
-      
+      closeEditor();
     } catch (error) {
-      const errDetails = error.response?.data?.msg || error.response?.data?.error || error.message;
-      console.error('Failed to create automation:', error.response?.data || error.message);
-      if (showAlert) showAlert('Error', `Error scheduling reminder: ${errDetails}`);
+      const detail = error.response?.data?.msg || error.response?.data?.error || error.message;
+      console.error('Failed to save automation:', error.response?.data || error.message);
+      showAlert('Could not save', detail);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const handleDelete = (id) => {
-    if (!showConfirm) return;
-    
+  // ── Card actions ────────────────────────────────────────────────────────
+  const handleToggleActive = async (schedule) => {
+    const next = !schedule.isActive;
+    setBusyId(schedule._id);
+    try {
+      const res = await api.patch(`/automation/schedule/${schedule._id}/active`, { isActive: next });
+      setSchedules(prev => prev.map(s => (s._id === schedule._id ? res.data.data : s)));
+      toast(next ? `"${schedule.scheduleName}" resumed.` : `"${schedule.scheduleName}" paused.`, next ? 'success' : 'warning');
+    } catch (error) {
+      toast(error.response?.data?.msg || 'Could not change the schedule state.', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handlePreview = async (schedule) => {
+    setBusyId(schedule._id);
+    try {
+      const res = await api.post(`/automation/schedule/${schedule._id}/run`, { actionType: 'MAIN', dryRun: true });
+      setPreview({ schedule, data: res.data.data });
+    } catch (error) {
+      toast(error.response?.data?.msg || 'Could not resolve a preview.', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleRunNow = (schedule) => {
     showConfirm(
-      'Delete Schedule',
-      'Are you sure you want to delete this scheduled reminder? It will be removed from the database and GitHub.',
+      'Send now?',
+      `This dispatches "${schedule.scheduleName}" immediately — real messages, right now. Preview it first if you are unsure.`,
       async () => {
+        setBusyId(schedule._id);
         try {
-          await api.delete(`/automation/schedule/${id}`);
-          setSchedules(schedules.filter(s => s._id !== id));
+          const res = await api.post(`/automation/schedule/${schedule._id}/run`, { actionType: 'MAIN' });
+          const { result, schedule: updated } = res.data.data;
+          if (updated) setSchedules(prev => prev.map(s => (s._id === schedule._id ? updated : s)));
+          toast(
+            result.ok ? `Dispatched — ${result.detail}` : `Nothing sent: ${result.detail}`,
+            result.ok ? 'success' : 'warning'
+          );
         } catch (error) {
-          console.error('Failed to delete schedule', error);
-          if (showAlert) showAlert('Error', 'Failed to delete schedule.');
+          toast(error.response?.data?.msg || 'The run failed.', 'error');
+        } finally {
+          setBusyId(null);
         }
       }
     );
   };
 
+  const handleDuplicate = async (schedule) => {
+    setBusyId(schedule._id);
+    try {
+      const res = await api.post(`/automation/schedule/${schedule._id}/duplicate`);
+      setSchedules(prev => [res.data.data, ...prev]);
+      toast('Copy created — it starts paused so nothing double-sends.', 'success');
+    } catch (error) {
+      toast(error.response?.data?.msg || 'Could not duplicate the schedule.', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleDelete = (schedule) => {
+    showConfirm(
+      'Delete schedule',
+      `"${schedule.scheduleName}" will be removed from the database and its GitHub workflow deleted. Pause it instead if you only want to stop it for now.`,
+      async () => {
+        try {
+          await api.delete(`/automation/schedule/${schedule._id}`);
+          setSchedules(prev => prev.filter(s => s._id !== schedule._id));
+          toast('Schedule deleted.', 'success');
+        } catch {
+          toast('Failed to delete the schedule.', 'error');
+        }
+      }
+    );
+  };
+
+  const openQueue = (schedule) => {
+    setQueueFor(schedule._id);
+    setQueueDraft((schedule.messageQueue || []).map(q => ({ ...q })));
+    setQueueSearch('');
+    setQueueTab('upcoming');
+    setOpenQueueDate(null);
+  };
+
+  const saveQueueItem = async (item) => {
+    try {
+      await api.patch(`/automation/schedule/${queueFor}/queue`, {
+        targetDate: item.targetDate,
+        messageText: item.messageText,
+        overrideChatUrl: item.overrideChatUrl
+      });
+      setSchedules(prev => prev.map(s => {
+        if (s._id !== queueFor) return s;
+        const queue = (s.messageQueue || []).map(q =>
+          q.targetDate === item.targetDate
+            ? { ...q, messageText: item.messageText, overrideChatUrl: item.overrideChatUrl }
+            : q
+        );
+        return { ...s, messageQueue: queue };
+      }));
+      toast(`${formatDateKey(item.targetDate)} saved.`, 'success');
+    } catch {
+      toast('Could not save that queue item.', 'error');
+    }
+  };
+
+  const copyToClipboard = (value, label = 'Copied') => {
+    navigator.clipboard?.writeText(value);
+    toast(`${label} copied to clipboard.`, 'success');
+  };
+
+  // ── Weekly code panel ───────────────────────────────────────────────────
+  const saveWeeklyCode = async (options = {}) => {
+    try {
+      setIsSavingDispatch(true);
+      const [hr, min] = dispatchTime.split(':');
+      const res = await api.put('/settings/weekly-code', {
+        template: codeTemplateDraft,
+        enableDispatch,
+        dispatchUrl,
+        dispatchCron: `${parseInt(min, 10)} ${parseInt(hr, 10)} * * ${dispatchDay}`,
+        dispatchMessage,
+        ...options
+      });
+      setWeeklyCodeConfig(res.data);
+      toast(options.forceGenerate ? `New code: ${res.data.currentCode}` : 'Weekly code settings saved.', 'success');
+    } catch {
+      toast('Could not save the weekly code settings.', 'error');
+    } finally {
+      setIsSavingDispatch(false);
+    }
+  };
+
+  // ── Render pieces ───────────────────────────────────────────────────────
+  const queueSchedule = decorated.find(s => s._id === queueFor);
+  const runsSchedule = decorated.find(s => s._id === runsFor);
+
+  const filteredQueue = useMemo(() => {
+    const needle = queueSearch.trim().toLowerCase();
+    return queueDraft
+      .filter(q => (queueTab === 'upcoming' ? q.targetDate >= today : q.targetDate < today))
+      .filter(q => !needle
+        || q.targetDate.includes(needle)
+        || (q.messageText || '').toLowerCase().includes(needle)
+        || Object.values(q.parsedRoles || {}).some(v => String(v).toLowerCase().includes(needle)))
+      .sort((a, b) => (queueTab === 'upcoming'
+        ? a.targetDate.localeCompare(b.targetDate)
+        : b.targetDate.localeCompare(a.targetDate)));
+  }, [queueDraft, queueTab, queueSearch, today]);
+
+  const runRows = useMemo(
+    () => [...(runsSchedule?.runHistory || [])].sort((a, b) => new Date(b.at) - new Date(a.at)),
+    [runsSchedule]
+  );
+
   return (
-    <div className="container" style={{ maxWidth: '1100px', padding: isMobile ? '0.5rem 0.35rem 5rem' : '1rem 0.5rem' }}>
-      
-      {/* ── Back Button & Help ── */}
-      <div style={{ marginBottom: isMobile ? '0.4rem' : '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="back-btn" style={{ padding: isMobile ? '0.3rem 0.6rem' : '0.4rem 0.8rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }}>
-          <ChevronLeft size={isMobile ? 15 : 18} /> Back
-        </button>
-        <Link to="/docs/automation-hub" className="back-btn" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem', padding: isMobile ? '0.3rem 0.6rem' : '0.4rem 0.8rem', fontSize: isMobile ? '0.78rem' : '0.85rem' }} title="Help & Documentation">
-          <BookOpen size={isMobile ? 14 : 16} /> Docs
-        </Link>
-      </div>
-
-      {/* ── Header Row ── */}
-      <div style={{ marginBottom: isMobile ? '0.85rem' : '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.15rem' }}>
-        <h1 className="text-gradient text-hero" style={{ fontSize: isMobile ? '1.4rem' : '1.75rem', margin: 0, lineHeight: 1.1, textAlign: 'center' }}>
-          Automation Hub
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: isMobile ? '0.75rem' : '0.85rem', margin: 0, textAlign: 'center' }}>
-          Manage scheduled group messages and personalized role reminders.
-        </p>
-      </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={() => navigate('/automation-hub/calendar')}>
-              <Calendar size={18} />
-              Serving Calendar
+    <div className="ah-shell">
+      <PageHeader
+        className="ah-page-header"
+        icon={Zap}
+        title="Automation Hub"
+        subtitle="Scheduled group messages and personalised role reminders, with every dispatch resolved from the serving calendar."
+        actions={
+          <>
+            <Link to="/docs/automation-hub" className="btn btn-secondary page-header-btn-icon" title="Help & documentation">
+              <BookOpen size={18} />
+            </Link>
+            <button type="button" className="btn btn-secondary page-header-btn" onClick={() => navigate('/automation-hub/calendar')}>
+              <Calendar size={16} /> Calendar
             </button>
-            <button className="btn btn-primary" onClick={() => handleOpenModal('simple')}>
-              <Plus size={18} />
-              Add Schedule
+            <button type="button" className="btn btn-primary page-header-btn" onClick={() => openEditor()}>
+              <Plus size={16} /> New schedule
             </button>
-          </div>
+          </>
+        }
+      />
 
-      {schedules.length === 0 ? (
-        <div className="ma-empty-state card">
-          <Calendar size={48} style={{ color: 'var(--border-color)' }} />
-          <h3>No reminders scheduled</h3>
-          <p>Create your first automated reminder to keep the community engaged.</p>
-          <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button className="btn btn-primary" onClick={() => handleOpenModal('simple')}>
-               <Plus size={18} /> Create Schedule
+      {/* ── Status rail ── */}
+      <div className="ah-stats">
+        <div className="ah-stat">
+          <span className="ah-stat-head"><Send size={13} /> Running</span>
+          <span className="ah-stat-value">{counts.all - counts.paused}<span className="ah-stat-total">{` / ${counts.all}`}</span></span>
+          <span className="ah-stat-foot">{counts.paused > 0 ? `${counts.paused} paused` : 'All schedules active'}</span>
+        </div>
+
+        <div className="ah-stat">
+          <span className="ah-stat-head"><Timer size={13} /> Next dispatch</span>
+          <span className="ah-stat-value">{nextUp ? formatCountdown(nextUp.nextRun, now) : '—'}</span>
+          <span className="ah-stat-foot">{nextUp ? nextUp.scheduleName : 'Nothing scheduled'}</span>
+        </div>
+
+        <div className="ah-stat">
+          <span className="ah-stat-head"><List size={13} /> Queued lineups</span>
+          <span className="ah-stat-value">{queuedTotal}</span>
+          <span className="ah-stat-foot">{availableRoles.length} role{availableRoles.length === 1 ? '' : 's'} on the calendar</span>
+        </div>
+
+        <div className="ah-stat">
+          <span className="ah-stat-head"><Key size={13} /> Weekly code</span>
+          <span className="ah-stat-value is-code">{weeklyCodeConfig?.currentCode || '—'}</span>
+          <span className="ah-stat-foot">
+            {weeklyCodeConfig?.lastGeneratedDate
+              ? `Generated ${formatTimestamp(weeklyCodeConfig.lastGeneratedDate)}`
+              : 'Regenerates every Sunday'}
+          </span>
+          <div className="ah-stat-action">
+            <button
+              type="button"
+              className="ah-icon-btn"
+              title="Weekly code settings"
+              onClick={() => setShowCodePanel(true)}
+            >
+              <Edit2 size={14} />
             </button>
           </div>
         </div>
+      </div>
+
+      {/* ── Toolbar ── */}
+      <div className="ah-toolbar">
+        <div className="ah-search">
+          <Search size={16} />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search schedules, roles or message text…"
+            aria-label="Search schedules"
+          />
+        </div>
+
+        <div className="ah-segment" role="tablist" aria-label="Filter schedules">
+          {[
+            { key: 'all', label: 'All', count: counts.all },
+            { key: 'group', label: 'Group chat', count: counts.group },
+            { key: 'role', label: 'Role', count: counts.role },
+            { key: 'paused', label: 'Paused', count: counts.paused }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={filter === tab.key}
+              className={`ah-segment-btn${filter === tab.key ? ' is-active' : ''}`}
+              onClick={() => setFilter(tab.key)}
+            >
+              {tab.label}
+              <span className="ah-segment-count">{tab.count}</span>
+            </button>
+          ))}
+        </div>
+
+        <button type="button" className="btn btn-secondary" onClick={() => setShowMembers(true)}>
+          <Users size={16} /> Members
+        </button>
+      </div>
+
+      {/* ── Schedules ── */}
+      {isLoading ? (
+        <div className="ah-grid">
+          {[0, 1, 2].map(i => <div key={i} className="ah-skeleton" />)}
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="ah-empty">
+          <div className="ah-empty-icon"><Calendar size={28} /></div>
+          <h3>{schedules.length === 0 ? 'No schedules yet' : 'Nothing matches that filter'}</h3>
+          <p>
+            {schedules.length === 0
+              ? 'Create a schedule to send a recurring group message, or to nudge whoever is assigned to a role on the serving calendar.'
+              : 'Try a different search term, or switch back to All.'}
+          </p>
+          {schedules.length === 0
+            ? <button type="button" className="btn btn-primary" onClick={() => openEditor()}><Plus size={16} /> Create schedule</button>
+            : <button type="button" className="btn btn-secondary" onClick={() => { setSearch(''); setFilter('all'); }}>Clear filters</button>}
+        </div>
       ) : (
-        <div className="ma-grid">
-          {(Array.isArray(schedules) ? schedules : []).map(schedule => (
-            <div key={schedule._id} className="card ma-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border-color)', borderRadius: '1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                  <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '800', color: 'var(--text-main)' }}>{schedule.scheduleName}</h3>
-                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '0.2rem' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'var(--primary-glow)', color: 'var(--primary)', padding: '0.15rem 0.5rem', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: '700' }}>
-                      <Clock size={12} />
-                      {parseUTCCronToLocalString(schedule.cronTime)}
+        <div className="ah-grid">
+          {visible.map(schedule => {
+            const busy = busyId === schedule._id;
+            const last = schedule.lastRun;
+            return (
+              <article key={schedule._id} className={`ah-card${schedule.isActive ? '' : ' is-paused'}`}>
+                <div className="ah-card-top">
+                  <div style={{ minWidth: 0 }}>
+                    <h3 className="ah-card-title">{schedule.scheduleName}</h3>
+                    <div className="ah-chips">
+                      <span className="ah-chip ah-chip--primary">
+                        <Clock size={11} /> {describeCron(schedule.cronTime)}
+                      </span>
+                      {schedule.isActive ? (
+                        schedule.nextRun && (
+                          <span className="ah-chip ah-chip--muted">
+                            <Timer size={11} /> {countdownLabel(schedule.nextRun, now)}
+                          </span>
+                        )
+                      ) : (
+                        <span className="ah-chip ah-chip--warning"><Pause size={11} /> Paused</span>
+                      )}
+                      {schedule.targetRole && (
+                        <span className="ah-chip ah-chip--info"><Target size={11} /> {schedule.targetRole}</span>
+                      )}
+                      {schedule.enableCodeBroadcast && (
+                        <span className="ah-chip ah-chip--muted"><Key size={11} /> Code broadcast</span>
+                      )}
                     </div>
-                    {getTimeUntilNextRun(schedule.cronTime) && (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-muted)', padding: '0.15rem 0.5rem', borderRadius: '9999px', fontSize: '0.7rem', fontWeight: '700' }}>
-                        <Timer size={12} />
-                        {getTimeUntilNextRun(schedule.cronTime)}
-                      </div>
-                    )}
                   </div>
+
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={schedule.isActive}
+                    aria-label={schedule.isActive ? 'Pause schedule' : 'Resume schedule'}
+                    title={schedule.isActive ? 'Pause' : 'Resume'}
+                    className="ah-switch"
+                    disabled={busy}
+                    onClick={() => handleToggleActive(schedule)}
+                  />
                 </div>
-                
-                <div className="ma-card-actions" style={{ background: 'var(--bg-secondary)', padding: '0.2rem', borderRadius: '0.5rem', display: 'flex', gap: '0.1rem' }}>
-                  <button className="ma-icon-btn" onClick={() => {
-                    setQueueToView(schedule.messageQueue || []);
-                    setQueueEditingId(schedule._id);
-                    setShowQueueModal(true);
-                  }} title="View Queue" style={{ padding: '0.4rem', borderRadius: '0.4rem' }}>
-                    <List size={16} />
-                  </button>
-                  <button className="ma-icon-btn" onClick={() => handleEdit(schedule)} title="Edit" style={{ padding: '0.4rem', borderRadius: '0.4rem' }}>
-                    <Edit2 size={16} />
-                  </button>
-                  <button className="ma-icon-btn text-danger" onClick={() => handleDelete(schedule._id)} title="Delete" style={{ padding: '0.4rem', borderRadius: '0.4rem' }}>
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </div>
-              
-              <div style={{ padding: '0.75rem', background: 'var(--bg-secondary)', borderRadius: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+
                 {schedule.targetRole ? (
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-main)', fontWeight: '600' }}>
-                    <LinkIcon size={12} style={{ flexShrink: 0 }} />
-                    Role-Based Message (Dynamic URL)
-                  </span>
+                  <div className="ah-target">
+                    <LinkIcon size={13} />
+                    <span>
+                      {schedule.nextItem?.parsedRoles?.[schedule.targetRole]
+                        ? `Next: ${schedule.nextItem.parsedRoles[schedule.targetRole]} · ${formatDateKey(schedule.nextItem.targetDate)}`
+                        : 'Sent to whoever holds this role — resolved per lineup'}
+                    </span>
+                  </div>
                 ) : (
-                  <a href={schedule.chatUrl || '#'} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--primary)', textDecoration: 'none', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <LinkIcon size={12} style={{ flexShrink: 0 }} />
-                    {schedule.chatUrl ? schedule.chatUrl.replace('https://', '') : 'Invalid URL'}
+                  <a className="ah-target" href={schedule.chatUrl || '#'} target="_blank" rel="noopener noreferrer">
+                    <LinkIcon size={13} />
+                    <span>{schedule.chatUrl ? schedule.chatUrl.replace(/^https?:\/\//, '') : 'No chat URL set'}</span>
                   </a>
                 )}
-              </div>
-              
-              <div style={{ position: 'relative', padding: '1rem', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderLeft: '3px solid var(--primary)', borderRadius: '0.75rem', fontSize: '0.82rem', color: 'var(--text-main)', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                <MessageSquare size={14} style={{ position: 'absolute', top: '1rem', right: '1rem', color: 'var(--border-color)' }} />
-                <span style={{ paddingRight: '1.5rem', display: 'block' }}>{schedule.message}</span>
-              </div>
-            </div>
-          ))}
+
+                <div className="ah-message">
+                  <MessageSquare size={13} className="ah-message-icon" />
+                  {renderWithTokens(schedule.message, availableRoles)}
+                </div>
+
+                <div className="ah-card-foot">
+                  <span className="ah-runstate" title={last?.detail || ''}>
+                    <span className={`ah-dot ah-dot--${last?.status || 'idle'}`} />
+                    {last
+                      ? <>Last run <strong>{formatTimestamp(last.at)}</strong></>
+                      : <>Never run yet</>}
+                  </span>
+
+                  <div className="ah-card-actions">
+                    <button type="button" className="ah-icon-btn" title="Preview next message" disabled={busy} onClick={() => handlePreview(schedule)}>
+                      <Eye size={15} />
+                    </button>
+                    <button type="button" className="ah-icon-btn" title="Send now" disabled={busy || !schedule.isActive} onClick={() => handleRunNow(schedule)}>
+                      <Play size={15} />
+                    </button>
+                    <button type="button" className="ah-icon-btn" title={`Message queue (${schedule.upcomingCount} upcoming)`} onClick={() => openQueue(schedule)}>
+                      <List size={15} />
+                    </button>
+                    <button type="button" className="ah-icon-btn" title="Run history" onClick={() => setRunsFor(schedule._id)}>
+                      <RotateCcw size={15} />
+                    </button>
+                    <button type="button" className="ah-icon-btn" title="Edit" onClick={() => openEditor(schedule)}>
+                      <Edit2 size={15} />
+                    </button>
+                    <button type="button" className="ah-icon-btn" title="Duplicate" disabled={busy} onClick={() => handleDuplicate(schedule)}>
+                      <Copy size={15} />
+                    </button>
+                    <button type="button" className="ah-icon-btn is-danger" title="Delete" onClick={() => handleDelete(schedule)}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
 
-      {isModalOpen && createPortal(
-        <div className="ma-modal-overlay">
-          <div className="card ma-modal-content" onClick={e => e.stopPropagation()}>
-            <div className="ma-modal-header">
-              <h3>{editingId ? 'Edit Schedule' : 'Create Schedule'}</h3>
-              <button onClick={handleCloseModal} className="ma-icon-btn">
-                <X size={20} />
+      {/* ── Editor ── */}
+      {isEditorOpen && (
+        <Modal
+          icon={editingId ? Edit2 : Plus}
+          title={editingId ? 'Edit schedule' : 'New schedule'}
+          subtitle={`Times are in ${LOCAL_ZONE} and stored as UTC.`}
+          onClose={closeEditor}
+          footer={
+            <>
+              <span className="ah-foot-note">
+                {formData.selectedDays.length > 0
+                  ? `Cron: ${localToUtcCron(formData.time, formData.selectedDays)} UTC`
+                  : 'Select at least one day'}
+              </span>
+              <button type="button" className="btn btn-secondary" onClick={closeEditor}>Cancel</button>
+              <button type="submit" form="ah-editor-form" className="btn btn-primary" disabled={isSaving}>
+                {isSaving ? 'Saving…' : editingId ? 'Save changes' : 'Create schedule'}
               </button>
-            </div>
-            
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Schedule Name</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="e.g. Friday Youth Gathering"
-                    value={formData.name}
-                    onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    required 
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Schedule Type</label>
-                  <select
-                    className="form-input"
-                    value={showAdvanced ? 'dynamic' : 'simple'}
-                    onChange={(e) => {
-                      setShowAdvanced(e.target.value === 'dynamic');
-                      setFormData(prev => ({...prev, targetUrl: '', targetRole: ''}));
-                    }}
-                    style={{ appearance: 'auto' }}
-                  >
-                    <option value="simple">Specific Contact</option>
-                    <option value="dynamic">Specific Role</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
-                {showAdvanced ? (
-                <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div>
-                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <LinkIcon size={16} /> Target Role
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <select
-                        className="form-input"
-                        value={formData.targetRole}
-                        onChange={(e) => setFormData({...formData, targetRole: e.target.value})}
-                        required
-                        style={{ appearance: 'auto' }}
-                      >
-                        <option value="">Select Target Role</option>
-                        {availableRoles.map(role => (
-                          <option key={role} value={role}>{role}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      <Clock size={16} /> Weeks in Advance
-                    </label>
-                    <div style={{ position: 'relative' }}>
-                      <select
-                        className="form-input"
-                        value={formData.advanceWeeks}
-                        onChange={(e) => setFormData({...formData, advanceWeeks: e.target.value})}
-                        style={{ appearance: 'auto' }}
-                      >
-                        <option value="1">Next 1 Week</option>
-                        <option value="2">Next 2 Weeks</option>
-                        <option value="3">Next 3 Weeks</option>
-                        <option value="4">Next 4 Weeks</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="form-group">
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <LinkIcon size={16} /> Target Chat URL
-                  </label>
-                  <div style={{ position: 'relative' }}>
-                    <input 
-                      type="url" 
-                      className="form-input" 
-                      placeholder="https://m.me/j/..."
-                      value={formData.targetUrl}
-                      onChange={(e) => setFormData({...formData, targetUrl: e.target.value})}
-                      required 
-                    />
-                  </div>
-                </div>
-              )}          </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 2fr', gap: '1rem', alignItems: 'end' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">Time (Local)</label>
-                  <input 
-                    type="time" 
-                    className="form-input" 
-                    style={{ width: '100%' }}
-                    value={formData.time}
-                    onChange={(e) => setFormData({...formData, time: e.target.value})}
-                    required 
-                  />
-                </div>
-
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                    <Calendar size={16} /> Repeat on
-                  </label>
-                  <div className="ma-days-selector">
-                    {DAYS_OF_WEEK.map(day => (
-                      <button
-                        key={day.value}
-                        type="button"
-                        className={`ma-day-btn ${formData.selectedDays.includes(day.value) ? 'selected' : ''}`}
-                        onClick={() => handleToggleDay(day.value)}
-                      >
-                        {day.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">Message Content</label>
-                <textarea 
-                  className="form-textarea" 
-                  placeholder="Write your automated message here. Use {Role} to dynamically replace names if you upload an Excel sheet (e.g., {Presider})"
-                  value={formData.message}
-                  onChange={(e) => setFormData({...formData, message: e.target.value})}
-                  required 
+            </>
+          }
+        >
+          <form id="ah-editor-form" onSubmit={handleSubmit} style={{ display: 'contents' }}>
+            {/* 1 — What is it */}
+            <div className="ah-section">
+              <div className="ah-section-title"><Info size={15} /> Basics</div>
+              <div className="ah-field">
+                <label className="ah-label" htmlFor="ah-name">Schedule name</label>
+                <input
+                  id="ah-name"
+                  type="text"
+                  className="ah-input"
+                  placeholder="e.g. Sunday lineup reminder"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
                 />
               </div>
 
-
-
-              <div className="ma-modal-actions" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem' }}>
-                <button type="button" className="btn btn-secondary" onClick={handleCloseModal}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Schedule</button>
+              <div className="ah-field">
+                <span className="ah-label">Who receives it</span>
+                <div className="ah-choice-grid">
+                  <button
+                    type="button"
+                    className={`ah-choice${isRoleMode ? '' : ' is-active'}`}
+                    onClick={() => { setIsRoleMode(false); setFormData(prev => ({ ...prev, targetRole: '' })); }}
+                  >
+                    <span className="ah-choice-title"><MessageSquare size={14} /> A group chat</span>
+                    <span className="ah-choice-desc">One fixed Messenger thread. Best for announcements.</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`ah-choice${isRoleMode ? ' is-active' : ''}`}
+                    onClick={() => { setIsRoleMode(true); setAutoQueue(true); setFormData(prev => ({ ...prev, targetUrl: '' })); }}
+                  >
+                    <span className="ah-choice-title"><Target size={14} /> Whoever holds a role</span>
+                    <span className="ah-choice-desc">Looks up the serving calendar and messages that person directly.</span>
+                  </button>
+                </div>
               </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
 
-      {/* Queue Viewer Modal */}
-      {showQueueModal && createPortal(
-        <div className="ma-modal-overlay">
-          <div className="card ma-modal-content" style={{ maxWidth: '600px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-            <div className="ma-modal-header">
-              <h3>Upcoming Message Queue</h3>
-              <button onClick={() => setShowQueueModal(false)} className="ma-icon-btn">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div style={{ overflowY: 'auto', flex: 1, padding: '1rem 0' }}>
-              {queueToView.length === 0 ? (
-                <p style={{ color: 'var(--text-muted)', textAlign: 'center' }}>No messages in queue. Edit schedule and upload Excel file to generate.</p>
+              {isRoleMode ? (
+                <div className="ah-field-row">
+                  <div className="ah-field">
+                    <label className="ah-label" htmlFor="ah-role"><Target size={13} /> Target role</label>
+                    <select
+                      id="ah-role"
+                      className="ah-select"
+                      value={formData.targetRole}
+                      onChange={(e) => setFormData({ ...formData, targetRole: e.target.value })}
+                      required
+                    >
+                      <option value="">Select a role…</option>
+                      {availableRoles.map(role => <option key={role} value={role}>{role}</option>)}
+                    </select>
+                  </div>
+                  <div className="ah-field">
+                    <label className="ah-label" htmlFor="ah-weeks"><Clock size={13} /> Lineups per run</label>
+                    <select
+                      id="ah-weeks"
+                      className="ah-select"
+                      value={formData.advanceWeeks}
+                      onChange={(e) => setFormData({ ...formData, advanceWeeks: e.target.value })}
+                    >
+                      {[1, 2, 3, 4].map(n => (
+                        <option key={n} value={n}>{`Next ${n} week${n > 1 ? 's' : ''}`}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               ) : (
+                <div className="ah-field">
+                  <label className="ah-label" htmlFor="ah-url"><LinkIcon size={13} /> Target chat URL</label>
+                  <input
+                    id="ah-url"
+                    type="url"
+                    className="ah-input"
+                    placeholder="https://m.me/j/…"
+                    value={formData.targetUrl}
+                    onChange={(e) => setFormData({ ...formData, targetUrl: e.target.value })}
+                    required
+                  />
+                </div>
+              )}
+
+              {isRoleMode && availableRoles.length === 0 && (
+                <div className="ah-callout ah-callout--warning">
+                  <AlertTriangle size={14} />
+                  <span>
+                    The serving calendar has no roles yet, so there is nobody to target.
+                    Fill it in from <Link to="/automation-hub/calendar">Calendar</Link> first.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* 2 — When */}
+            <div className="ah-section">
+              <div className="ah-section-title"><Clock size={15} /> When it runs</div>
+              <div className="ah-field-row">
+                <div className="ah-field">
+                  <label className="ah-label" htmlFor="ah-time">Time (local)</label>
+                  <input
+                    id="ah-time"
+                    type="time"
+                    className="ah-input"
+                    value={formData.time}
+                    onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="ah-field">
+                  <span className="ah-label">Shortcuts</span>
+                  <div className="ah-day-presets">
+                    {DAY_PRESETS.map(preset => (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        className="ah-mini-btn"
+                        onClick={() => setFormData(prev => ({ ...prev, selectedDays: preset.days }))}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                    <button type="button" className="ah-mini-btn" onClick={() => setFormData(prev => ({ ...prev, selectedDays: [] }))}>
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="ah-field">
+                <span className="ah-label"><Calendar size={13} /> Repeat on</span>
+                <div className="ah-days">
+                  {DAYS_OF_WEEK.map(day => (
+                    <button
+                      key={day.value}
+                      type="button"
+                      aria-pressed={formData.selectedDays.includes(day.value)}
+                      className={`ah-day${formData.selectedDays.includes(day.value) ? ' is-on' : ''}`}
+                      onClick={() => toggleDay(day.value)}
+                    >
+                      {day.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="ah-hint">
+                  {formData.selectedDays.length > 0
+                    ? `${describeCron(localToUtcCron(formData.time, formData.selectedDays))} · next on ${
+                      nextRunAt(localToUtcCron(formData.time, formData.selectedDays))?.toLocaleString([], {
+                        weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                      }) || '—'}`
+                    : 'Pick the days this message should go out.'}
+                </span>
+              </div>
+            </div>
+
+            {/* 3 — What it says */}
+            <div className="ah-section">
+              <div className="ah-section-head">
+                <span className="ah-section-title"><MessageSquare size={15} /> Message</span>
+                <span className="ah-hint">{formData.message.length} chars</span>
+              </div>
+
+              <div className="ah-field">
+                <span className="ah-label">Insert a placeholder</span>
+                <div className="ah-tokens">
+                  {[...BUILTIN_TOKENS, ...availableRoles].map(token => (
+                    <button key={token} type="button" className="ah-token-btn" onClick={() => insertToken(token)}>
+                      {`{${token}}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <textarea
+                ref={messageRef}
+                className="ah-textarea"
+                placeholder={'Hi {Presider}, you are serving on {Date}. Confirmation code: {WeeklyCode}'}
+                value={formData.message}
+                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                required
+              />
+
+              {unknownTokens.length > 0 && (
+                <div className="ah-callout ah-callout--warning">
+                  <AlertTriangle size={14} />
+                  <span>
+                    {unknownTokens.map(t => `{${t}}`).join(', ')} {unknownTokens.length === 1 ? 'does not match' : 'do not match'} any
+                    calendar role or built-in placeholder, so {unknownTokens.length === 1 ? 'it' : 'they'} will be sent literally.
+                  </span>
+                </div>
+              )}
+
+              <div className="ah-field">
+                <span className="ah-label">
+                  <Eye size={13} /> Preview{sampleDate ? ` · using ${formatDateKey(sampleDate)}` : ''}
+                </span>
+                <div className="ah-preview">{composerPreview}</div>
+              </div>
+            </div>
+
+            {/* 4 — Confirmation code */}
+            <div className="ah-section">
+              <div className="ah-toggle-row">
+                <div className="ah-toggle-copy">
+                  <strong>Confirmation code broadcast</strong>
+                  <span className="ah-hint">A second, separate post with the week&apos;s lineup code.</span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={formData.enableCodeBroadcast}
+                  aria-label="Enable confirmation code broadcast"
+                  className="ah-switch"
+                  onClick={() => setFormData(prev => ({ ...prev, enableCodeBroadcast: !prev.enableCodeBroadcast }))}
+                />
+              </div>
+
+              {formData.enableCodeBroadcast && (
                 <>
-                  <QueueList 
-                    title="Upcoming Messages"
-                    items={queueToView.filter(q => new Date(q.targetDate) >= new Date(new Date().setHours(0,0,0,0)))}
-                    queueEditingId={queueEditingId}
-                    setQueueToView={setQueueToView}
-                    queueToView={queueToView}
-                    showAlert={showAlert}
-                    setSchedules={setSchedules}
-                    currentSchedule={schedules.find(s => s._id === queueEditingId)}
-                  />
-                  <QueueList 
-                    title="Archived (Past Dates)"
-                    items={queueToView.filter(q => new Date(q.targetDate) < new Date(new Date().setHours(0,0,0,0))).reverse()}
-                    queueEditingId={queueEditingId}
-                    setQueueToView={setQueueToView}
-                    queueToView={queueToView}
-                    showAlert={showAlert}
-                    setSchedules={setSchedules}
-                    currentSchedule={schedules.find(s => s._id === queueEditingId)}
-                  />
+                  <div className="ah-field-row">
+                    <div className="ah-field">
+                      <label className="ah-label" htmlFor="ah-code-time">Code time (local)</label>
+                      <input
+                        id="ah-code-time"
+                        type="time"
+                        className="ah-input"
+                        value={formData.codeTime}
+                        onChange={(e) => setFormData({ ...formData, codeTime: e.target.value })}
+                      />
+                    </div>
+                    <div className="ah-field">
+                      <label className="ah-label" htmlFor="ah-code-template">Code template</label>
+                      <input
+                        id="ah-code-template"
+                        type="text"
+                        className="ah-input"
+                        value={formData.codeTemplate}
+                        onChange={(e) => setFormData({ ...formData, codeTemplate: e.target.value })}
+                        placeholder="DFCCI-S-LU-{DATE}"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="ah-field">
+                    <span className="ah-label"><Calendar size={13} /> Broadcast the code on</span>
+                    <div className="ah-days">
+                      {DAYS_OF_WEEK.map(day => (
+                        <button
+                          key={day.value}
+                          type="button"
+                          aria-pressed={formData.codeSelectedDays.includes(day.value)}
+                          className={`ah-day${formData.codeSelectedDays.includes(day.value) ? ' is-on' : ''}`}
+                          onClick={() => toggleDay(day.value, true)}
+                        >
+                          {day.label}
+                        </button>
+                      ))}
+                    </div>
+                    <span className="ah-hint">
+                      {'{DATE}'} becomes the lineup date as MMDDYY — so {formData.codeTemplate.replace(/{DATE}/gi, '032526')}.
+                    </span>
+                  </div>
                 </>
               )}
             </div>
-          </div>
-        </div>,
-        document.body
+
+            {autoQueue && messageQueue.length > 0 && (
+              <div className="ah-callout">
+                <Info size={14} />
+                <span>
+                  {messageQueue.length} lineup{messageQueue.length === 1 ? '' : 's'} will be generated from the serving
+                  calendar when you save. Each one can be edited individually afterwards from the queue.
+                </span>
+              </div>
+            )}
+          </form>
+        </Modal>
       )}
 
-      {/* Floating Action Button for Weekly Code Generator */}
-      <button 
-        onClick={() => setShowCodeGenerator(true)}
-        style={{ 
-          position: 'fixed', 
-          bottom: '96px', 
-          right: '24px', 
-          width: '56px', 
-          height: '56px', 
-          borderRadius: '50%', 
-          background: 'var(--accent-color, #10b981)', 
-          color: '#fff', 
-          border: 'none', 
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          cursor: 'pointer', 
-          zIndex: 90,
-          transition: 'transform 0.2s',
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-        title="Weekly Code Generator"
-      >
-        <Key size={24} />
-      </button>
-
-      {/* Code Generator Modal */}
-      {showCodeGenerator && createPortal(
-        <div className="ma-modal-overlay" style={{ zIndex: 1000 }} onClick={() => setShowCodeGenerator(false)}>
-          <div className="card ma-modal-content" style={{ maxWidth: '400px', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-            <div className="ma-modal-header">
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Key size={22} className="text-primary" />
-                Weekly Code Generator
-              </h3>
-              <button onClick={() => setShowCodeGenerator(false)} className="ma-icon-btn">
-                <X size={20} />
-              </button>
+      {/* ── Queue ── */}
+      {queueFor && queueSchedule && (
+        <Modal
+          icon={List}
+          title="Message queue"
+          subtitle={queueSchedule.scheduleName}
+          size="ah-panel--wide"
+          onClose={() => setQueueFor(null)}
+          footer={<button type="button" className="btn btn-secondary" onClick={() => setQueueFor(null)}>Done</button>}
+        >
+          <div className="ah-toolbar" style={{ marginBottom: 0 }}>
+            <div className="ah-search">
+              <Search size={16} />
+              <input
+                type="search"
+                value={queueSearch}
+                onChange={(e) => setQueueSearch(e.target.value)}
+                placeholder="Search a date, name or message…"
+                aria-label="Search the queue"
+              />
             </div>
-            <div className="ma-modal-body">
-              <div>
-                <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--primary-color)' }}>Current Active Code</h4>
-                {weeklyCodeConfig ? (
-                  <div style={{ padding: '0.8rem', background: 'var(--bg-secondary)', borderRadius: '6px', textAlign: 'center' }}>
-                    <p style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                      Automatically updates every Sunday at 12:00 PM. Use <strong>{'{WeeklyCode}'}</strong> in your messages to inject this.
-                    </p>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                      <h3 style={{ margin: 0, color: 'var(--text-color)' }}>{weeklyCodeConfig.currentCode}</h3>
-                      <button 
-                        className="ma-icon-btn" 
-                        title="Copy to clipboard"
-                        onClick={() => {
-                          navigator.clipboard.writeText(weeklyCodeConfig.currentCode);
-                          showAlert('Copied', 'Active code copied to clipboard!');
-                        }}
-                      >
-                        <Copy size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Loading active code...</p>
-                )}
-              </div>
-
-              <div style={{ marginTop: '1.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '1rem' }}>
-                <h4 style={{ margin: '0 0 1rem 0', color: 'var(--primary-color)' }}>Dispatch Configuration</h4>
-                
-                <div className="form-group" style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <input 
-                    type="checkbox" 
-                    id="enableDispatch"
-                    checked={enableDispatch}
-                    onChange={(e) => setEnableDispatch(e.target.checked)}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <label htmlFor="enableDispatch" style={{ margin: 0, cursor: 'pointer', fontWeight: 500 }}>
-                    Enable Auto-Dispatch
-                  </label>
-                </div>
-
-                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.25rem', textAlign: 'left' }}>
-                  <label style={{ margin: 0, fontWeight: 500 }}>Target Chat URL</label>
-                  <input 
-                    type="text" 
-                    className="form-control"
-                    placeholder="https://www.messenger.com/t/..."
-                    value={dispatchUrl}
-                    onChange={(e) => setDispatchUrl(e.target.value)}
-                    disabled={!enableDispatch}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.25rem' }}>
-                  <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem', textAlign: 'left' }}>
-                    <label style={{ margin: 0, fontWeight: 500 }}>Dispatch Day</label>
-                    <select 
-                      className="form-control"
-                      value={dispatchDay}
-                      onChange={(e) => setDispatchDay(e.target.value)}
-                      disabled={!enableDispatch}
-                    >
-                      <option value="0">Sunday</option>
-                      <option value="1">Monday</option>
-                      <option value="2">Tuesday</option>
-                      <option value="3">Wednesday</option>
-                      <option value="4">Thursday</option>
-                      <option value="5">Friday</option>
-                      <option value="6">Saturday</option>
-                    </select>
-                  </div>
-                  <div className="form-group" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem', textAlign: 'left' }}>
-                    <label style={{ margin: 0, fontWeight: 500 }}>Dispatch Time</label>
-                    <input 
-                      type="time" 
-                      className="form-control"
-                      value={dispatchTime}
-                      onChange={(e) => setDispatchTime(e.target.value)}
-                      disabled={!enableDispatch}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginBottom: '1.5rem', textAlign: 'left' }}>
-                  <label style={{ margin: 0, fontWeight: 500 }}>Message Content</label>
-                  <textarea 
-                    className="form-control"
-                    rows="3"
-                    value={dispatchMessage}
-                    onChange={(e) => setDispatchMessage(e.target.value)}
-                    placeholder="Here is the code: {WeeklyCode}"
-                    disabled={!enableDispatch}
-                  />
-                  <small className="text-muted">Use <code>{"{WeeklyCode}"}</code> to inject the code.</small>
-                </div>
-
-                <button 
-                  className="btn btn-primary" 
-                  style={{ width: '100%' }}
-                  onClick={handleSaveDispatchConfig}
-                  disabled={isSavingDispatch}
+            <div className="ah-segment">
+              {['upcoming', 'archived'].map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  className={`ah-segment-btn${queueTab === tab ? ' is-active' : ''}`}
+                  onClick={() => { setQueueTab(tab); setOpenQueueDate(null); }}
                 >
-                  {isSavingDispatch ? 'Saving...' : 'Save Configuration'}
+                  {tab === 'upcoming' ? 'Upcoming' : 'Archived'}
+                  <span className="ah-segment-count">
+                    {queueDraft.filter(q => (tab === 'upcoming' ? q.targetDate >= today : q.targetDate < today)).length}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredQueue.length === 0 ? (
+            <div className="ah-callout">
+              <Info size={14} />
+              <span>
+                {queueDraft.length === 0
+                  ? 'This schedule has no queue. Role schedules build one from the serving calendar when you save them.'
+                  : 'No queue items match that filter.'}
+              </span>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+              {filteredQueue.map(item => {
+                const isOpen = openQueueDate === item.targetDate;
+                const roles = item.parsedRoles || {};
+                const assignee = queueSchedule.targetRole ? roles[queueSchedule.targetRole] : null;
+                return (
+                  <div key={item.targetDate} className={`ah-queue-item${isOpen ? ' is-open' : ''}`}>
+                    <button
+                      type="button"
+                      className="ah-queue-head"
+                      aria-expanded={isOpen}
+                      onClick={() => setOpenQueueDate(isOpen ? null : item.targetDate)}
+                    >
+                      <span className="ah-queue-date">{formatDateKey(item.targetDate)}</span>
+                      <span className="ah-queue-sub">
+                        {assignee ? `${queueSchedule.targetRole}: ${assignee}` : (item.messageText || '').slice(0, 80)}
+                      </span>
+                      {item.isSent
+                        ? <span className="ah-chip ah-chip--success"><CheckCircle2 size={11} /> Sent</span>
+                        : item.targetDate < today
+                          ? <span className="ah-chip ah-chip--muted">Archived</span>
+                          : <span className="ah-chip ah-chip--warning">Pending</span>}
+                    </button>
+
+                    {isOpen && (
+                      <div className="ah-queue-body">
+                        {Object.keys(roles).length > 0 && (
+                          <div className="ah-role-chips">
+                            {Object.entries(roles).map(([role, name]) => (
+                              <span key={role} className="ah-role-chip">{role}: <b>{name}</b></span>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.weeklyConfirmationCode && (
+                          <div className="ah-chips">
+                            <span className="ah-chip ah-chip--primary ah-chip--code">
+                              <Key size={11} /> {item.weeklyConfirmationCode}
+                            </span>
+                            <button
+                              type="button"
+                              className="ah-icon-btn"
+                              title="Copy code"
+                              onClick={() => copyToClipboard(item.weeklyConfirmationCode, 'Code')}
+                            >
+                              <Copy size={13} />
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="ah-field">
+                          <label className="ah-label">Override chat URL (optional)</label>
+                          <input
+                            type="url"
+                            className="ah-input"
+                            placeholder="Send this one to a different thread"
+                            value={item.overrideChatUrl || ''}
+                            onChange={(e) => setQueueDraft(prev => prev.map(q =>
+                              q.targetDate === item.targetDate ? { ...q, overrideChatUrl: e.target.value } : q))}
+                          />
+                        </div>
+
+                        <div className="ah-field">
+                          <label className="ah-label">Message for this date</label>
+                          <textarea
+                            className="ah-textarea"
+                            style={{ minHeight: '7rem' }}
+                            value={item.messageText || ''}
+                            onChange={(e) => setQueueDraft(prev => prev.map(q =>
+                              q.targetDate === item.targetDate ? { ...q, messageText: e.target.value } : q))}
+                          />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <button type="button" className="btn btn-primary" onClick={() => saveQueueItem(item)}>
+                            Save this date
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* ── Preview ── */}
+      {preview && (
+        <Modal
+          icon={Eye}
+          title="Dispatch preview"
+          subtitle={`${preview.schedule.scheduleName} — resolved by the scheduler, nothing sent`}
+          onClose={() => setPreview(null)}
+          footer={
+            <>
+              <button type="button" className="btn btn-secondary" onClick={() => setPreview(null)}>Close</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!preview.data?.shouldDispatch || !preview.schedule.isActive}
+                onClick={() => { const s = preview.schedule; setPreview(null); handleRunNow(s); }}
+              >
+                <Play size={15} /> Send now
+              </button>
+            </>
+          }
+        >
+          {!preview.data?.shouldDispatch ? (
+            <div className="ah-callout ah-callout--warning">
+              <AlertTriangle size={14} />
+              <span><strong>This run would send nothing.</strong><br />{preview.data?.reason}</span>
+            </div>
+          ) : (
+            <>
+              {preview.data.items?.length > 0 && (
+                <div className="ah-chips">
+                  {preview.data.items.map(d => (
+                    <span key={d} className="ah-chip ah-chip--primary"><Calendar size={11} /> {formatDateKey(d)}</span>
+                  ))}
+                </div>
+              )}
+
+              {preview.data.message && (
+                <div className="ah-field">
+                  <span className="ah-label"><MessageSquare size={13} /> To the group chat</span>
+                  <div className="ah-preview">{preview.data.message}</div>
+                </div>
+              )}
+
+              {preview.data.reminderTasks?.length > 0 && (
+                <div className="ah-field">
+                  <span className="ah-label">
+                    <Send size={13} /> Direct messages ({preview.data.reminderTasks.length})
+                  </span>
+                  {preview.data.reminderTasks.map((task, i) => (
+                    <div key={i} className="ah-queue-item" style={{ padding: 'var(--sp-3) var(--sp-4)' }}>
+                      <div className="ah-queue-sub" style={{ marginBottom: 'var(--sp-2)' }}>
+                        {task.url.replace(/^https?:\/\//, '')}
+                      </div>
+                      <div className="ah-preview" style={{ borderLeftColor: 'var(--info)' }}>{task.message}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {preview.data.codeMessage && (
+                <div className="ah-field">
+                  <span className="ah-label"><Key size={13} /> Confirmation code post</span>
+                  <div className="ah-preview">{preview.data.codeMessage}</div>
+                </div>
+              )}
+            </>
+          )}
+        </Modal>
+      )}
+
+      {/* ── Run history ── */}
+      {runsFor && runsSchedule && (
+        <Modal
+          icon={RotateCcw}
+          title="Run history"
+          subtitle={runsSchedule.scheduleName}
+          onClose={() => setRunsFor(null)}
+          footer={<button type="button" className="btn btn-secondary" onClick={() => setRunsFor(null)}>Close</button>}
+        >
+          {runRows.length === 0 ? (
+            <div className="ah-callout">
+              <Info size={14} />
+              <span>No runs recorded yet. History starts collecting from the next dispatch — cron or manual.</span>
+            </div>
+          ) : (
+            <div>
+              {runRows.map((run, i) => (
+                <div key={`${run.at}-${i}`} className="ah-run-row">
+                  {run.status === 'success'
+                    ? <CheckCircle2 size={16} style={{ color: 'var(--success)', flexShrink: 0, marginTop: 2 }} />
+                    : run.status === 'error'
+                      ? <XCircle size={16} style={{ color: 'var(--danger)', flexShrink: 0, marginTop: 2 }} />
+                      : <AlertTriangle size={16} style={{ color: 'var(--warning)', flexShrink: 0, marginTop: 2 }} />}
+                  <div className="ah-run-meta">
+                    <span className="ah-run-title">
+                      {run.status === 'success' ? 'Dispatched' : run.status === 'error' ? 'Failed' : 'Skipped'}
+                      <span className="ah-chip ah-chip--muted">{run.actionType}</span>
+                      <span className="ah-chip ah-chip--muted">{run.trigger === 'manual' ? 'Manual' : 'Cron'}</span>
+                      {run.recipients > 0 && (
+                        <span className="ah-chip ah-chip--muted">{run.recipients} message{run.recipients === 1 ? '' : 's'}</span>
+                      )}
+                    </span>
+                    <span className="ah-run-detail">{run.detail}</span>
+                  </div>
+                  <span className="ah-run-time">{formatTimestamp(run.at)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {/* ── Weekly code ── */}
+      {showCodePanel && (
+        <Modal
+          icon={Key}
+          title="Weekly code"
+          subtitle="Generated every Sunday at 12:00 PM Manila time"
+          onClose={() => setShowCodePanel(false)}
+          footer={
+            <>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCodePanel(false)}>Close</button>
+              <button type="button" className="btn btn-primary" disabled={isSavingDispatch} onClick={() => saveWeeklyCode()}>
+                {isSavingDispatch ? 'Saving…' : 'Save settings'}
+              </button>
+            </>
+          }
+        >
+          <div className="ah-section">
+            <div className="ah-section-head">
+              <span className="ah-section-title"><Key size={15} /> Active code</span>
+              <div style={{ display: 'flex', gap: '0.15rem' }}>
+                <button
+                  type="button"
+                  className="ah-icon-btn"
+                  title="Copy code"
+                  onClick={() => copyToClipboard(weeklyCodeConfig?.currentCode || '', 'Code')}
+                >
+                  <Copy size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="ah-icon-btn"
+                  title="Regenerate now"
+                  disabled={isSavingDispatch}
+                  onClick={() => saveWeeklyCode({ forceGenerate: true })}
+                >
+                  <RefreshCw size={15} />
                 </button>
               </div>
             </div>
+            <div className="ah-stat-value is-code" style={{ textAlign: 'center' }}>
+              {weeklyCodeConfig?.currentCode || 'Not generated yet'}
+            </div>
+            <span className="ah-hint" style={{ textAlign: 'center' }}>
+              Use <code>{'{WeeklyCode}'}</code> in any message to inject it.
+            </span>
+
+            <div className="ah-field">
+              <label className="ah-label" htmlFor="ah-wc-template">Code template</label>
+              <input
+                id="ah-wc-template"
+                type="text"
+                className="ah-input"
+                value={codeTemplateDraft}
+                onChange={(e) => setCodeTemplateDraft(e.target.value)}
+              />
+              <span className="ah-hint">{'{DATE}'} becomes next Sunday as MMDDYY.</span>
+            </div>
           </div>
+
+          <div className="ah-section">
+            <div className="ah-toggle-row">
+              <div className="ah-toggle-copy">
+                <strong>Auto-dispatch the code</strong>
+                <span className="ah-hint">Post the code to one chat on a weekly schedule.</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={enableDispatch}
+                aria-label="Enable weekly code auto-dispatch"
+                className="ah-switch"
+                onClick={() => setEnableDispatch(v => !v)}
+              />
+            </div>
+
+            <div className="ah-field">
+              <label className="ah-label" htmlFor="ah-wc-url">Target chat URL</label>
+              <input
+                id="ah-wc-url"
+                type="url"
+                className="ah-input"
+                placeholder="https://www.messenger.com/t/…"
+                value={dispatchUrl}
+                onChange={(e) => setDispatchUrl(e.target.value)}
+                disabled={!enableDispatch}
+              />
+            </div>
+
+            <div className="ah-field-row">
+              <div className="ah-field">
+                <label className="ah-label" htmlFor="ah-wc-day">Day</label>
+                <select
+                  id="ah-wc-day"
+                  className="ah-select"
+                  value={dispatchDay}
+                  onChange={(e) => setDispatchDay(e.target.value)}
+                  disabled={!enableDispatch}
+                >
+                  {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((d, i) => (
+                    <option key={d} value={String(i)}>{d}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="ah-field">
+                <label className="ah-label" htmlFor="ah-wc-time">Time (Manila)</label>
+                <input
+                  id="ah-wc-time"
+                  type="time"
+                  className="ah-input"
+                  value={dispatchTime}
+                  onChange={(e) => setDispatchTime(e.target.value)}
+                  disabled={!enableDispatch}
+                />
+              </div>
+            </div>
+
+            <div className="ah-field">
+              <label className="ah-label" htmlFor="ah-wc-msg">Message</label>
+              <textarea
+                id="ah-wc-msg"
+                className="ah-textarea"
+                style={{ minHeight: '6rem' }}
+                value={dispatchMessage}
+                onChange={(e) => setDispatchMessage(e.target.value)}
+                placeholder="Here is the code: {WeeklyCode}"
+                disabled={!enableDispatch}
+              />
+              <span className="ah-hint">
+                Sends as: {dispatchMessage.replace(/{WeeklyCode}/gi, weeklyCodeConfig?.currentCode || 'DFCCI-S-LU-…')}
+              </span>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Member directory ── */}
+      {showMembers && (
+        <Modal
+          icon={Users}
+          title="Member directory"
+          subtitle="Names here must match the serving calendar exactly, or a role reminder cannot be delivered."
+          size="ah-panel--wide"
+          onClose={() => setShowMembers(false)}
+        >
+          <MemberDirectory showAlert={showAlert} showConfirm={showConfirm} />
+        </Modal>
+      )}
+
+      {/* ── Toasts ── */}
+      {toasts.length > 0 && createPortal(
+        <div className="ah-toasts" role="status" aria-live="polite">
+          {toasts.map(t => (
+            <div key={t.id} className={`ah-toast ah-toast--${t.tone}`}>
+              {t.tone === 'success' ? <CheckCircle2 size={15} />
+                : t.tone === 'error' ? <XCircle size={15} />
+                  : t.tone === 'warning' ? <AlertTriangle size={15} />
+                    : <Info size={15} />}
+              <span>{t.message}</span>
+            </div>
+          ))}
         </div>,
         document.body
       )}
 
-      {/* Floating Action Button for Member Directory */}
-      <button 
-        onClick={() => setShowMembersModal(true)}
-        style={{ 
-          position: 'fixed', 
-          bottom: '24px', 
-          right: '24px', 
-          width: '56px', 
-          height: '56px', 
-          borderRadius: '50%', 
-          background: 'var(--primary-color, var(--primary))', 
-          color: '#fff', 
-          border: 'none', 
-          boxShadow: '0 4px 12px rgba(0,0,0,0.3)', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          cursor: 'pointer', 
-          zIndex: 90,
-          transition: 'transform 0.2s',
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-        title="Member Directory"
-      >
-        <List size={24} />
-      </button>
-
-      {/* Member Directory Modal Overlay */}
-      {showMembersModal && createPortal(
-        <div className="ma-modal-overlay" style={{ zIndex: 1000 }} onClick={() => setShowMembersModal(false)}>
-          <div className="card ma-modal-content" style={{ maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-            <div className="ma-modal-header">
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <List size={22} className="text-primary" />
-                Member Directory
-              </h3>
-              <button onClick={() => setShowMembersModal(false)} className="ma-icon-btn">
-                <X size={20} />
-              </button>
-            </div>
-            <div style={{ overflowY: 'auto', flex: 1, padding: '1rem 0' }}>
-              <p style={{ color: 'var(--text-muted)', margin: '0 0 1.5rem 0', fontSize: '0.9rem', padding: '0 1rem' }}>
-                Map the exact names from your Excel schedules to their private Facebook Chat URLs.
-              </p>
-              <MemberDirectory showAlert={showAlert} showConfirm={showConfirm} />
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-      
-      <PopupModal 
+      <PopupModal
         isOpen={popup.isOpen}
         onClose={() => setPopup({ ...popup, isOpen: false })}
         title={popup.title}
@@ -988,97 +1743,6 @@ export default function AutomationDashboard() {
         onConfirm={popup.onConfirm}
         isAlert={popup.isAlert}
       />
-    </div>
-  );
-}
-
-function QueueList({ items, title, queueEditingId, setQueueToView, queueToView, showAlert, setSchedules, currentSchedule }) {
-  if (items.length === 0) return null;
-  return (
-    <div style={{ marginBottom: '2rem' }}>
-      <h4 style={{ marginBottom: '1rem', color: 'var(--text-muted)' }}>{title} ({items.length})</h4>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        {items.map((q, idx) => {
-          const mainIdx = queueToView.findIndex(item => item.targetDate === q.targetDate);
-          return (
-            <div key={idx} style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border-color)', opacity: q.isSent ? 0.7 : 1 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <span style={{ fontWeight: 'bold', color: 'var(--primary-color)' }}>
-                  Target Date: {q.targetDate}
-                  {currentSchedule?.targetRole && q.parsedRoles && q.parsedRoles[currentSchedule.targetRole] && (
-                    <span style={{ marginLeft: '10px', fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                      - To: <strong>{q.parsedRoles[currentSchedule.targetRole]}</strong> ({currentSchedule.targetRole})
-                    </span>
-                  )}
-                </span>
-                {q.isSent ? (
-                  <span style={{ fontSize: '0.75rem', background: 'var(--success-color)', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>Sent</span>
-                ) : new Date(q.targetDate) < new Date(new Date().setHours(0,0,0,0)) ? (
-                  <span style={{ fontSize: '0.75rem', background: 'var(--bg-secondary)', color: 'var(--text-muted)', padding: '2px 6px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>Archived</span>
-                ) : (
-                  <span style={{ fontSize: '0.75rem', background: 'var(--warning-color)', color: '#000', padding: '2px 6px', borderRadius: '4px' }}>Pending</span>
-                )}
-              </div>
-              
-              <div style={{ marginBottom: '0.5rem' }}>
-                <input
-                  type="url"
-                  placeholder="Override Target Chat URL (Optional)"
-                  style={{ width: '100%', padding: '0.5rem', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-main)', fontSize: '0.85rem', marginBottom: '0.5rem' }}
-                  value={q.overrideChatUrl || ''}
-                  onChange={(e) => {
-                    const newQueue = [...queueToView];
-                    newQueue[mainIdx].overrideChatUrl = e.target.value;
-                    setQueueToView(newQueue);
-                  }}
-                />
-              </div>
-              
-              <textarea
-                style={{ width: '100%', minHeight: '100px', padding: '0.5rem', background: 'var(--bg-primary)', border: '1px solid var(--border-color)', borderRadius: '4px', color: 'var(--text-main)', fontSize: '0.85rem' }}
-                value={q.messageText}
-                onChange={(e) => {
-                  const newQueue = [...queueToView];
-                  newQueue[mainIdx].messageText = e.target.value;
-                  setQueueToView(newQueue);
-                }}
-              />
-              
-              {!q.isSent && (
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ marginTop: '0.5rem', padding: '0.3rem 0.8rem', fontSize: '0.8rem' }}
-                  onClick={async () => {
-                    try {
-                      await api.patch(`/automation/schedule/${queueEditingId}/queue`, {
-                        targetDate: q.targetDate,
-                        messageText: q.messageText,
-                        overrideChatUrl: q.overrideChatUrl
-                      });
-                      if (showAlert) showAlert('Success', 'Queue item updated successfully!');
-                      setSchedules(prev => prev.map(s => {
-                        if (s._id === queueEditingId) {
-                          const updatedQueue = [...(s.messageQueue || [])];
-                          if (mainIdx > -1) {
-                            updatedQueue[mainIdx].messageText = q.messageText;
-                            updatedQueue[mainIdx].overrideChatUrl = q.overrideChatUrl;
-                          }
-                          return { ...s, messageQueue: updatedQueue };
-                        }
-                        return s;
-                      }));
-                    } catch (err) {
-                      if (showAlert) showAlert('Error', 'Failed to update queue item.');
-                    }
-                  }}
-                >
-                  Save Override
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }

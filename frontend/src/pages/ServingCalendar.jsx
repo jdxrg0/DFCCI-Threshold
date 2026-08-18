@@ -12,12 +12,13 @@ import {
   isSameDay, 
   addDays 
 } from 'date-fns';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import api from '../api';
 import { parseExcelSchedule, downloadExcelTemplate } from '../utils/excelParser';
 import PopupModal from '../components/PopupModal';
 import MemberDirectory from '../components/MemberDirectory'; // Reusing MemberDirectory
 import { createPortal } from 'react-dom';
+import PageHeader from '../components/PageHeader';
 
 export default function ServingCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -81,7 +82,6 @@ export default function ServingCalendar() {
     if (!confirmPopup.isOpen) cancelHold();
   }, [confirmPopup.isOpen]);
 
-  const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
@@ -340,24 +340,16 @@ export default function ServingCalendar() {
 
   return (
     <div className="container" style={{ maxWidth: '1100px', padding: '1rem 0.5rem 5rem' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button onClick={() => navigate('/admin/automation')} className="back-btn" style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
-          <ChevronLeft size={18} /> Back to Hub
-        </button>
-        <Link to="/docs/automation-hub" className="back-btn" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}>
-          <BookOpen size={16} /> Docs
-        </Link>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.15rem', marginBottom: '2rem' }}>
-        <h1 className="text-gradient text-hero" style={{ fontSize: '1.75rem', margin: 0, lineHeight: 1.1, textAlign: 'center' }}>
-          Serving Calendar
-        </h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0, textAlign: 'center' }}>
-          Manage your schedule and assign members to roles for dynamic automation.
-        </p>
-      </div>
+      <PageHeader
+        icon={CalendarIcon}
+        title="Serving Calendar"
+        subtitle="Manage your schedule and assign members to roles for dynamic automation."
+        actions={
+          <Link to="/docs/automation-hub" className="btn btn-secondary page-header-btn-icon" title="Help & Documentation">
+            <BookOpen size={18} />
+          </Link>
+        }
+      />
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginBottom: '1rem' }}>
         <button className="btn btn-secondary" onClick={downloadExcelTemplate} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>

@@ -12,12 +12,55 @@ const { requireAuth, requireVerified, requireRole } = require('../middleware/aut
 const adminOrTreasurerAuth = [requireAuth, requireVerified, requireRole(['ADMIN', 'YOUTH_TREASURER'])];
 
 const DUES_START_DATE = new Date('2026-05-01');
+const DUES_WEEKLY_AMOUNT = 10;
+const DUES_TIMEZONE = 'Asia/Manila';
 
-// Helper: calculate total arrears for a member
-async function calcMemberArrears(memberId) {
-  const payments = await DuesPayment.find({ member: memberId });
-  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+// User-supplied text goes into a $regex, so anything with regex meaning has to
+// be neutralised first — otherwise a search for "(" throws and a search for
+// ".*" scans everything.
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
+// Shared by the paginated list and the export route so both honour the exact
+// same filters — the export used to be impossible to keep in sync by hand.
+function buildTxQuery({ month, year, filterType, designatedFund, q }) {
+  const query = {};
+
+  if (filterType === 'WEEKLY_DUES') {
+    query.category = 'Weekly Dues';
+  } else if (filterType === 'OTHERS') {
+    query.category = { $ne: 'Weekly Dues' };
+  }
+
+  if (designatedFund) {
+    query.designatedFund = designatedFund === 'UNASSIGNED' ? null : designatedFund;
+  }
+
+  if (month && year) {
+    query.date = {
+      $gte: new Date(year, month - 1, 1),
+      $lte: new Date(year, month, 0, 23, 59, 59, 999),
+    };
+  } else if (year) {
+    query.date = {
+      $gte: new Date(year, 0, 1),
+      $lte: new Date(year, 11, 31, 23, 59, 59, 999),
+    };
+  }
+
+  if (q && String(q).trim()) {
+    const rx = new RegExp(escapeRegex(String(q).trim()), 'i');
+    query.$or = [{ category: rx }, { description: rx }];
+  }
+
+  return query;
+}
+
+// Helper: how many dues Sundays have already come around as of today (PH time).
+// Extracted so the ledger grid, the statement email and the batch reminders all
+// agree on what "expected so far" means.
+function duesSundaysToDate() {
   const nowSystem = new Date();
   const now = new Date(nowSystem.getTime() + 8 * 60 * 60 * 1000);
   now.setUTCHours(0, 0, 0, 0);
@@ -29,8 +72,14 @@ async function calcMemberArrears(memberId) {
     sundaysCount++;
     d.setUTCDate(d.getUTCDate() + 7);
   }
-  const expected = sundaysCount * 10;
-  return expected - totalPaid;
+  return sundaysCount;
+}
+
+// Helper: calculate total arrears for a member
+async function calcMemberArrears(memberId) {
+  const payments = await DuesPayment.find({ member: memberId });
+  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  return duesSundaysToDate() * DUES_WEEKLY_AMOUNT - totalPaid;
 }
 
 // Helper: get Monday of the week for a given date string
@@ -44,27 +93,51 @@ function getWeekStart(dateStr) {
 }
 
 // Get summary (Accessible to all verified users)
+// Aggregated in the database rather than pulled into memory — the old version
+// loaded every transaction ever recorded on each dashboard open.
 router.get('/summary', requireAuth, requireVerified, async (req, res) => {
   try {
-    const transactions = await Transaction.find({});
-    
-    let totalIncome = 0;
-    let totalExpense = 0;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-    transactions.forEach(t => {
-      if (t.type === 'INCOME') {
-        totalIncome += t.amount;
-      } else if (t.type === 'EXPENSE') {
-        totalExpense += t.amount;
-      }
-    });
+    const [totals, monthTotals, prevMonthTotals, unassigned, txCount] = await Promise.all([
+      Transaction.aggregate([
+        { $group: { _id: '$type', total: { $sum: '$amount' } } },
+      ]),
+      Transaction.aggregate([
+        { $match: { date: { $gte: monthStart } } },
+        { $group: { _id: '$type', total: { $sum: '$amount' } } },
+      ]),
+      Transaction.aggregate([
+        { $match: { date: { $gte: prevMonthStart, $lt: monthStart } } },
+        { $group: { _id: '$type', total: { $sum: '$amount' } } },
+      ]),
+      Transaction.aggregate([
+        { $match: { designatedFund: null } },
+        { $group: { _id: '$type', total: { $sum: '$amount' } } },
+      ]),
+      Transaction.countDocuments({}),
+    ]);
 
-    const currentBalance = totalIncome - totalExpense;
+    const pick = (rows, type) => rows.find(r => r._id === type)?.total || 0;
+
+    const totalIncome = pick(totals, 'INCOME');
+    const totalExpense = pick(totals, 'EXPENSE');
+    const monthIncome = pick(monthTotals, 'INCOME');
+    const monthExpense = pick(monthTotals, 'EXPENSE');
 
     res.json({
       totalIncome,
       totalExpense,
-      currentBalance
+      currentBalance: totalIncome - totalExpense,
+      monthIncome,
+      monthExpense,
+      monthNet: monthIncome - monthExpense,
+      prevMonthNet: pick(prevMonthTotals, 'INCOME') - pick(prevMonthTotals, 'EXPENSE'),
+      // What is still sitting in the general pot, not earmarked to any fund
+      unallocated: pick(unassigned, 'INCOME') - pick(unassigned, 'EXPENSE'),
+      transactionCount: txCount,
     });
   } catch (error) {
     console.error('Error fetching funds summary:', error);
@@ -72,33 +145,101 @@ router.get('/summary', requireAuth, requireVerified, async (req, res) => {
   }
 });
 
+// Monthly trend + category breakdown for the Insights tab
+router.get('/analytics', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const months = Math.min(24, Math.max(3, Number(req.query.months) || 6));
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+    const match = { date: { $gte: start } };
+
+    // $year/$month default to UTC; the community banks in PH time, so a Sunday
+    // evening entry would otherwise land in the wrong month.
+    const [monthly, categories, funds] = await Promise.all([
+      Transaction.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: {
+              y: { $year: { date: '$date', timezone: DUES_TIMEZONE } },
+              m: { $month: { date: '$date', timezone: DUES_TIMEZONE } },
+              type: '$type',
+            },
+            total: { $sum: '$amount' },
+          },
+        },
+      ]),
+      Transaction.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: { category: '$category', type: '$type' },
+            total: { $sum: '$amount' },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { total: -1 } },
+      ]),
+      DesignatedFund.find({}).select('name color').lean(),
+    ]);
+
+    // Fill every month in the window, including ones with no activity, so the
+    // chart keeps an even x-axis instead of collapsing empty months.
+    const series = [];
+    for (let i = 0; i < months; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - (months - 1) + i, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      const find = (type) =>
+        monthly.find(r => r._id.y === y && r._id.m === m && r._id.type === type)?.total || 0;
+      const income = find('INCOME');
+      const expense = find('EXPENSE');
+      series.push({ year: y, month: m, income, expense, net: income - expense });
+    }
+
+    res.json({
+      months,
+      series,
+      categories: categories.map(c => ({
+        category: c._id.category,
+        type: c._id.type,
+        total: c.total,
+        count: c.count,
+      })),
+      funds,
+    });
+  } catch (error) {
+    console.error('Error building analytics:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Full (unpaginated) result set for the current filters, used by the export
+// button. Capped so a runaway export cannot exhaust memory.
+router.get('/export', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const query = buildTxQuery(req.query);
+    const transactions = await Transaction.find(query)
+      .sort({ date: -1, createdAt: -1 })
+      .limit(5000)
+      .populate('createdBy', 'displayName')
+      .populate('designatedFund', 'name')
+      .lean();
+
+    res.json({ transactions, total: transactions.length, capped: transactions.length === 5000 });
+  } catch (error) {
+    console.error('Error exporting transactions:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get transactions with pagination (10 per page by default)
 router.get('/', requireAuth, requireVerified, async (req, res) => {
   try {
-    const { month, year, page = 1, limit = 10, filterType, designatedFund } = req.query;
+    const { page = 1, limit = 10 } = req.query;
     const pageNum = Math.max(1, Number(page));
-    const limitNum = Math.max(1, Number(limit));
-    let query = {};
-
-    if (filterType === 'WEEKLY_DUES') {
-      query.category = 'Weekly Dues';
-    } else if (filterType === 'OTHERS') {
-      query.category = { $ne: 'Weekly Dues' };
-    }
-
-    if (designatedFund) {
-      query.designatedFund = designatedFund;
-    }
-
-    if (month && year) {
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0, 23, 59, 59, 999);
-      query.date = { $gte: startDate, $lte: endDate };
-    } else if (year) {
-      const startDate = new Date(year, 0, 1);
-      const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
-      query.date = { $gte: startDate, $lte: endDate };
-    }
+    const limitNum = Math.min(100, Math.max(1, Number(limit)));
+    const query = buildTxQuery(req.query);
 
     const [transactions, total] = await Promise.all([
       Transaction.find(query)
@@ -291,7 +432,21 @@ router.get('/dues/ledger', requireAuth, requireVerified, async (req, res) => {
       DuesMember.find({ isActive: true }).sort({ name: 1 }).populate('linkedUser', 'displayName email'),
       DuesPayment.find({}),
     ]);
-    res.json({ members, payments });
+
+    // The rate and start date used to be duplicated as literals on the client.
+    // Shipping them with the ledger keeps the grid, the status pills and the
+    // emailed statements on one definition.
+    const sundaysToDate = duesSundaysToDate();
+    res.json({
+      members,
+      payments,
+      config: {
+        startDate: DUES_START_DATE,
+        weeklyAmount: DUES_WEEKLY_AMOUNT,
+        sundaysToDate,
+        expectedToDate: sundaysToDate * DUES_WEEKLY_AMOUNT,
+      },
+    });
   } catch (err) {
     console.error('Error fetching ledger:', err);
     res.status(500).json({ message: 'Server error' });
@@ -491,26 +646,26 @@ router.get('/designated', requireAuth, requireVerified, async (req, res) => {
     
     // For each fund, compute the current balance by aggregating transactions assigned to it
     const fundsWithBalances = await Promise.all(funds.map(async (fund) => {
-      const [incomeResult, expenseResult] = await Promise.all([
+      const [rows, lastTx] = await Promise.all([
         Transaction.aggregate([
-          { $match: { type: 'INCOME', designatedFund: fund._id } },
-          { $group: { _id: null, total: { $sum: '$amount' } } }
+          { $match: { designatedFund: fund._id } },
+          { $group: { _id: '$type', total: { $sum: '$amount' }, count: { $sum: 1 } } },
         ]),
-        Transaction.aggregate([
-          { $match: { type: 'EXPENSE', designatedFund: fund._id } },
-          { $group: { _id: null, total: { $sum: '$amount' } } }
-        ])
+        Transaction.findOne({ designatedFund: fund._id }).sort({ date: -1 }).select('date').lean(),
       ]);
 
-      const totalIncome = incomeResult.length > 0 ? incomeResult[0].total : 0;
-      const totalExpense = expenseResult.length > 0 ? expenseResult[0].total : 0;
-      const currentBalance = totalIncome - totalExpense;
+      const income = rows.find(r => r._id === 'INCOME');
+      const expense = rows.find(r => r._id === 'EXPENSE');
+      const totalIncome = income?.total || 0;
+      const totalExpense = expense?.total || 0;
 
       return {
         ...fund.toObject(),
         totalIncome,
         totalExpense,
-        currentBalance
+        currentBalance: totalIncome - totalExpense,
+        transactionCount: (income?.count || 0) + (expense?.count || 0),
+        lastActivity: lastTx?.date || null,
       };
     }));
 

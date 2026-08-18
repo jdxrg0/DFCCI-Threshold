@@ -1,0 +1,219 @@
+/* ==========================================================================
+   Redesign: Navigation — sticky brand bar + mobile sheet
+   ========================================================================== */
+
+/* ── Bar ────────────────────────────────────────────────────────────────── */
+.glass-nav {
+  /* index.css sets these with !important, so they must be overridden in kind */
+  background: color-mix(in srgb, var(--bg-color) 72%, transparent) !important;
+  backdrop-filter: blur(20px) saturate(1.6) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.6) !important;
+  border-bottom: 1px solid var(--hairline) !important;
+  z-index: 110;
+}
+
+/* Brand-coloured hairline under the bar, so the chrome reads as part of the
+   product rather than a floating panel. */
+.glass-nav::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ring), transparent);
+  pointer-events: none;
+}
+
+.navbar-header {
+  position: sticky;
+  top: 0;
+}
+
+.navbar-header > .container {
+  min-height: var(--nav-height);
+  gap: var(--sp-4);
+}
+
+/* ── Brand ──────────────────────────────────────────────────────────────── */
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.navbar-logo {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--r-sm);
+  transition: transform var(--dur) var(--ease);
+}
+
+.navbar-brand a:hover .navbar-logo { transform: rotate(-6deg) scale(1.06); }
+
+.navbar-title {
+  font-size: 1.05rem;
+  font-weight: 900;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-main);
+  line-height: 1.1;
+}
+
+.navbar-title:hover { color: var(--primary); }
+
+.navbar-tagline {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+}
+
+/* ── Desktop nav ────────────────────────────────────────────────────────── */
+.desktop-nav {
+  gap: var(--sp-2);
+}
+
+/* Profile chip */
+.nav-profile-link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2) !important;
+  padding: 0.3rem 0.85rem 0.3rem 0.3rem !important;
+  margin-right: var(--sp-2) !important;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full) !important;
+  background: var(--surface-1);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+.nav-profile-link:hover {
+  background: var(--tint-primary);
+  border-color: var(--ring);
+  transform: translateY(-1px);
+}
+
+.nav-profile-name {
+  font-weight: 800;
+  max-width: 12ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: bottom;
+}
+
+/* Icon actions in the bar */
+.desktop-nav > .btn-secondary {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0 !important;
+  border-radius: var(--r-full);
+}
+
+/* ── Mobile trigger ─────────────────────────────────────────────────────── */
+.mobile-menu-btn {
+  color: var(--text-main);
+  border-radius: var(--r-sm);
+}
+
+@media (max-width: 768px) {
+  .navbar-header > .container { min-height: 3.75rem; }
+
+  .navbar-logo { width: 2rem; height: 2rem; }
+
+  .navbar-title { font-size: 0.98rem; }
+
+  .mobile-menu-btn {
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    background: var(--surface-1);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-full);
+  }
+
+  /* ── Mobile sheet ─────────────────────────────────────────────────────── */
+  .mobile-nav-menu {
+    background: color-mix(in srgb, var(--bg-color) 88%, transparent);
+    backdrop-filter: blur(28px) saturate(1.4);
+    -webkit-backdrop-filter: blur(28px) saturate(1.4);
+    padding: 5rem var(--sp-4) var(--sp-6);
+    gap: var(--sp-4);
+    animation: dash-stagger-fade-in var(--dur) var(--ease-out) both;
+  }
+
+  .mobile-menu-profile-card {
+    background: var(--grad-surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-lg);
+    padding: var(--sp-4) var(--sp-5);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: var(--shadow-md);
+  }
+
+  .mobile-menu-profile-card:hover,
+  .mobile-menu-profile-card:active {
+    border-color: var(--ring);
+    box-shadow: var(--shadow-lg), var(--shadow-glow);
+  }
+
+  .mobile-menu-avatar-glow {
+    background: var(--grad-brand);
+    box-shadow: 0 0 0 4px var(--tint-primary);
+  }
+
+  .mobile-menu-profile-greeting {
+    font-size: var(--fs-eyebrow);
+    letter-spacing: var(--tracking-eyebrow);
+    color: var(--primary);
+    font-weight: 800;
+  }
+
+  .mobile-menu-profile-name {
+    font-size: 1.2rem;
+    font-weight: 800;
+    letter-spacing: var(--tracking-tight);
+  }
+
+  .mobile-menu-list {
+    background: var(--surface-1);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-lg);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: var(--shadow-md);
+  }
+
+  .mobile-menu-item {
+    padding: 1.05rem var(--sp-5);
+    font-size: 1rem;
+    font-weight: 700;
+    border-bottom: 1px solid var(--hairline);
+  }
+
+  .mobile-menu-item:hover,
+  .mobile-menu-item:active {
+    background: var(--tint-primary);
+    padding-left: 1.75rem;
+  }
+
+  .mobile-menu-settings-card {
+    background: var(--surface-1);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-lg);
+    padding: var(--sp-5);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    box-shadow: var(--shadow-md);
+  }
+
+  .mobile-menu-section-title {
+    font-size: var(--fs-eyebrow);
+    font-weight: 800;
+    letter-spacing: var(--tracking-eyebrow);
+    color: var(--primary);
+  }
+}

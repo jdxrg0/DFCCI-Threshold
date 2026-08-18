@@ -4,6 +4,8 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider } from './context/LanguageContext';
 import Navbar from './components/Navbar';
+import BackBar from './components/BackBar';
+import AnimatedBackdrop from './components/AnimatedBackdrop';
 
 import ProtectedRoute from './components/ProtectedRoute';
 import { useAuth } from './context/AuthContext';
@@ -86,9 +88,14 @@ const App = () => {
       <AuthProvider>
         <Router>
           <div className="app-container">
+            <AnimatedBackdrop />
             <NameChangePrompt />
             <Navbar />
             <main className="main-content">
+              {/* One global back control for every module & settings page.
+                  Route hierarchy lives in data/navMap.js — do not add
+                  per-page back buttons. */}
+              <BackBar />
               <Routes>
                 {/* Public / Landing logic */}
                 <Route path="/" element={<RootRedirect />} />

@@ -1,0 +1,1128 @@
+/* ==========================================================================
+   Automation Hub
+   --------------------------------------------------------------------------
+   The hub is an operations console, not a content page: an admin comes here to
+   answer "is it going to fire, what will it say, and did the last one work?".
+   The layout is ordered by that question — status rail, then schedule cards
+   carrying their own next-run and last-run state, then the editors.
+
+   Everything is derived from tokens.css so all fifteen themes come along for
+   free. No hard-coded greys, no per-theme overrides.
+   ========================================================================== */
+
+.ah-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: var(--sp-4) var(--sp-4) var(--sp-8);
+}
+
+/* The page title itself comes from components/PageHeader.jsx — the hub only
+   adds the operational chrome below it. */
+.ah-page-header { margin-bottom: var(--sp-4); }
+
+
+/* ── Status rail ────────────────────────────────────────────────────────── */
+.ah-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(184px, 1fr));
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+}
+
+.ah-stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-4);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+
+.ah-stat:hover {
+  transform: translateY(-2px);
+  border-color: var(--ring);
+}
+
+.ah-stat-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-eyebrow);
+  font-weight: 800;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ah-stat-head svg { color: var(--primary); flex-shrink: 0; }
+
+.ah-stat-value {
+  font-size: 1.55rem;
+  font-weight: 900;
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.ah-stat-value.is-code {
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  font-size: 1.05rem;
+  letter-spacing: 0;
+}
+
+.ah-stat-total {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.ah-stat-foot {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.ah-stat-action {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+}
+
+/* ── Toolbar ────────────────────────────────────────────────────────────── */
+.ah-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+
+.ah-search {
+  position: relative;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.ah-search svg {
+  position: absolute;
+  top: 50%;
+  left: 0.85rem;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.ah-search input {
+  width: 100%;
+  padding: 0.62rem 0.9rem 0.62rem 2.4rem;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text-main);
+  background: var(--surface-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.ah-search input::placeholder { color: var(--text-muted); }
+
+.ah-search input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.ah-segment {
+  display: inline-flex;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+  overflow-x: auto;
+  scrollbar-width: none;
+  max-width: 100%;
+}
+
+.ah-segment::-webkit-scrollbar { display: none; }
+
+.ah-segment-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0.45rem 0.95rem;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.ah-segment-btn:hover { color: var(--text-main); }
+
+.ah-segment-btn.is-active {
+  background: var(--grad-brand);
+  color: var(--on-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.ah-segment-count {
+  padding: 0 0.4rem;
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Schedule cards ─────────────────────────────────────────────────────── */
+.ah-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+.ah-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
+  background: var(--grad-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease), opacity var(--dur) var(--ease);
+}
+
+.ah-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--ring);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
+}
+
+/* A paused schedule stays legible but visibly inert. */
+.ah-card.is-paused {
+  background: var(--surface-1);
+  box-shadow: var(--shadow-sm);
+}
+
+.ah-card.is-paused .ah-card-title { color: var(--text-muted); }
+
+/* The accent rail doubles as the status light. */
+.ah-card::before {
+  content: "";
+  position: absolute;
+  top: var(--sp-5);
+  bottom: var(--sp-5);
+  left: 0;
+  width: 3px;
+  border-radius: 0 var(--r-full) var(--r-full) 0;
+  background: var(--grad-brand);
+  opacity: 0.9;
+}
+
+.ah-card.is-paused::before {
+  background: var(--hairline-strong);
+}
+
+.ah-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.ah-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--text-main);
+  overflow-wrap: anywhere;
+}
+
+.ah-chips {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-2);
+}
+
+.ah-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  border-radius: var(--r-full);
+  border: 1px solid transparent;
+}
+
+.ah-chip svg { flex-shrink: 0; }
+
+.ah-chip--primary { background: var(--tint-primary); color: var(--primary); }
+.ah-chip--muted {
+  background: var(--surface-sunken);
+  border-color: var(--hairline);
+  color: var(--text-muted);
+}
+.ah-chip--success { background: var(--success-soft); color: var(--success); }
+.ah-chip--warning { background: var(--warning-soft); color: var(--warning); }
+.ah-chip--danger { background: var(--danger-soft); color: var(--danger); }
+.ah-chip--info { background: var(--info-soft); color: var(--info); }
+
+.ah-chip--code {
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  letter-spacing: 0.02em;
+}
+
+/* ── Pause / resume switch ──────────────────────────────────────────────── */
+.ah-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.ah-switch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transform: translateY(-50%);
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.ah-switch[aria-checked="true"] {
+  background: var(--grad-brand);
+  border-color: transparent;
+}
+
+.ah-switch[aria-checked="true"]::after {
+  background: var(--on-primary);
+  transform: translate(18px, -50%);
+}
+
+.ah-switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* ── Card body ──────────────────────────────────────────────────────────── */
+.ah-target {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0.55rem 0.75rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-main);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  overflow: hidden;
+}
+
+a.ah-target:hover { color: var(--primary); border-color: var(--ring); }
+
+.ah-target span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ah-message {
+  position: relative;
+  padding: var(--sp-4);
+  padding-right: 2.25rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-main);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  max-height: 7.2rem;
+  overflow: hidden;
+}
+
+/* Fade rather than clip, so it reads as "there is more". */
+.ah-message::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 2.2rem;
+  background: linear-gradient(to bottom, transparent, var(--surface-sunken));
+  pointer-events: none;
+}
+
+.ah-message-icon {
+  position: absolute;
+  top: var(--sp-3);
+  right: var(--sp-3);
+  color: var(--text-muted);
+  opacity: 0.5;
+}
+
+/* Placeholders such as {Presider} are what make these messages dynamic —
+   highlighting them is the fastest way to spot a typo'd tag. */
+.ah-token {
+  padding: 0 0.28rem;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--tint-primary);
+  border-radius: 0.3rem;
+}
+
+.ah-token.is-unknown {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.ah-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--hairline);
+}
+
+.ah-runstate {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.ah-runstate strong {
+  color: var(--text-main);
+  font-weight: 700;
+}
+
+.ah-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+
+.ah-dot--success { background: var(--success); }
+.ah-dot--skipped { background: var(--warning); }
+.ah-dot--error { background: var(--danger); }
+
+.ah-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+}
+
+.ah-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+
+.ah-icon-btn:hover:not(:disabled) {
+  color: var(--primary);
+  background: var(--tint-primary);
+}
+
+.ah-icon-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.ah-icon-btn.is-danger:hover:not(:disabled) {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.ah-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* ── Empty + loading ────────────────────────────────────────────────────── */
+.ah-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-7) var(--sp-5);
+  text-align: center;
+  background: var(--grad-surface);
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--r-xl);
+}
+
+.ah-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 50%;
+  color: var(--primary);
+  background: var(--tint-primary);
+}
+
+.ah-empty h3 {
+  margin: 0;
+  font-size: var(--fs-h3);
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.ah-empty p {
+  margin: 0;
+  max-width: 46ch;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.ah-skeleton {
+  height: 190px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(
+    100deg,
+    var(--surface-sunken) 30%,
+    color-mix(in srgb, var(--text-main) 8%, var(--surface-sunken)) 50%,
+    var(--surface-sunken) 70%
+  );
+  background-size: 220% 100%;
+  animation: ah-shimmer 1.4s var(--ease) infinite;
+}
+
+@keyframes ah-shimmer {
+  from { background-position: 180% 0; }
+  to { background-position: -20% 0; }
+}
+
+/* ── Modals ─────────────────────────────────────────────────────────────── */
+.ah-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(6px) saturate(1.2);
+  -webkit-backdrop-filter: blur(6px) saturate(1.2);
+  animation: ah-fade var(--dur) var(--ease-out);
+}
+
+.ah-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 620px;
+  max-height: min(90vh, 900px);
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  animation: ah-rise var(--dur-slow) var(--ease-out);
+  overflow: hidden;
+}
+
+.ah-panel--wide { max-width: 860px; }
+.ah-panel--narrow { max-width: 460px; }
+
+.ah-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-5) var(--sp-4);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ah-panel-head h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0;
+  font-size: var(--fs-h3);
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-main);
+}
+
+.ah-panel-head p {
+  margin: 0.2rem 0 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.ah-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.ah-panel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--hairline);
+}
+
+.ah-panel-foot .ah-foot-note {
+  margin-right: auto;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+@keyframes ah-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ah-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── Form pieces ────────────────────────────────────────────────────────── */
+.ah-field { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.ah-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+}
+
+.ah-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ah-hint {
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.ah-input,
+.ah-select,
+.ah-textarea {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text-main);
+  background: var(--surface-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.ah-textarea {
+  min-height: 9rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.ah-input:focus,
+.ah-select:focus,
+.ah-textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.ah-input:disabled,
+.ah-select:disabled,
+.ah-textarea:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.ah-select { appearance: auto; }
+
+/* Sectioned form — each block is one decision. */
+.ah-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-4);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+}
+
+.ah-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.ah-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.ah-section-title svg { color: var(--primary); }
+
+/* Choice cards for "who receives this" */
+.ah-choice-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+.ah-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: var(--sp-3);
+  text-align: left;
+  background: var(--surface-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), background var(--dur) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.ah-choice:hover { transform: translateY(-2px); border-color: var(--ring); }
+
+.ah-choice.is-active {
+  background: var(--tint-primary);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary) inset;
+}
+
+.ah-choice-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.ah-choice-desc {
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* Day picker */
+.ah-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.3rem;
+}
+
+.ah-day {
+  padding: 0.5rem 0.2rem;
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--surface-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.ah-day:hover { color: var(--text-main); border-color: var(--ring); }
+
+.ah-day.is-on {
+  color: var(--on-primary);
+  background: var(--grad-brand);
+  border-color: transparent;
+  box-shadow: var(--shadow-sm);
+}
+
+.ah-day-presets {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.ah-mini-btn {
+  padding: 0.25rem 0.6rem;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.ah-mini-btn:hover { color: var(--primary); border-color: var(--primary); border-style: solid; }
+
+/* Token palette */
+.ah-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ah-token-btn {
+  padding: 0.25rem 0.55rem;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--tint-primary);
+  border: 1px solid transparent;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease);
+}
+
+.ah-token-btn:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+/* Live preview */
+.ah-preview {
+  padding: var(--sp-4);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-main);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--r-sm);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.ah-preview:empty::before {
+  content: "Nothing to preview yet.";
+  color: var(--text-muted);
+}
+
+.ah-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--hairline);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.ah-callout svg { flex-shrink: 0; margin-top: 1px; }
+.ah-callout--warning {
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+  color: var(--text-main);
+}
+.ah-callout--warning svg { color: var(--warning); }
+.ah-callout--danger {
+  background: var(--danger-soft);
+  border-color: color-mix(in srgb, var(--danger) 35%, transparent);
+  color: var(--text-main);
+}
+.ah-callout--danger svg { color: var(--danger); }
+.ah-callout--info svg { color: var(--info); }
+
+/* Switch row (checkbox replacement) */
+.ah-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.ah-toggle-copy { display: flex; flex-direction: column; gap: 0.15rem; }
+
+.ah-toggle-copy strong {
+  font-size: var(--fs-sm);
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+/* ── Queue list ─────────────────────────────────────────────────────────── */
+.ah-queue-item {
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  overflow: hidden;
+  transition: border-color var(--dur) var(--ease);
+}
+
+.ah-queue-item.is-open { border-color: var(--ring); }
+
+.ah-queue-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  padding: var(--sp-3) var(--sp-4);
+  text-align: left;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.ah-queue-head:hover { background: var(--tint-primary); }
+
+.ah-queue-date {
+  font-size: var(--fs-sm);
+  font-weight: 800;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ah-queue-sub {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ah-queue-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-4) var(--sp-4);
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--sp-4);
+}
+
+.ah-role-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ah-role-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.7rem;
+  border-radius: var(--r-full);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  color: var(--text-muted);
+}
+
+.ah-role-chip b { color: var(--text-main); font-weight: 700; }
+
+/* ── Run history ────────────────────────────────────────────────────────── */
+.ah-run-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ah-run-row:last-child { border-bottom: none; }
+
+.ah-run-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ah-run-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.ah-run-detail {
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ah-run-time {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Toasts ─────────────────────────────────────────────────────────────── */
+.ah-toasts {
+  position: fixed;
+  right: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  max-width: min(360px, calc(100vw - 2rem));
+}
+
+.ah-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-main);
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-lg);
+  animation: ah-toast-in var(--dur) var(--ease-out);
+}
+
+.ah-toast--success { border-left-color: var(--success); }
+.ah-toast--error { border-left-color: var(--danger); }
+.ah-toast--warning { border-left-color: var(--warning); }
+
+.ah-toast svg { flex-shrink: 0; margin-top: 1px; }
+.ah-toast--success svg { color: var(--success); }
+.ah-toast--error svg { color: var(--danger); }
+.ah-toast--warning svg { color: var(--warning); }
+
+@keyframes ah-toast-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .ah-shell { padding: var(--sp-2) var(--sp-3) 6rem; }
+
+  .ah-hero {
+    padding: var(--sp-5) var(--sp-4);
+    border-radius: var(--r-lg);
+  }
+
+  .ah-hero-actions { margin-top: var(--sp-4); }
+  .ah-hero-actions .btn { flex: 1 1 auto; justify-content: center; }
+
+  .ah-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
+  .ah-stat { padding: var(--sp-3); border-radius: var(--r-md); }
+  .ah-stat-value { font-size: 1.25rem; }
+  .ah-stat-value.is-code { font-size: 0.9rem; }
+
+  .ah-grid { grid-template-columns: 1fr; gap: var(--sp-3); }
+  .ah-card { padding: var(--sp-4); border-radius: var(--r-md); }
+
+  .ah-field-row,
+  .ah-choice-grid { grid-template-columns: 1fr; }
+
+  /* Modals become bottom sheets — reachable with one thumb. */
+  .ah-overlay { padding: 0; align-items: flex-end; }
+
+  .ah-panel {
+    max-width: none;
+    max-height: 92vh;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-bottom: none;
+    animation: ah-sheet var(--dur-slow) var(--ease-out);
+  }
+
+  .ah-panel-body { padding: var(--sp-4); gap: var(--sp-4); }
+  .ah-panel-head { padding: var(--sp-4); }
+  .ah-panel-foot { padding: var(--sp-3) var(--sp-4); }
+  .ah-panel-foot .btn { flex: 1; justify-content: center; }
+  .ah-panel-foot .ah-foot-note { display: none; }
+
+  .ah-toasts { right: var(--sp-3); left: var(--sp-3); bottom: 5.5rem; max-width: none; }
+}
+
+@keyframes ah-sheet {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ah-card,
+  .ah-stat,
+  .ah-choice,
+  .ah-panel,
+  .ah-overlay,
+  .ah-toast,
+  .ah-skeleton {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .ah-card:hover,
+  .ah-stat:hover,
+  .ah-choice:hover { transform: none; }
+}

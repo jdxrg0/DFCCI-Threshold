@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Send, Heart, Sun, User, Calendar, Quote, BookOpen } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { Send, Heart, Sun, User, Calendar, Quote, BookOpen } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
@@ -9,7 +9,6 @@ import PopupModal from '../components/PopupModal';
 
 const AffirmationView = () => {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
   const { t } = useLanguage();
 
@@ -92,13 +91,6 @@ const AffirmationView = () => {
   return (
     <div className="container thread-view-container" style={{ paddingBottom: '3rem', maxWidth: '800px', margin: '0 auto' }}>
       
-      {/* ── Back Button ── */}
-      <div className="btn-back-wrapper">
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/affirm/dashboard')} className="btn-back-pill">
-          <ChevronLeft size={16} /> {t('back')}
-        </button>
-      </div>
-      
       {/* ── Header Metadata ── */}
       <div className="thread-view-header flex justify-end items-start mb-4">
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
@@ -129,10 +121,10 @@ const AffirmationView = () => {
               {/* Card Header */}
               <div className="sl-card-header" style={{ background: 'none', borderBottom: '1px solid var(--border-color)', padding: '0 0 1.5rem 0' }}>
                 {affirmation.topic && (
-                  <h2 style={{ fontSize: '1.8rem', color: 'var(--text-main)', fontWeight: '850', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem', letterSpacing: '-0.02em' }}>
+                  <h1 style={{ fontSize: '1.8rem', color: 'var(--text-main)', fontWeight: '850', margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.75rem', letterSpacing: '-0.02em' }}>
                     <Sun size={28} style={{ color: '#f59e0b', flexShrink: 0 }} />
                     {affirmation.topic}
-                  </h2>
+                  </h1>
                 )}
                 <div className="sl-card-meta" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                   <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -262,13 +254,6 @@ const AffirmationView = () => {
             </button>
           </div>
         )}
-
-        {/* ── Standard Centered Bottom Back Button ── */}
-        <div className="btn-back-wrapper" style={{ marginTop: '3.5rem' }}>
-          <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/affirm/dashboard')} className="btn-back-pill">
-            <ChevronLeft size={16} /> {t('back')}
-          </button>
-        </div>
 
       </div>
 

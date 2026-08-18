@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
-import { Send, ChevronLeft, ArrowLeft } from 'lucide-react';
+import { Send, ArrowLeft, Wrench } from 'lucide-react';
 import api from '../api';
+import PageHeader from '../components/PageHeader';
 
 const CreateTicket = () => {
   const { t } = useLanguage();
@@ -45,22 +46,12 @@ const CreateTicket = () => {
 
   return (
     <div className="container" style={{ maxWidth: '600px', padding: '2rem 1rem' }}>
-      <div className="btn-back-wrapper">
-        <button 
-          onClick={() => navigate('/tickets/dashboard')} 
-          className="btn-back-pill"
-        >
-          <ChevronLeft size={16} /> {t('back')}
-        </button>
-      </div>
-
       <div style={{ padding: 0 }} className="ticket-form-container">
-        <h1 className="ticket-form-title" style={{ fontSize: '2.1rem', color: 'var(--text-main)', marginBottom: '0.5rem', fontWeight: '850', letterSpacing: '-0.03em' }}>
-          {t('create_request')}
-        </h1>
-        <p className="ticket-form-desc" style={{ color: 'var(--text-muted)', marginBottom: '2rem', fontSize: '0.95rem' }}>
-          {t('system_requests_desc')}
-        </p>
+        <PageHeader
+          icon={Wrench}
+          title={t('create_request')}
+          subtitle={t('system_requests_desc')}
+        />
 
         {error && (
           <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', padding: '1rem', borderRadius: '12px', marginBottom: '1.5rem', border: '1px solid rgba(239, 68, 68, 0.2)', fontSize: '0.9rem', fontWeight: '600' }}>

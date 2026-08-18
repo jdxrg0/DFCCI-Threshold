@@ -1,0 +1,1086 @@
+/* ==========================================================================
+   DFCCI Threshold — Admin Dashboard
+   --------------------------------------------------------------------------
+   AdminPanel.jsx used to paint itself with ~1,300 lines of inline style and
+   about forty hard-coded hex values, so it only read correctly on the dark
+   themes: `rgba(0,0,0,0.2)` inputs turned into black boxes on the light ones
+   and the `rgba(255,255,255,0.02)` fills disappeared entirely. Everything
+   here derives from tokens.css, so the module follows whichever theme the
+   admin picked.
+
+   Namespace: .adm-*
+   Layout switch: one breakpoint, 900px. The JSX no longer measures the
+   window — desktop rail vs. mobile tab strip is decided here.
+   ========================================================================== */
+
+/* ── Tone system ─────────────────────────────────────────────────────────
+   Chips, meters and pill toggles all take their colour from a single
+   `--tone`, mixed against --text-main rather than used raw. That keeps the
+   hue but pushes it dark on light themes and light on dark ones, so one
+   rule stays legible everywhere instead of needing a per-theme override. */
+.adm-page {
+  --tone-ok: var(--success);
+  --tone-warn: var(--warning);
+  --tone-danger: var(--danger);
+  --tone-info: var(--info);
+  --tone-brand: var(--primary);
+  --tone-violet: #8b5cf6;
+  --tone-slate: #64748b;
+}
+
+.adm-page [data-tone="ok"] { --tone: var(--tone-ok); }
+.adm-page [data-tone="warn"] { --tone: var(--tone-warn); }
+.adm-page [data-tone="danger"] { --tone: var(--tone-danger); }
+.adm-page [data-tone="info"] { --tone: var(--tone-info); }
+.adm-page [data-tone="brand"] { --tone: var(--tone-brand); }
+.adm-page [data-tone="violet"] { --tone: var(--tone-violet); }
+.adm-page [data-tone="muted"] { --tone: var(--tone-slate); }
+
+.adm-page [data-role="ADMIN"] { --tone: var(--tone-violet); }
+.adm-page [data-role="COUNSELOR"] { --tone: var(--tone-warn); }
+.adm-page [data-role="YOUTH_TREASURER"] { --tone: var(--tone-ok); }
+.adm-page [data-role="MEMBER"] { --tone: var(--tone-slate); }
+
+/* ── Shell ──────────────────────────────────────────────────────────────── */
+.adm-page {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 var(--sp-4) var(--sp-7);
+}
+
+.adm-sync {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.adm-body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-5);
+  margin-top: var(--sp-5);
+}
+
+.adm-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Error banner ───────────────────────────────────────────────────────── */
+.adm-error {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-4);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: var(--r-md);
+  background: var(--danger-soft);
+  color: color-mix(in srgb, var(--danger) 72%, var(--text-main));
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.adm-error__text { flex: 1; min-width: 0; }
+
+.adm-error__btn {
+  flex-shrink: 0;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+  border-radius: var(--r-full);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+
+.adm-error__btn:hover { background: color-mix(in srgb, var(--danger) 16%, transparent); }
+
+/* ── KPI rail ───────────────────────────────────────────────────────────── */
+.adm-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+  gap: var(--sp-3);
+  margin-top: var(--sp-5);
+}
+
+.adm-stat {
+  --tone: var(--primary);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  text-align: left;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--grad-surface);
+  box-shadow: var(--shadow-sm);
+  font: inherit;
+  cursor: pointer;
+  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.adm-stat--static { cursor: default; }
+.adm-stat--static:hover { transform: none; border-color: var(--hairline); box-shadow: var(--shadow-sm); }
+
+.adm-stat:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--tone) 45%, transparent);
+  box-shadow: var(--shadow-md);
+}
+
+.adm-stat__icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  color: color-mix(in srgb, var(--tone) 74%, var(--text-main));
+}
+
+.adm-stat__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.adm-stat__value {
+  font-size: 1.3rem;
+  font-weight: 850;
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-main);
+}
+
+.adm-stat__label {
+  margin-top: 0.1rem;
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Tab navigation ──────────────────────────────────────────────────────
+   One <nav> serves both layouts, so the tab list, its badges and its
+   keyboard handling exist once. Desktop gets a sticky column, mobile a
+   horizontal scroller — the old build shipped two separate copies plus a
+   floating bottom sheet, and only the sheet had working badges. */
+.adm-nav {
+  flex-shrink: 0;
+  width: 232px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  position: sticky;
+  top: var(--sp-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  background: var(--grad-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.adm-nav__title {
+  padding: 0.4rem 0.65rem 0.25rem;
+  font-size: var(--fs-eyebrow);
+  font-weight: 800;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.adm-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.adm-tab:hover { color: var(--text-main); background: var(--tint-primary); }
+
+.adm-tab[aria-selected="true"] {
+  background: var(--tint-primary);
+  border-color: var(--ring);
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.adm-tab__side {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.adm-tab__icon { flex-shrink: 0; }
+
+.adm-count {
+  --tone: var(--danger);
+  flex-shrink: 0;
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 40%, transparent);
+  color: color-mix(in srgb, var(--tone) 74%, var(--text-main));
+  font-size: 0.66rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+/* ── Toolbar (search / filters) ─────────────────────────────────────────── */
+.adm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  margin-bottom: var(--sp-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--grad-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.adm-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.adm-search__icon {
+  position: absolute;
+  left: 0.75rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.adm-search .adm-field { padding-left: 2.25rem; }
+
+.adm-search__clear {
+  position: absolute;
+  right: 0.5rem;
+  display: grid;
+  place-items: center;
+  padding: 0.2rem;
+  border: none;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.adm-search__clear:hover { color: var(--text-main); background: var(--tint-primary); }
+
+/* Inputs read as sunken. --surface-3 already inverts per theme, which is
+   exactly what the old literal rgba(0,0,0,0.2) could not do. */
+.adm-field {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-3);
+  color: var(--text-main);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.adm-field:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.adm-field::placeholder { color: var(--text-muted); font-weight: 500; }
+
+select.adm-field { cursor: pointer; padding-right: 1.75rem; }
+
+.adm-field--auto { width: auto; flex: 0 0 auto; }
+
+/* Inside a card footer the role/status picker fills the row it is given. */
+.adm-card__foot .adm-field { flex: 1; width: 100%; }
+
+.adm-toolbar__spacer { flex: 1 1 auto; }
+
+.adm-toolbar__meta {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.adm-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.5rem 0.8rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text-main);
+  font: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.adm-ghost-btn:hover:not(:disabled) {
+  background: var(--tint-primary);
+  border-color: var(--ring);
+  color: var(--primary);
+}
+
+.adm-ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+.adm-table-wrap {
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  background: var(--grad-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.adm-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+.adm-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.adm-table th {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--text-main) 4%, transparent);
+  font-size: var(--fs-eyebrow);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.adm-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 0.86rem;
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.adm-table tbody tr:last-child td { border-bottom: none; }
+.adm-table tbody tr { transition: background var(--dur-fast) var(--ease); }
+.adm-table tbody tr:hover { background: var(--tint-primary); }
+
+.adm-td-right { text-align: right; }
+.adm-td-dim { color: var(--text-muted); white-space: nowrap; }
+
+/* ── Identity block (shared by table row and mobile card) ───────────────── */
+.adm-ident {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.adm-ident__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.adm-ident__name {
+  font-size: 0.9rem;
+  font-weight: 750;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-ident__mail {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-self {
+  font-size: var(--fs-xs);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+/* ── Chips & pill toggles ───────────────────────────────────────────────── */
+.adm-chip {
+  --tone: var(--tone-slate);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--r-full);
+  border: 1px solid color-mix(in srgb, var(--tone) 30%, transparent);
+  background: color-mix(in srgb, var(--tone) 13%, transparent);
+  color: color-mix(in srgb, var(--tone) 72%, var(--text-main));
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.adm-chip--sq { border-radius: var(--r-xs); }
+
+.adm-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.adm-pill {
+  --tone: var(--tone-slate);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.32rem 0.7rem;
+  border-radius: var(--r-full);
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease);
+}
+
+.adm-pill:hover { border-color: var(--ring); color: var(--text-main); }
+
+.adm-pill[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--tone) 38%, transparent);
+  background: color-mix(in srgb, var(--tone) 13%, transparent);
+  color: color-mix(in srgb, var(--tone) 72%, var(--text-main));
+}
+
+.adm-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.adm-icon-btn {
+  --tone: var(--tone-slate);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  padding: 0.4rem;
+  border-radius: var(--r-xs);
+  border: 1px solid color-mix(in srgb, var(--tone) 28%, transparent);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  color: color-mix(in srgb, var(--tone) 72%, var(--text-main));
+  cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.adm-icon-btn:hover {
+  background: var(--tone);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* ── Cards (approvals, history, tickets, mobile users & emails) ─────────── */
+.adm-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--sp-3);
+}
+
+.adm-cards--single { grid-template-columns: 1fr; }
+
+.adm-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  background: var(--grad-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.adm-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.adm-card__stamp {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.adm-card__title {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-main);
+}
+
+.adm-card__body {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.adm-card__foot {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--hairline);
+}
+
+.adm-rule { height: 1px; background: var(--hairline); }
+
+/* Sender → receiver bridge */
+.adm-flow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+}
+
+.adm-flow__side {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.adm-flow__side--to { text-align: right; }
+
+.adm-flow__label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.adm-flow__name {
+  font-size: 0.85rem;
+  font-weight: 750;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-flow__arrow { flex-shrink: 0; color: var(--text-muted); }
+
+.adm-quote {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--r-xs);
+  background: var(--surface-sunken);
+}
+
+.adm-quote__who {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.adm-quote__text {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text-main);
+}
+
+/* ── Meters ─────────────────────────────────────────────────────────────── */
+.adm-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.adm-meter__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.adm-meter__label { color: var(--text-main); }
+.adm-meter__value { color: var(--text-muted); }
+
+.adm-meter__value[data-tone] { color: color-mix(in srgb, var(--tone) 74%, var(--text-main)); }
+
+.adm-meter__track {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--text-main) 12%, transparent);
+}
+
+.adm-meter__fill {
+  --tone: var(--success);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--tone),
+    color-mix(in srgb, var(--tone) 62%, #000)
+  );
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+.adm-meter__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* ── Empty & loading states ─────────────────────────────────────────────── */
+.adm-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: var(--sp-7) var(--sp-5);
+  text-align: center;
+  border: 1px dashed var(--hairline-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+
+.adm-empty__icon { color: var(--text-muted); opacity: 0.35; margin-bottom: 0.3rem; }
+
+.adm-empty__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.adm-empty__text {
+  margin: 0;
+  max-width: 42ch;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.adm-skel {
+  height: 68px;
+  border-radius: var(--r-md);
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 25%,
+    color-mix(in srgb, var(--text-main) 8%, var(--surface-2)) 37%,
+    var(--surface-2) 63%
+  );
+  background-size: 400% 100%;
+  animation: adm-shimmer 1.4s ease infinite;
+}
+
+.adm-skel + .adm-skel { margin-top: var(--sp-2); }
+
+@keyframes adm-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* Referenced by every loading affordance in the app but never defined, so
+   every RefreshCw "spinner" in the codebase sat perfectly still. */
+.spin,
+.adm-spin { animation: adm-spin 0.85s linear infinite; }
+
+@keyframes adm-spin { to { transform: rotate(360deg); } }
+
+/* ── Pager ──────────────────────────────────────────────────────────────── */
+.adm-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  margin-top: var(--sp-4);
+}
+
+.adm-pager__label {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* ── Platform limits ────────────────────────────────────────────────────── */
+.adm-limits {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.adm-limit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: var(--sp-4);
+}
+
+.adm-limit-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  background: var(--grad-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.adm-limit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.adm-limit-head__name {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.adm-limit-head__name svg { color: color-mix(in srgb, var(--tone) 72%, var(--text-main)); }
+
+.adm-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--primary)) 25%, transparent);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--tone, var(--primary)) 8%, transparent);
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.adm-note svg { flex-shrink: 0; margin-top: 0.1rem; color: color-mix(in srgb, var(--tone, var(--primary)) 72%, var(--text-main)); }
+
+.adm-note strong { color: var(--text-main); }
+
+.adm-fine {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.adm-fine strong { color: var(--text-main); }
+
+.adm-spec {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: var(--fs-xs);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.adm-spec strong { color: var(--text-main); }
+
+.adm-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-main);
+}
+
+.adm-mini-scroll {
+  max-height: 224px;
+  overflow-y: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+}
+
+.adm-mini {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-xs);
+  text-align: left;
+}
+
+.adm-mini th {
+  position: sticky;
+  top: 0;
+  padding: 0.45rem 0.7rem;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-2);
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.adm-mini td {
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-muted);
+}
+
+.adm-mini tbody tr:last-child td { border-bottom: none; }
+.adm-mini td:first-child { font-weight: 700; color: var(--text-main); }
+.adm-mini th:not(:first-child), .adm-mini td:not(:first-child) { text-align: right; }
+
+/* ── Email preview drawer ───────────────────────────────────────────────── */
+.adm-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in srgb, #000 45%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: adm-fade var(--dur) var(--ease-out);
+}
+
+.adm-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 560px;
+  height: 100%;
+  padding: var(--sp-5);
+  overflow-y: auto;
+  border-left: 1px solid var(--hairline);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-lg);
+  animation: adm-slide-in var(--dur-slow) var(--ease-out);
+}
+
+.adm-drawer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.adm-drawer__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 850;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-main);
+}
+
+.adm-drawer__title svg { color: var(--primary); }
+
+.adm-drawer__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: var(--sp-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+}
+
+.adm-drawer__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  font-size: 0.85rem;
+}
+
+.adm-drawer__key { flex-shrink: 0; font-weight: 600; color: var(--text-muted); }
+
+.adm-drawer__val {
+  min-width: 0;
+  font-weight: 700;
+  text-align: right;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adm-drawer__err {
+  padding-top: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+  font-size: var(--fs-xs);
+  color: color-mix(in srgb, var(--danger) 74%, var(--text-main));
+  overflow-wrap: anywhere;
+}
+
+.adm-drawer__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1;
+  min-height: 260px;
+}
+
+.adm-drawer__frame {
+  flex: 1;
+  width: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: #fff;
+}
+
+.adm-drawer__foot {
+  display: flex;
+  gap: var(--sp-3);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--hairline);
+}
+
+@keyframes adm-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@keyframes adm-slide-in {
+  from { transform: translateX(24px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+/* These only ever hide. Assigning a positive display here would clobber the
+   element's own layout mode (`display: initial` resolves to `inline`, which
+   collapses the card grid and the table shell). */
+@media (min-width: 901px) { .adm-mob { display: none !important; } }
+@media (max-width: 900px) { .adm-desk { display: none !important; } }
+
+@media (max-width: 900px) {
+  .adm-page { padding: 0 0.85rem var(--sp-6); }
+
+  .adm-body { flex-direction: column; gap: var(--sp-3); }
+
+  /* Vertical rail becomes a sticky horizontal scroller. Sticky rather than
+     the old fixed bottom sheet, so nothing overlaps the last table row and
+     the page no longer needs 5.5rem of dead padding underneath. */
+  .adm-nav {
+    position: sticky;
+    top: var(--nav-height);
+    z-index: 20; /* below .glass-nav (110), above page content */
+    flex-direction: row;
+    width: 100%;
+    gap: 0.35rem;
+    padding: 0.4rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-radius: var(--r-md);
+    background: var(--surface-solid);
+  }
+
+  .adm-nav::-webkit-scrollbar { display: none; }
+  .adm-nav__title { display: none; }
+
+  .adm-tab {
+    width: auto;
+    flex-shrink: 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+
+  .adm-stats { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.5rem; }
+  .adm-stat { padding: 0.6rem 0.7rem; gap: 0.55rem; }
+  .adm-stat__icon { width: 32px; height: 32px; }
+  .adm-stat__value { font-size: 1.05rem; }
+  .adm-stat__label { font-size: 0.62rem; }
+
+  .adm-cards { grid-template-columns: 1fr; gap: 0.6rem; }
+  .adm-card { padding: 0.8rem; gap: 0.6rem; border-radius: var(--r-md); }
+  .adm-limit-grid { grid-template-columns: 1fr; gap: 0.75rem; }
+  .adm-limit-card { padding: 1rem; gap: 0.85rem; }
+  .adm-drawer { padding: 1rem; max-width: none; }
+  .adm-toolbar { padding: 0.6rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-skel,
+  .spin,
+  .adm-spin,
+  .adm-drawer,
+  .adm-drawer-backdrop { animation: none; }
+
+  .adm-stat:hover { transform: none; }
+  .adm-meter__fill { transition: none; }
+}

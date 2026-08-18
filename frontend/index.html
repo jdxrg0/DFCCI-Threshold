@@ -13,6 +13,57 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap" rel="stylesheet">
     <title>DFCCI Threshold</title>
+    <!--
+      Theme bootstrap — MUST stay inline and MUST stay before any stylesheet.
+      React applies the theme in an effect, which runs after first paint, so
+      without this every load flashes the default theme before settling. With a
+      "system" mode that flash is a full light/dark inversion.
+
+      Keep this in sync with src/context/ThemeContext.jsx. It is deliberately
+      dependency-free and wrapped in try/catch: a throw here would block the
+      page, and localStorage throws outright in Safari private mode.
+    -->
+    <script>
+      (function () {
+        try {
+          var LEGACY = {
+            light: 'azure', dark: 'azure', mint: 'aurora', aurora: 'aurora',
+            sepia: 'ember', sunset: 'ember', lavender: 'dusk', dusk: 'dusk',
+            peony: 'rose', claret: 'rose', glacier: 'tide', abyss: 'tide',
+            obsidian: 'mono', nord: 'nord', dracula: 'dracula',
+            vaporwave: 'vapor', cyberpunk: 'neon', espresso: 'roast',
+            beacon: 'signal', slate: 'slate', cottagecore: 'sage'
+          };
+          var DARK_LEGACY = {
+            dark: 1, aurora: 1, dusk: 1, sunset: 1, obsidian: 1, nord: 1,
+            dracula: 1, vaporwave: 1, cyberpunk: 1, abyss: 1, espresso: 1,
+            claret: 1, beacon: 1
+          };
+
+          var stored = localStorage.getItem('theme') || 'azure';
+          var mode = localStorage.getItem('themeMode');
+
+          // First run after the paired-variant upgrade: a legacy key encodes a
+          // mode as well as a family, so honour it instead of falling to system.
+          if (!mode) mode = LEGACY[stored] && stored !== 'azure'
+            ? (DARK_LEGACY[stored] ? 'dark' : 'light')
+            : (stored === 'dark' ? 'dark' : stored === 'light' ? 'light' : 'system');
+
+          var family = LEGACY[stored] || stored;
+          var resolved = mode === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : mode;
+
+          var el = document.documentElement;
+          el.className = resolved;
+          el.setAttribute('data-theme', family);
+          el.style.colorScheme = resolved;
+        } catch (e) {
+          document.documentElement.className = 'light';
+          document.documentElement.setAttribute('data-theme', 'azure');
+        }
+      })();
+    </script>
     <!-- Standard Google Identity Services script -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>

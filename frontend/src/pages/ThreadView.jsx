@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import MessageBubble from '../components/MessageBubble';
 import TimerButton from '../components/TimerButton';
 import useFormPersist from '../hooks/useFormPersist';
-import { Check, X, ShieldAlert, CheckCircle, Hourglass, Trash2, ChevronLeft } from 'lucide-react';
+import { Check, X, ShieldAlert, CheckCircle, Hourglass, Trash2 } from 'lucide-react';
 
 const formatRelativeTime = (dateString) => {
   if (!dateString) return '';
@@ -43,7 +43,6 @@ const ThreadView = () => {
   const { id } = useParams();
   const { user } = useAuth();
   const { t } = useLanguage();
-  const navigate = useNavigate();
 
   const [thread, setThread] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -265,18 +264,12 @@ const ThreadView = () => {
 
   return (
     <div className="container" style={{ maxWidth: '800px', paddingBottom: '2rem' }}>
-      <div className="btn-back-wrapper">
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/mirror/dashboard')} className="btn-back-pill">
-          <ChevronLeft size={16} /> {t('back')}
-        </button>
-      </div>
-
       <div className="thread-view-header flex justify-between items-start mb-4">
         <div>
           {isCounselorView ? (
-            <h2 style={{ margin: 0 }}>Counselor View: {thread.receiver?.displayName || 'Unknown'} & Anonymous Sender</h2>
+            <h1 style={{ margin: 0 }}>Counselor View: {thread.receiver?.displayName || 'Unknown'} & Anonymous Sender</h1>
           ) : (
-            <h2 style={{ margin: 0 }}>{isSender ? `To: ${otherPartyName}` : `From: ${otherPartyName}`}</h2>
+            <h1 style={{ margin: 0 }}>{isSender ? `To: ${otherPartyName}` : `From: ${otherPartyName}`}</h1>
           )}
           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
             Sent {formatRelativeTime(thread.createdAt)}

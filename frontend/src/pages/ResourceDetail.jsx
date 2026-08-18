@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
-import { ArrowLeft, Download, BookOpen, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, Download, BookOpen } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 const getDownloadUrl = (url) => {
@@ -93,13 +93,6 @@ const ResourceDetail = () => {
 
   return (
     <div className="resource-detail-view">
-      
-      {/* Centered Back Pill at the top */}
-      <div className="btn-back-wrapper" style={{ marginBottom: '1rem' }}>
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/resources')} className="btn-back-pill">
-          <ChevronLeft size={16} /> {t('back') || 'Back'}
-        </button>
-      </div>
 
       {/* Premium Reader Card Container */}
       <div className="resource-reading-card">
@@ -172,15 +165,6 @@ const ResourceDetail = () => {
               {t('no_description') || 'No abstract or description provided for this resource.'}
             </p>
           )}
-        </div>
-
-        {/* Bottom Centered Back Trigger */}
-        <div className="resource-reading-footer">
-          <div className="btn-back-wrapper" style={{ margin: 0 }}>
-            <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/resources')} className="btn-back-pill">
-              <ChevronLeft size={16} /> {t('back') || 'Back'}
-            </button>
-          </div>
         </div>
 
       </div>

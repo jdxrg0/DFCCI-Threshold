@@ -1,0 +1,197 @@
+/* ==========================================================================
+   DFCCI Threshold — Redesign: Token Layer
+   --------------------------------------------------------------------------
+   Loaded after themes.css. Everything below is DERIVED from the seed colours
+   a theme declares there, so adding a theme means writing eight values and
+   nothing else. This file is the recipe; themes.css is the ingredient list.
+   ========================================================================== */
+
+/* ── 1. Scale — identical in every theme ────────────────────────────────── */
+:root {
+  /* Radii — larger, softer, more contemporary */
+  --r-xs: 0.5rem;
+  --r-sm: 0.75rem;
+  --r-md: 1rem;
+  --r-lg: 1.375rem;
+  --r-xl: 1.875rem;
+  --r-full: 999px;
+  --radius: var(--r-md);
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-full: var(--r-full);
+
+  /* Spacing rhythm */
+  --sp-1: 0.25rem;
+  --sp-2: 0.5rem;
+  --sp-3: 0.75rem;
+  --sp-4: 1rem;
+  --sp-5: 1.5rem;
+  --sp-6: 2rem;
+  --sp-7: 3rem;
+  --sp-8: 4rem;
+
+  /* Type scale — fluid, bold, tightly tracked */
+  --fs-display: clamp(2.4rem, 1.5rem + 3.6vw, 4rem);
+  --fs-h1: clamp(1.85rem, 1.25rem + 2.2vw, 2.75rem);
+  --fs-h2: clamp(1.4rem, 1.1rem + 1.1vw, 1.9rem);
+  --fs-h3: clamp(1.15rem, 1rem + 0.6vw, 1.4rem);
+  --fs-body: 1rem;
+  --fs-sm: 0.875rem;
+  --fs-xs: 0.78rem;
+  --fs-eyebrow: 0.72rem;
+
+  --tracking-tight: -0.03em;
+  --tracking-eyebrow: 0.14em;
+
+  /* Motion */
+  --ease: cubic-bezier(0.22, 0.85, 0.28, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 0.15s;
+  --dur: 0.24s;
+  --dur-slow: 0.42s;
+
+  /* Layout */
+  --shell-width: 1240px;
+  --shell-narrow: 780px;
+  --nav-height: 4.5rem;
+}
+
+/* ── 2. Semantic colour — light themes (default) ────────────────────────── */
+/* Elevation mixes toward white: page sits on tinted grey, cards read as paper.
+   Selector is `:root:root` (specificity 0,2,0) on purpose: index.css still
+   declares --surface, --border-color and the shadow set inside its per-theme
+   `:root.<name>` blocks, which would otherwise outrank a plain `:root` here
+   and leave themed pages on the old values. Section 3 below matches that
+   specificity and comes later, so dark themes still override this. */
+:root:root {
+  --surface-1: color-mix(in srgb, #fff 78%, var(--bg-color));
+  --surface-2: color-mix(in srgb, #fff 92%, var(--bg-color));
+  /* Inputs read as sunken against near-white cards rather than blending in */
+  --surface-3: color-mix(in srgb, var(--text-main) 5%, var(--bg-color));
+  --surface-solid: color-mix(in srgb, #fff 94%, var(--bg-color));
+  --surface-sunken: color-mix(in srgb, var(--text-main) 4%, var(--bg-color));
+
+  --hairline: color-mix(in srgb, var(--text-main) 12%, transparent);
+  --hairline-strong: color-mix(in srgb, var(--text-main) 20%, transparent);
+
+  --tint-primary: color-mix(in srgb, var(--primary) 10%, transparent);
+  --tint-primary-strong: color-mix(in srgb, var(--primary) 18%, transparent);
+  --ring: color-mix(in srgb, var(--primary) 32%, transparent);
+  --glow: color-mix(in srgb, var(--primary) 26%, transparent);
+
+  /* Pulled only partway toward --secondary. A full primary→secondary sweep
+     lands on a much lighter stop in several themes (dark, sunset, dusk)
+     which drops --on-primary text below usable contrast at the far end. */
+  --grad-brand: linear-gradient(
+    135deg,
+    var(--primary) 0%,
+    color-mix(in srgb, var(--secondary) 55%, var(--primary)) 100%
+  );
+  --grad-surface: linear-gradient(
+    160deg,
+    color-mix(in srgb, #fff 88%, var(--bg-color)) 0%,
+    color-mix(in srgb, #fff 70%, var(--bg-color)) 100%
+  );
+
+  /* Bold ambient elevation + tight contact shadow */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, var(--text-main) 10%, transparent);
+  --shadow-md:
+    0 2px 4px color-mix(in srgb, var(--text-main) 6%, transparent),
+    0 12px 24px -12px color-mix(in srgb, var(--text-main) 22%, transparent);
+  --shadow-lg:
+    0 2px 4px color-mix(in srgb, var(--text-main) 5%, transparent),
+    0 24px 48px -20px color-mix(in srgb, var(--text-main) 28%, transparent);
+  --shadow-glow: 0 12px 32px -12px var(--glow);
+
+  /* Status */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #3b82f6;
+  --success-soft: color-mix(in srgb, var(--success) 14%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 14%, transparent);
+  --danger-soft: color-mix(in srgb, var(--danger) 14%, transparent);
+  --info-soft: color-mix(in srgb, var(--info) 14%, transparent);
+
+  /* Page backdrop — layered mesh rather than a flat two-stop gradient.
+     Sized in vw/vh so the wash keeps the same proportions on a phone as on a
+     desktop; fixed rem radii covered an entire mobile viewport in solid tint. */
+  --bg-mesh:
+    radial-gradient(90vw 55vh at 88% -10%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 65%),
+    radial-gradient(80vw 50vh at -10% 8%, color-mix(in srgb, var(--secondary) 8%, transparent), transparent 62%),
+    radial-gradient(75vw 50vh at 50% 110%, color-mix(in srgb, var(--primary) 5%, transparent), transparent 70%);
+
+  /* ── Aliases for tokens the JSX already references but index.css never
+     defined. Previously these silently resolved to nothing. ── */
+  --primary-color: var(--primary);
+  --primary-glow: var(--glow);
+  --secondary-color: var(--secondary);
+  --accent: var(--secondary);
+  --accent-bg: var(--tint-primary);
+  --accent-border: var(--hairline-strong);
+  --card-bg: var(--surface-1);
+  --bg-primary: var(--bg-color);
+  --bg-secondary: var(--surface-sunken);
+  --bg-main: var(--bg-color);
+  --bg: var(--bg-color);
+  --border: var(--border-color);
+  --text-color: var(--text-main);
+  --text-h: var(--text-main);
+  --success-color: var(--success);
+  --warning-color: var(--warning);
+  --danger-color: var(--danger);
+  --error-color: var(--danger);
+  --info-color: var(--info);
+  --social-bg: var(--surface-2);
+  --shadow: var(--shadow-md);
+
+  /* ── Legacy theme tokens. index.css styles these directly and used to get
+     them from 15 hand-written per-theme blocks; they are now derived once
+     from the seeds, so a theme never has to restate them. ── */
+  --surface: var(--surface-1);
+  --surface-border: var(--hairline);
+  --border-color: var(--hairline-strong);
+  /* body::before paints --bg-mesh now; the old per-theme gradient is unused. */
+  --bg-gradient: none;
+}
+
+/* ── 3. Dark themes — elevation inverts, everything else is shared ──────── */
+/* Mode lives on the root element as a class, independent of which theme family
+   is active, so elevation inverts here once for every dark variant. This used
+   to be a hand-maintained list of theme names — a dark theme missing from it
+   rendered near-white cards on a near-black ground. */
+:root.dark {
+  --surface-1: color-mix(in srgb, #fff 5%, var(--bg-color));
+  --surface-2: color-mix(in srgb, #fff 9%, var(--bg-color));
+  --surface-3: color-mix(in srgb, #000 24%, var(--bg-color));
+  --surface-solid: color-mix(in srgb, #fff 7%, var(--bg-color));
+  --surface-sunken: color-mix(in srgb, #000 28%, var(--bg-color));
+
+  --hairline: color-mix(in srgb, #fff 10%, transparent);
+  --hairline-strong: color-mix(in srgb, #fff 18%, transparent);
+
+  --tint-primary: color-mix(in srgb, var(--primary) 14%, transparent);
+  --tint-primary-strong: color-mix(in srgb, var(--primary) 24%, transparent);
+  --ring: color-mix(in srgb, var(--primary) 42%, transparent);
+  --glow: color-mix(in srgb, var(--primary) 34%, transparent);
+
+  --grad-surface: linear-gradient(
+    160deg,
+    color-mix(in srgb, #fff 8%, var(--bg-color)) 0%,
+    color-mix(in srgb, #fff 3%, var(--bg-color)) 100%
+  );
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.4), 0 14px 28px -14px rgba(0, 0, 0, 0.75);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, 0.4), 0 28px 56px -24px rgba(0, 0, 0, 0.85);
+
+  --bg-mesh:
+    radial-gradient(90vw 55vh at 88% -10%, color-mix(in srgb, var(--primary) 15%, transparent), transparent 65%),
+    radial-gradient(80vw 50vh at -10% 8%, color-mix(in srgb, var(--secondary) 12%, transparent), transparent 62%),
+    radial-gradient(75vw 50vh at 50% 112%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 70%);
+}
+
+/* Seed colours (--primary, --on-primary, --primary-rgb, …) live in
+   themes.css, which is imported before this file. */
+

@@ -282,21 +282,15 @@ const DevotionalView = () => {
 
   return (
     <div style={S.page}>
-      <div className="btn-back-wrapper">
-        <button onClick={() => navigate('/devotionals')} className="btn-back-pill">
-          <ChevronLeft size={16} /> {t('devo_back_to_dashboard')}
-        </button>
-      </div>
-
       {error && <div style={{ color: '#EF4444', fontSize: '0.85rem', marginBottom: '1rem', textAlign: 'center', fontWeight: '600' }}>{error}</div>}
 
       <div style={S.card}>
         {/* ── Gradient Hero Header ── */}
         <div style={S.heroBar(devotional.status)}>
           <div style={S.heroHeaderRow}>
-            <h2 style={S.heroTitleRow}>
+            <h1 style={S.heroTitleRow}>
               <BookHeart size={20} /> {t('devo_detail_title')}
-            </h2>
+            </h1>
             <div style={S.heroBadge(devotional.status)}>
               {devotional.status === 'Acknowledged' ? (
                 <CheckCircle2 size={12} />

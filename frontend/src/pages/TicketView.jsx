@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { ChevronLeft, ArrowLeft, AlertCircle, Wrench, PlusCircle, FileText, CheckCircle, Clock, RefreshCw, User } from 'lucide-react';
+import { ArrowLeft, AlertCircle, Wrench, PlusCircle, FileText, CheckCircle, Clock, RefreshCw, User } from 'lucide-react';
 import api from '../api';
 
 const TicketView = () => {
   const { id } = useParams();
   const { user } = useAuth();
   const { t } = useLanguage();
-  const navigate = useNavigate();
   
   const [ticket, setTicket] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -113,14 +112,6 @@ const TicketView = () => {
 
   return (
     <div className="container" style={{ maxWidth: '800px', padding: '2rem 1rem' }}>
-      <div className="btn-back-wrapper">
-        <button 
-          onClick={() => navigate('/tickets/dashboard')} 
-          className="btn-back-pill"
-        >
-          <ChevronLeft size={16} /> {t('back')}
-        </button>
-      </div>
 
       <div style={{ padding: 0, marginBottom: '2rem' }} className="ticket-view-header-container">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '2rem' }}>
@@ -176,15 +167,6 @@ const TicketView = () => {
             </div>
           )}
         </div>
-      </div>
-
-      <div className="btn-back-wrapper" style={{ marginTop: '3rem' }}>
-        <button 
-          onClick={() => navigate('/tickets/dashboard')} 
-          className="btn-back-pill"
-        >
-          <ChevronLeft size={16} /> {t('back')}
-        </button>
       </div>
     </div>
   );

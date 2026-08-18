@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, BookHeart, Send, BookOpen, Flame, Target, Calendar, Heart, Info, Zap, AlertTriangle } from 'lucide-react';
+import { BookHeart, Send, BookOpen, Flame, Target, Calendar, Heart, Info, Zap, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import useFormPersist from '../hooks/useFormPersist';
 import { useLanguage } from '../context/LanguageContext';
@@ -281,18 +281,12 @@ const SubmitDevotional = () => {
 
   return (
     <div style={S.page}>
-      <div className="btn-back-wrapper">
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/devotionals')} className="btn-back-pill">
-          <ChevronLeft size={16} /> {t('back')}
-        </button>
-      </div>
-
       <div style={S.card}>
         {/* Hero gradient header */}
         <div style={S.heroBar}>
-          <h2 style={S.heroTitle}>
+          <h1 style={S.heroTitle}>
             <BookHeart size={22} /> {t('devo_submit_title')}
-          </h2>
+          </h1>
           <p style={S.heroVerse}>{t('devo_scripture_quote')}</p>
           <p style={S.heroRef}>— {t('devo_scripture_ref')}</p>
         </div>

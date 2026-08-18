@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { PlusCircle, FileText, AlertCircle, Wrench, RefreshCw, CheckCircle, Clock } from 'lucide-react';
 import api from '../api';
+import PageHeader from '../components/PageHeader';
 
 const TicketsDashboard = () => {
   const { user } = useAuth();
@@ -78,20 +79,18 @@ const TicketsDashboard = () => {
       
       {/* ── BREATHTAKING MESH GRADIENT HERO BANNER ── */}
       <div className="ticket-hero-banner">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-          <div>
-            <h1 className="ticket-dashboard-title" style={{ fontSize: '2.1rem', color: 'var(--text-main)', margin: 0, fontWeight: '850', letterSpacing: '-0.03em', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <Wrench size={28} style={{ color: 'var(--primary)' }} /> {t('system_requests')}
-            </h1>
-            <p className="ticket-dashboard-desc" style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.35rem 0 0 0', fontWeight: '500' }}>
-              {t('system_requests_desc')}
-            </p>
-          </div>
-          <Link to="/tickets/create" className="btn btn-primary" style={{ height: '40px', padding: '0 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', borderRadius: '9999px', fontWeight: '700' }}>
-            <PlusCircle size={16} />
-            <span>New Request</span>
-          </Link>
-        </div>
+        <PageHeader
+          className="page-header--flush"
+          icon={Wrench}
+          title={t('system_requests')}
+          subtitle={t('system_requests_desc')}
+          actions={
+            <Link to="/tickets/create" className="btn btn-primary page-header-btn">
+              <PlusCircle size={16} />
+              <span>New Request</span>
+            </Link>
+          }
+        />
       </div>
 
       <div style={{ padding: 0 }}>

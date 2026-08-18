@@ -1,27 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { 
-  ChevronLeft,
-  Camera, 
-  User, 
-  Mail, 
-  ArrowLeft, 
-  Trash2, 
-  Check, 
-  Eye, 
-  EyeOff, 
-  ShieldAlert, 
+import {
+  Camera,
+  User,
+  Mail,
+  ArrowLeft,
+  Trash2,
+  Check,
+  Eye,
+  EyeOff,
+  ShieldAlert,
   Settings,
-  LockKeyhole
+  LockKeyhole,
 } from 'lucide-react';
-import { PRESETS, renderPresetSvg, renderAvatarHelper } from '../utils/avatarHelper';
+import { PRESETS, PRESET_META, getPresetName, renderPresetSvg, renderAvatarHelper } from '../utils/avatarHelper';
+import PageHeader from '../components/PageHeader';
 
 const ProfileSettings = () => {
   const { user, updateProfile, updateEmail, verifyEmailOtp, resendEmailOtp, cancelEmailUpdate, updatePassword, removeProfilePicture } = useAuth();
   const { t } = useLanguage();
-  const navigate = useNavigate();
 
   // ── States ──
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -54,6 +53,9 @@ const ProfileSettings = () => {
   // Drag and Drop State
   const [dragActive, setDragActive] = useState(false);
 
+  // Preset avatar awaiting confirmation (null = no pending change)
+  const [pendingPreset, setPendingPreset] = useState(null);
+
   // Synchronize pending verification state on load/update
   useEffect(() => {
     if (user?.pendingEmail) {
@@ -61,6 +63,18 @@ const ProfileSettings = () => {
       setShowEmailVerifyModal(true);
     }
   }, [user]);
+
+  // Let Escape back out of the preset confirmation without applying it
+  useEffect(() => {
+    if (!pendingPreset) return;
+
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && !profileLoading) setPendingPreset(null);
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [pendingPreset, profileLoading]);
 
   // Refs
   const fileInputRef = useRef(null);
@@ -153,9 +167,17 @@ const ProfileSettings = () => {
     }
   };
 
-  const handlePresetSelect = async (presetId) => {
+  // Tapping a preset only stages it — nothing is saved until the user confirms
+  const handlePresetSelect = (presetId) => {
+    if (user?.profilePicture === presetId) return; // Already applied, nothing to confirm
+    setPendingPreset(presetId);
+  };
+
+  const handleConfirmPreset = async () => {
+    if (!pendingPreset) return;
+
     const formData = new FormData();
-    formData.append('presetAvatar', presetId);
+    formData.append('presetAvatar', pendingPreset);
 
     setProfileLoading(true);
     setErrorMsg('');
@@ -163,9 +185,11 @@ const ProfileSettings = () => {
 
     try {
       await updateProfile(formData);
-      setSuccessMsg('Default avatar applied successfully!');
+      setSuccessMsg(`"${getPresetName(pendingPreset)}" is now your profile avatar!`);
+      setPendingPreset(null);
     } catch (err) {
       setErrorMsg(err.response?.data?.message || 'Failed to update avatar.');
+      setPendingPreset(null);
     } finally {
       setProfileLoading(false);
     }
@@ -340,19 +364,11 @@ const ProfileSettings = () => {
   return (
     <div className="container" style={{ maxWidth: '900px', marginTop: '1.5rem', marginBottom: '4rem' }}>
       
-      {/* ── Back Button ── */}
-      <div className="btn-back-wrapper">
-        <button onClick={() => window.history.state && window.history.state.idx > 0 ? navigate(-1) : navigate('/dashboard')} className="btn-back-pill">
-          <ChevronLeft size={16} /> {t('back')}
-        </button>
-      </div>
-
-      {/* ── Header Row ── */}
-      <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-        <h1 className="text-gradient text-hero" style={{ fontSize: '1.75rem', margin: 0, lineHeight: 1.1, textAlign: 'center' }}>
-          {t('profile_settings')}
-        </h1>
-      </div>
+      <PageHeader
+        icon={Settings}
+        title={t('profile_settings')}
+        subtitle={t('profile_settings_desc') || 'Manage your name, photo, email address and password.'}
+      />
 
       {/* ── Premium Centered Modal Dialog Popup ── */}
       {(successMsg || errorMsg) && (
@@ -632,6 +648,161 @@ const ProfileSettings = () => {
         </div>
       )}
 
+      {/* ── Preset Avatar Confirmation Modal ── */}
+      {pendingPreset && (
+        <div
+          onClick={() => { if (!profileLoading) setPendingPreset(null); }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.65)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10900,
+            animation: 'fadeIn 0.2s ease',
+          }}
+        >
+          <style>{`
+            @keyframes fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes scaleUp {
+              from {
+                transform: scale(0.92);
+                opacity: 0;
+              }
+              to {
+                transform: scale(1);
+                opacity: 1;
+              }
+            }
+          `}</style>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: 'var(--card-bg, #1a1a24)',
+              border: '1px solid rgba(var(--primary-rgb), 0.35)',
+              borderRadius: '16px',
+              padding: '2.25rem 2rem',
+              width: '100%',
+              maxWidth: '400px',
+              textAlign: 'center',
+              boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
+              animation: 'scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              margin: '1.5rem',
+            }}
+          >
+            {/* Large preview of the avatar being tried on */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '1.25rem' }}>
+              <div style={{ textAlign: 'center', opacity: 0.55 }}>
+                {renderCurrentPhoto(52)}
+                <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04rem' }}>
+                  Current
+                </p>
+              </div>
+
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--text-muted)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ flexShrink: 0, marginBottom: '1rem' }}
+                aria-hidden="true"
+              >
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+
+              <div style={{ textAlign: 'center' }}>
+                {renderPresetSvg(pendingPreset, 76, { boxShadow: '0 0 22px rgba(var(--primary-rgb), 0.35)' })}
+                <p style={{ margin: '0.4rem 0 0 0', fontSize: '0.65rem', color: 'var(--primary)', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04rem' }}>
+                  New
+                </p>
+              </div>
+            </div>
+
+            {/* Modal Title */}
+            <h3
+              className="text-gradient"
+              style={{
+                fontSize: '1.35rem',
+                fontWeight: 'bold',
+                marginBottom: '0.6rem',
+                marginTop: 0,
+              }}
+            >
+              Use "{getPresetName(pendingPreset)}"?
+            </h3>
+
+            {/* Description text */}
+            <p
+              style={{
+                fontSize: '0.9rem',
+                color: 'var(--text-main)',
+                opacity: 0.9,
+                lineHeight: '1.5',
+                marginBottom: '1.6rem',
+                marginTop: 0,
+              }}
+            >
+              {user?.profilePicture && !PRESETS.includes(user.profilePicture)
+                ? 'This replaces your uploaded profile photo. The photo will be permanently deleted.'
+                : 'This will become your profile avatar everywhere in the portal.'}
+            </p>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                type="button"
+                onClick={() => setPendingPreset(null)}
+                className="ff-btn ff-btn-secondary"
+                style={{
+                  flex: 1,
+                  padding: '0.75rem 1rem',
+                  fontSize: '0.9rem',
+                  fontWeight: 'bold',
+                  borderRadius: '10px',
+                }}
+                disabled={profileLoading}
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleConfirmPreset}
+                className="ff-btn ff-btn-primary"
+                style={{
+                  flex: 1,
+                  padding: '0.75rem 1rem',
+                  fontSize: '0.9rem',
+                  fontWeight: 'bold',
+                  borderRadius: '10px',
+                  boxShadow: '0 4px 15px rgba(var(--primary-rgb), 0.25)',
+                }}
+                disabled={profileLoading}
+              >
+                {profileLoading ? (
+                  <><span className="ff-btn-spinner" /> Applying...</>
+                ) : (
+                  <><Check size={16} strokeWidth={3} /> Apply</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Primary Settings Panels Grid ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '1.25rem' }}>
         
@@ -724,28 +895,35 @@ const ProfileSettings = () => {
 
             {/* Grid of Preset SVG Avatars */}
             <div style={{ width: '100%' }}>
-              <div 
+              <p style={{ margin: '0 0 0.35rem 0', fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-main)', textAlign: 'center' }}>
+                {t('preset_avatars')}
+              </p>
+              <p style={{ margin: '0 0 0.85rem 0', fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+                Tap one to preview it — you'll be asked to confirm before it's applied.
+              </p>
+              <div
                 style={{
                   display: 'flex',
                   flexWrap: 'wrap',
                   justifyContent: 'center',
                   gap: '0.5rem',
-                  maxWidth: '300px',
+                  maxWidth: '320px',
                   margin: '0 auto',
                 }}
               >
-                {PRESETS.map((presetId, idx) => {
+                {PRESET_META.map(({ id: presetId, name }) => {
                   const isActive = user?.profilePicture === presetId;
                   return (
                     <button
                       key={presetId}
+                      type="button"
                       onClick={() => handlePresetSelect(presetId)}
                       style={{
                         padding: 0,
                         border: isActive ? '2px solid var(--primary)' : '2px solid transparent',
                         borderRadius: '50%',
                         overflow: 'hidden',
-                        cursor: 'pointer',
+                        cursor: isActive ? 'default' : 'pointer',
                         width: '40px',
                         height: '40px',
                         background: 'transparent',
@@ -757,7 +935,9 @@ const ProfileSettings = () => {
                       }}
                       className="preset-avatar-btn"
                       disabled={profileLoading}
-                      title={`Preset Avatar ${idx + 1}`}
+                      title={isActive ? `${name} (current avatar)` : name}
+                      aria-label={isActive ? `${name}, current avatar` : `Choose ${name} avatar`}
+                      aria-pressed={isActive}
                     >
                       {renderPresetSvg(presetId, 40, { boxShadow: 'none' })}
                     </button>

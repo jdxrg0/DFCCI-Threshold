@@ -655,4 +655,105 @@ export const moduleDocs = {
       ]
     }
   }
+  ,
+  'automation-hub': {
+    en: {
+      title: 'Automation Hub',
+      description: 'The admin console for scheduled Messenger dispatches: recurring group announcements, role reminders pulled from the serving calendar, and the weekly confirmation code.',
+      whatIsIt: "The Automation Hub schedules messages so nobody has to remember to send them. Every schedule owns a GitHub Actions workflow; the server fires it on a UTC cron with a fully resolved message. A schedule either posts to one fixed group chat, or looks up the serving calendar and messages whoever is assigned to a role that week. Placeholders such as {Presider} and {WeeklyCode} are replaced at send time, so one template covers the whole year.",
+      howToUse: [
+        'Open the Automation Hub from the admin dashboard. The status rail across the top shows how many schedules are running, when the next dispatch fires, how many lineups are queued, and the current weekly code.',
+        'Click "New schedule", give it a name, then choose who receives it: a group chat (one fixed Messenger URL) or whoever holds a role (resolved from the serving calendar).',
+        'Set the time and the days it repeats. Times are entered in your own timezone and stored as UTC, and the editor shows the exact next run before you save.',
+        'Write the message. Use the placeholder buttons to insert {Date}, {WeeklyCode} or any role from the calendar, and check the live preview underneath, which fills in the next real lineup.',
+        'Optionally enable the confirmation code broadcast, which posts the lineup code for the week as a separate message on its own schedule.',
+        'Use the eye icon on any card to preview exactly what the next dispatch would send, resolved by the same code the cron uses. Nothing is sent by a preview.',
+        'Use the play icon to send immediately, the list icon to edit the per-date message queue, and the history icon to see every past run with its outcome.',
+        'Use the switch on a card to pause a schedule. It keeps everything but stops firing, which is safer than deleting.',
+        'Keep the Member Directory up to date: a role reminder can only be delivered if the name on the calendar matches a member with a Facebook chat URL.'
+      ],
+      rules: [
+        'Admin only. Every route in this module requires an ADMIN account.',
+        'Names must match exactly. The serving calendar name and the Member Directory name are matched case-insensitively but otherwise literally, so a nickname or an extra initial breaks delivery.',
+        'Pause before you delete. Deleting a schedule also deletes its GitHub workflow file and cannot be undone; pausing is reversible.',
+        'Preview before you send. "Send now" dispatches real messages immediately.',
+        'A duplicate always starts paused, so a copy can never double-post by accident.',
+        'Role schedules skip silently when there is no upcoming lineup for that role. Check the run history if a message did not arrive.',
+        'The weekly code regenerates every Sunday at 12:00 PM Manila time, and any message using {WeeklyCode} picks up the new value automatically.'
+      ],
+      templates: [
+        {
+          title: "Template: Weekly lineup announcement",
+          description: "A group chat post that names the whole serving team for the coming Sunday.",
+          structure: [
+            { label: "Greeting", text: "Who the message is for." },
+            { label: "Date", text: "Use {Date} — it becomes the lineup date." },
+            { label: "Assignments", text: "One line per role, using the role placeholders." },
+            { label: "Code", text: "Use {WeeklyCode} if the team confirms by replying with it." }
+          ],
+          example: "Good day, family! Here is our lineup for {Date}:\n\nPresider: {Presider}\nSong Leader: {Song Leader}\nOpening Song: {Opening Song}\n\nPlease reply with {WeeklyCode} to confirm."
+        },
+        {
+          title: "Template: Personal role reminder",
+          description: "A direct message to whoever holds one role, sent through a role-targeted schedule.",
+          structure: [
+            { label: "Name", text: "Address the assigned person with their role placeholder." },
+            { label: "Assignment", text: "State the role and the date." },
+            { label: "Confirmation", text: "Ask for a reply containing the code so the reader bot can verify it." }
+          ],
+          example: "Hi {Presider}! A gentle reminder that you are presiding on {Date}.\n\nPlease confirm by replying with {WeeklyCode}. Thank you and God bless!"
+        }
+      ]
+    },
+    fil: {
+      title: 'Automation Hub',
+      description: 'Ang admin console para sa mga naka-iskedyul na mensahe sa Messenger: paulit-ulit na anunsyo sa group chat, mga paalala base sa serving calendar, at ang lingguhang confirmation code.',
+      whatIsIt: "Ang Automation Hub ang nag-iiskedyul ng mga mensahe para walang kailangang tumandaan kung kailan ipapadala. Bawat schedule ay may sariling GitHub Actions workflow na pinapaandar ng server sa itinakdang oras (UTC) kasama ang buong mensahe. Maaaring ipadala ito sa isang group chat, o sa kung sino ang nakatalaga sa isang role ayon sa serving calendar. Ang mga placeholder tulad ng {Presider} at {WeeklyCode} ay pinapalitan sa mismong oras ng pagpapadala, kaya sapat na ang isang template para sa buong taon.",
+      howToUse: [
+        'Buksan ang Automation Hub mula sa admin dashboard. Ipinapakita ng status rail sa itaas kung ilan ang tumatakbo, kailan ang susunod na padala, ilang lineup ang naka-queue, at ang kasalukuyang weekly code.',
+        'Pindutin ang "New schedule", lagyan ng pangalan, at piliin kung sino ang tatanggap: isang group chat o kung sino man ang may hawak ng isang role.',
+        'Itakda ang oras at mga araw ng pag-uulit. Ang oras ay nasa iyong sariling timezone at iniimbak bilang UTC, at makikita mo ang eksaktong susunod na takbo bago mag-save.',
+        'Isulat ang mensahe. Gamitin ang mga placeholder button para ipasok ang {Date}, {WeeklyCode}, o kahit anong role mula sa calendar, at tingnan ang live preview sa ibaba.',
+        'Opsyonal na buksan ang confirmation code broadcast, isang hiwalay na mensahe na naglalaman ng lingguhang code.',
+        'Gamitin ang eye icon para makita nang eksakto ang ipapadala sa susunod na takbo. Walang naipapadala kapag nag-preview.',
+        'Gamitin ang play icon para ipadala agad, ang list icon para i-edit ang mensahe kada petsa, at ang history icon para makita ang lahat ng nakaraang takbo.',
+        'Gamitin ang switch sa card para i-pause ang isang schedule. Hindi ito mabubura, titigil lang ito sa pagpapadala.',
+        'Panatilihing updated ang Member Directory: maipapadala lamang ang paalala kung ang pangalan sa calendar ay tugma sa isang miyembrong may Facebook chat URL.'
+      ],
+      rules: [
+        'Para sa admin lamang. Lahat ng bahagi ng module na ito ay nangangailangan ng ADMIN account.',
+        'Kailangang eksakto ang pangalan. Ang pangalan sa serving calendar at sa Member Directory ay dapat magkatugma, kaya nasisira ng palayaw o dagdag na initial ang paghahatid.',
+        'I-pause muna bago magbura. Ang pagbura ay tinatanggal din ang GitHub workflow file at hindi na maibabalik.',
+        'Mag-preview bago magpadala. Ang "Send now" ay agad na nagpapadala ng tunay na mensahe.',
+        'Ang duplicate ay laging nakapause, para hindi makapagpadala nang doble.',
+        'Nilalaktawan ng role schedules ang takbo kapag walang paparating na lineup para sa role na iyon. Tingnan ang run history kung may hindi dumating.',
+        'Ang weekly code ay awtomatikong nababago tuwing Linggo ng 12:00 PM (oras ng Maynila).'
+      ]
+    },
+    conyo: {
+      title: 'Automation Hub',
+      description: 'The admin control room for automated Messenger blasts, bes: recurring group announcements, role reminders straight from the serving calendar, and the weekly confirmation code.',
+      whatIsIt: "Basically, the Automation Hub is your set-it-and-forget-it messenger. Every schedule has its own GitHub Actions workflow, and the server fires it on the dot with the message already filled in. It can blast one group chat, or it can look up the serving calendar and DM literally whoever is assigned that week. Placeholders like {Presider} and {WeeklyCode} get swapped in at send time, so one template lasts the whole year.",
+      howToUse: [
+        'Open the Automation Hub from the admin dashboard. The stats on top tell you what is running, when the next blast fires, how many lineups are queued, and the current code.',
+        'Tap "New schedule", name it, then pick who gets it: a group chat, or whoever holds a role that week.',
+        'Set the time and days. It uses your own timezone, promise, and it shows you the exact next run before you save.',
+        'Write your message and tap the placeholder chips to drop in {Date}, {WeeklyCode} or any role. The live preview below shows the real thing.',
+        'Turn on the confirmation code broadcast if you want the code posted separately on its own schedule.',
+        'Tap the eye icon to preview exactly what would be sent. Super safe, nothing goes out.',
+        'Tap play to send right now, the list icon to edit the message per date, and the history icon to see every past run.',
+        'Tap the switch to pause a schedule instead of deleting it, bes. Way safer.',
+        'Keep the Member Directory updated, ha. If the calendar name does not match a member with a chat URL, the DM literally cannot be delivered.'
+      ],
+      rules: [
+        'Admins only, sorry not sorry.',
+        'Names must match exactly. A nickname or an extra initial and the DM just will not land.',
+        'Pause instead of delete. Deleting also kills the GitHub workflow file, and that is forever.',
+        'Preview before you hit send. "Send now" is instant and real.',
+        'Duplicates always start paused so nothing double-posts, thank God.',
+        'Role schedules skip quietly when there is no upcoming lineup. Check the run history if something did not arrive.',
+        'The weekly code refreshes every Sunday 12:00 PM Manila time, automatic na.'
+      ]
+    }
+  }
 };

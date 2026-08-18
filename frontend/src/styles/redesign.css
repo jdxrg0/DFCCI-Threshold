@@ -1,0 +1,24 @@
+/* ==========================================================================
+   DFCCI Threshold — Redesign entry point
+   --------------------------------------------------------------------------
+   Imported from main.jsx AFTER index.css. Order matters: tokens first, then
+   base, then the component and page layers that consume them.
+
+   Removing the single `import './styles/redesign.css'` line in main.jsx
+   reverts the site to the previous look.
+   ========================================================================== */
+
+@import './themes.css';
+@import './tokens.css';
+@import './base.css';
+@import './backdrop.css';
+@import './components.css';
+@import './navbar.css';
+@import './dashboard.css';
+@import './auth.css';
+@import './pages.css';
+@import './modules.css';
+@import './automation.css';
+@import './fundtracker.css';
+@import './admin.css';
+@import './responsive.css';

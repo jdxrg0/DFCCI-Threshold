@@ -1,0 +1,245 @@
+/* ==========================================================================
+   Redesign: Responsive reconciliation
+   --------------------------------------------------------------------------
+   index.css tunes many selectors inside @media blocks. Because this redesign
+   layer loads afterwards, its unscoped rules were winning over those mobile
+   values (equal specificity, later wins) and pushing desktop sizing onto
+   phones. Every property the redesign took over is re-established here at the
+   same breakpoint index.css used, expressed in the new design language.
+
+   Must be imported LAST.
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* ── Typography ───────────────────────────────────────────────────────── */
+  h1 { font-size: 1.75rem; }
+  h2 { font-size: 1.4rem; }
+  h3 { font-size: 1.2rem; }
+
+  .text-hero {
+    font-size: 2.1rem;
+    line-height: 1.08;
+  }
+
+  .text-subtitle {
+    font-size: 1rem;
+    margin-bottom: var(--sp-4);
+  }
+
+  /* ── Density ──────────────────────────────────────────────────────────── */
+  .card {
+    padding: var(--sp-4);
+    border-radius: var(--r-md);
+  }
+
+  /* Hover lift is meaningless on touch and causes jitter on tap */
+  .card:hover {
+    transform: none;
+    box-shadow: var(--shadow-md);
+  }
+
+  .btn {
+    padding: 0.55rem 1.1rem;
+    font-size: 0.85rem;
+  }
+
+  .btn:hover:not(:disabled),
+  a.btn:hover:not(:disabled) { transform: none; }
+
+  /* ── Inputs — 16px keeps iOS Safari from zooming on focus ─────────────── */
+  .form-input,
+  .form-textarea,
+  select.form-input {
+    padding: 0.6rem 0.8rem;
+    font-size: 16px;
+  }
+
+  .ff-input,
+  .auth-glass-card .ff-input {
+    padding: 0.7rem 0.85rem;
+    font-size: 16px;
+  }
+
+  .ff-field { margin-bottom: var(--sp-4); }
+
+  .fun-title,
+  .auth-glass-card .fun-title {
+    font-size: 1.25rem;
+    margin-bottom: var(--sp-4);
+  }
+
+  .ff-btn,
+  .auth-glass-card .ff-btn {
+    padding: 0.8rem 1.25rem;
+    font-size: 0.95rem;
+  }
+
+  /* ── Navbar ───────────────────────────────────────────────────────────── */
+  .navbar-brand { gap: var(--sp-2); }
+
+  .navbar-tagline { font-size: 0.62rem; }
+
+  /* Sheet must clear the sticky bar, which paints above it */
+  .mobile-nav-menu { padding-top: 5.5rem; }
+
+  /* ── Module cards ─────────────────────────────────────────────────────── */
+  .module-card-header { gap: var(--sp-2); }
+
+  .module-card-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .module-card-icon-svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .module-card:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .module-card:hover .module-card-icon { transform: none; }
+
+  .module-action-btn {
+    height: 2.25rem;
+    font-size: 0.8rem;
+  }
+
+  /* Icon-only docs button stays square instead of stretching to a wide pill */
+  .action-docs {
+    width: 2.25rem;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .module-card-actions {
+    gap: var(--sp-2);
+    padding-top: var(--sp-3);
+  }
+
+  /* Two module cards per row leaves the primary pill very tight; the arrow is
+     decoration, so the label gets the room instead. */
+  .action-open { padding: 0 var(--sp-3); }
+
+  .action-open svg { display: none; }
+
+  /* ── Stat + hero tiles ────────────────────────────────────────────────── */
+  .stat-pill:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .dashboard-hero-avatar-glow:hover { transform: none; }
+
+  /* ── Messages ─────────────────────────────────────────────────────────── */
+  .message-bubble { padding: 0.7rem 0.85rem; }
+
+  /* ── Notifications ────────────────────────────────────────────────────── */
+  .notification-container-glass { border-radius: var(--r-md); }
+
+  .notification-item {
+    border: 1px solid var(--hairline);
+    border-radius: 0.85rem;
+    transition: background-color var(--dur) var(--ease);
+  }
+
+  /* ── Tickets ──────────────────────────────────────────────────────────── */
+  .ticket-card-glass:hover,
+  .thread-card-glass:hover,
+  .affirmation-card-glass:hover,
+  .games-card-glass:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ── Misc hover resets ────────────────────────────────────────────────── */
+  .book-card:hover,
+  :root.dark .book-card:hover,
+  .resource-stat-card:hover,
+  .quiz-option-btn:hover:not(:disabled) { transform: none; }
+
+  .back-btn:hover,
+  .btn-back-pill:hover { transform: none; }
+}
+
+@media (max-width: 640px) {
+  .resource-hero-title { font-size: 1.6rem; }
+
+  .resource-grid { gap: var(--sp-3); }
+
+  .book-card-category,
+  .book-card-tag { font-size: 0.6rem; }
+
+  /* Reading view is deliberately full-bleed on small screens */
+  .resource-reading-card {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  .resource-reading-title {
+    font-size: 1.75rem;
+    letter-spacing: -0.01em;
+  }
+
+  .resource-reading-content { font-size: 1.025rem; }
+}
+
+@media (max-width: 480px) {
+  .auth-logo-ring { margin-bottom: var(--sp-3); }
+
+  .auth-brand-hero { font-size: 2.2rem; }
+
+  .auth-brand-label {
+    font-size: 0.65rem;
+    letter-spacing: 0.3em;
+  }
+
+  .auth-brand-divider { margin: 0.65rem 0; }
+
+  .auth-tagline { font-size: 0.85rem; }
+
+  .auth-glass-card { padding: var(--sp-5) var(--sp-4); }
+
+  /* Full-width stat tiles left a lot of dead space beside a short figure;
+     keep them paired and let the number shrink instead. */
+  .quick-stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+  .stat-pill {
+    column-gap: var(--sp-2);
+    padding: var(--sp-3);
+  }
+
+  .stat-pill-value {
+    font-size: 1.15rem;
+    overflow-wrap: anywhere;
+  }
+
+  .stat-pill-label { font-size: 0.62rem; }
+
+  .stat-pill-icon {
+    width: 1rem;
+    height: 1rem;
+    padding: 0.45rem;
+  }
+}
+
+/* ── Touch devices: drop hover-only affordances regardless of width ─────── */
+@media (hover: none) {
+  .card:hover,
+  .module-card:hover,
+  .stat-pill:hover,
+  .book-card:hover,
+  .ticket-card-glass:hover,
+  .thread-card-glass:hover,
+  .affirmation-card-glass:hover,
+  .games-card-glass:hover {
+    transform: none;
+  }
+
+  .module-card:hover::before { opacity: 0; }
+
+  .card:hover::after { opacity: 0; }
+}

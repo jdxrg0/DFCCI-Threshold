@@ -3,6 +3,7 @@ export const translations = {
     // Nav
     hello: 'Hello',
     profile_settings: 'Profile Settings',
+    profile_settings_desc: 'Manage your name, photo, email address and password.',
     change_avatar: 'Change Profile Picture',
     update_profile_btn: 'Save Profile',
     update_email_btn: 'Update Email',
@@ -403,6 +404,7 @@ export const translations = {
   fil: {
     hello: 'Kamusta',
     profile_settings: 'Mga Setting ng Profile',
+    profile_settings_desc: 'Pamahalaan ang iyong pangalan, larawan, email address at password.',
     change_avatar: 'Baguhin ang Larawan ng Profile',
     update_profile_btn: 'I-save ang Profile',
     update_email_btn: 'I-update ang Email',
@@ -796,6 +798,7 @@ export const translations = {
   conyo: {
     hello: 'Hello',
     profile_settings: 'Profile Settings, bes',
+    profile_settings_desc: 'I-manage yung name, photo, email address at password mo, bes.',
     change_avatar: 'Palit of Profile Pic',
     update_profile_btn: 'Save Profile na!',
     update_email_btn: 'Update Email na!',
