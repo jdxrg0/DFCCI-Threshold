@@ -369,6 +369,78 @@ select.adm-field { cursor: pointer; padding-right: 1.75rem; }
 
 .adm-ghost-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* Destructive variant. Tinted rather than solid so it reads as one of the row
+   of ghost buttons it sits in, not as a primary call to action. */
+.adm-ghost-btn--danger {
+  border-color: color-mix(in srgb, var(--danger) 32%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: color-mix(in srgb, var(--danger) 72%, var(--text-main));
+}
+
+.adm-ghost-btn--danger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 48%, transparent);
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: color-mix(in srgb, var(--danger) 82%, var(--text-main));
+}
+
+/* Bulk-action bar. It replaces the toolbar's meta area, and takes a whole row of
+   it (flex-basis 100%) rather than squeezing in beside the filters — six controls
+   next to a search box is a horizontal scroll trap at 360px. */
+.adm-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1 1 100%;
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--hairline);
+}
+
+.adm-bulk__count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--r-full);
+  background: var(--tint-primary-strong);
+  color: var(--primary);
+  font-size: var(--fs-xs);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* Date-range pair for the audit filter. The caption sits above the control so
+   both inputs still fit side by side on a narrow toolbar. */
+.adm-dates {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.adm-dates__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.adm-dates__label {
+  font-size: var(--fs-eyebrow);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.adm-dates .adm-field {
+  width: auto;
+  min-width: 0;
+  padding: 0.4rem 0.5rem;
+  font-size: var(--fs-xs);
+}
+
 /* ── Table ──────────────────────────────────────────────────────────────── */
 .adm-table-wrap {
   overflow: hidden;
@@ -412,6 +484,34 @@ select.adm-field { cursor: pointer; padding-right: 1.75rem; }
 
 .adm-td-right { text-align: right; }
 .adm-td-dim { color: var(--text-muted); white-space: nowrap; }
+
+/* Selection column. Fixed width so ticking a box never reflows the name beside
+   it, and the right padding is dropped so the box sits close to its row. */
+.adm-table th.adm-td-check,
+.adm-table td.adm-td-check {
+  width: 2.4rem;
+  padding-right: 0;
+}
+
+/* accent-color keeps the native control on the active theme instead of leaving
+   it Windows blue, which is the one colour tokens.css cannot reach. */
+.adm-check {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.adm-check:disabled { cursor: not-allowed; opacity: 0.5; }
+
+/* Holds the column open on the current admin's row, which has no checkbox. */
+.adm-check-gap {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+}
 
 /* ── Identity block (shared by table row and mobile card) ───────────────── */
 .adm-ident {
@@ -557,6 +657,9 @@ select.adm-field { cursor: pointer; padding-right: 1.75rem; }
   gap: var(--sp-2);
 }
 
+/* A long display name must ellipsis rather than shove the chip off the row. */
+.adm-card__head .adm-ident { flex: 1; }
+
 .adm-card__stamp {
   font-size: var(--fs-xs);
   font-weight: 600;
@@ -588,6 +691,13 @@ select.adm-field { cursor: pointer; padding-right: 1.75rem; }
 }
 
 .adm-rule { height: 1px; background: var(--hairline); }
+
+/* A card can carry its own urgency — an expired signup code has to be visible
+   before the chip is read, so the tone lands on the card edge as well. */
+.adm-card[data-tone] {
+  border-color: color-mix(in srgb, var(--tone) 32%, transparent);
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--tone) 55%, transparent), var(--shadow-sm);
+}
 
 /* Sender → receiver bridge */
 .adm-flow {
@@ -754,6 +864,15 @@ select.adm-field { cursor: pointer; padding-right: 1.75rem; }
   100% { background-position: 0 50%; }
 }
 
+/* Server-driven lists keep their current rows while the next page loads. Swapping
+   in skeletons would collapse the table to a different height and bounce the page
+   under the cursor, which is how a mis-click lands on the wrong row. */
+.adm-stale {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity var(--dur) var(--ease);
+}
+
 /* Referenced by every loading affordance in the app but never defined, so
    every RefreshCw "spinner" in the codebase sat perfectly still. */
 .spin,
@@ -901,6 +1020,86 @@ select.adm-field { cursor: pointer; padding-right: 1.75rem; }
 .adm-mini tbody tr:last-child td { border-bottom: none; }
 .adm-mini td:first-child { font-weight: 700; color: var(--text-main); }
 .adm-mini th:not(:first-child), .adm-mini td:not(:first-child) { text-align: right; }
+
+/* ── Audit log ──────────────────────────────────────────────────────────── */
+.adm-audit__cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+/* The summary is the primary content and can run long, so it wraps rather than
+   forcing the Details column to widen the whole table. */
+.adm-audit__summary {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.adm-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.adm-expand:hover { border-color: var(--ring); color: var(--primary); }
+
+.adm-expand__caret { transition: transform var(--dur) var(--ease); }
+.adm-expand__caret--open { transform: rotate(180deg); }
+
+.adm-diff {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--sp-2);
+  padding: var(--sp-1) 0;
+}
+
+.adm-diff__side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.adm-diff__label {
+  font-size: var(--fs-eyebrow);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* before/after are arbitrary JSON, so the block scrolls inside its own box —
+   one long value must not be able to widen the table it is expanded inside. */
+.adm-pre {
+  margin: 0;
+  max-height: 220px;
+  padding: 0.6rem 0.7rem;
+  overflow: auto;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  color: var(--text-main);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 
 /* ── Email preview drawer ───────────────────────────────────────────────── */
 .adm-drawer-backdrop {
@@ -1072,6 +1271,18 @@ select.adm-field { cursor: pointer; padding-right: 1.75rem; }
   .adm-limit-card { padding: 1rem; gap: 0.85rem; }
   .adm-drawer { padding: 1rem; max-width: none; }
   .adm-toolbar { padding: 0.6rem; }
+
+  /* The bulk bar is the one group that must stay usable at 360px: its controls
+     flex to a shared basis so two fit per row instead of one long scroller.
+     Beats .adm-field--auto's `flex: 0 0 auto` on specificity, deliberately. */
+  .adm-bulk { gap: 0.35rem; }
+  .adm-bulk .adm-ghost-btn { flex: 1 1 8.5rem; justify-content: center; }
+  .adm-bulk .adm-field { flex: 1 1 8.5rem; width: auto; }
+  .adm-bulk .adm-toolbar__spacer { display: none; }
+
+  .adm-dates { flex: 1 1 100%; }
+  .adm-dates__field { flex: 1; }
+  .adm-dates .adm-field { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1082,5 +1293,8 @@ select.adm-field { cursor: pointer; padding-right: 1.75rem; }
   .adm-drawer-backdrop { animation: none; }
 
   .adm-stat:hover { transform: none; }
-  .adm-meter__fill { transition: none; }
+
+  .adm-meter__fill,
+  .adm-stale,
+  .adm-expand__caret { transition: none; }
 }

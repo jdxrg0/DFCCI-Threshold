@@ -374,8 +374,134 @@ table {
   letter-spacing: var(--tracking-tight);
 }
 
-/* 21 themes at 3 fixed columns made the panel a long scroll; let the grid pack
-   as many swatches per row as the panel width allows. */
+/* ── Appearance mode switch (Light / Dark / System) ─────────────────────── */
+.mode-switch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+  margin-bottom: var(--sp-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+}
+
+.mode-switch-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.4rem;
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.mode-switch-btn:hover { color: var(--text-main); }
+
+.mode-switch-btn.active {
+  background: var(--grad-brand);
+  color: var(--on-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-panel-hint {
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ── "Surprise me" shuffle toggle ───────────────────────────────────────── */
+.shuffle-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  margin-bottom: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-family: inherit;
+  color: var(--text-muted);
+  text-align: left;
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease);
+}
+
+.shuffle-toggle:hover { color: var(--text-main); }
+
+.shuffle-toggle.active {
+  color: var(--text-main);
+  background: var(--tint-primary);
+  border-color: var(--ring);
+}
+
+.shuffle-toggle__text {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.shuffle-toggle__label {
+  font-size: var(--fs-xs);
+  font-weight: 700;
+}
+
+.shuffle-toggle__sub {
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Track and knob. Sized in em so it tracks the label if the panel scales. */
+.shuffle-switch {
+  flex: none;
+  position: relative;
+  width: 2.1rem;
+  height: 1.15rem;
+  background: var(--hairline);
+  border-radius: var(--r-full);
+  transition: background var(--dur) var(--ease);
+}
+
+.shuffle-switch > span {
+  position: absolute;
+  top: 0.15rem;
+  left: 0.15rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  background: var(--surface-solid);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease);
+}
+
+.shuffle-toggle.active .shuffle-switch { background: var(--grad-brand); }
+.shuffle-toggle.active .shuffle-switch > span { transform: translateX(0.95rem); }
+
+/* Colour is the only signal this control gives, so keep the movement even for
+   users who suppress animation — just make it instant. */
+@media (prefers-reduced-motion: reduce) {
+  .shuffle-toggle,
+  .shuffle-switch,
+  .shuffle-switch > span { transition: none; }
+}
+
+/* Many themes at 3 fixed columns made the panel a long scroll; let the grid
+   pack as many swatches per row as the panel width allows. */
 .theme-swatches {
   grid-template-columns: repeat(auto-fill, minmax(4.25rem, 1fr));
   gap: var(--sp-2);

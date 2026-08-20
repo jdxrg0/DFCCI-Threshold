@@ -48,14 +48,18 @@ router.put('/weekly-code', async (req, res) => {
     if (enableDispatch !== undefined) value.enableDispatch = enableDispatch;
 
     if (forceGenerate) {
-      // Calculate MMDDYY based on next Sunday's date
-      const date = new Date();
-      const daysUntilNextSunday = date.getDay() === 0 ? 7 : 7 - date.getDay();
-      date.setDate(date.getDate() + daysUntilNextSunday);
+      // Calculate MMDDYY based on next Sunday's date. The code names a Manila
+      // Sunday, so it is worked out on the Manila calendar and read back in UTC:
+      // host-local getters drift a day on any server west of UTC.
+      const todayKey = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+      const [year, month, day] = todayKey.split('-').map(Number);
+      const date = new Date(Date.UTC(year, month - 1, day));
+      const daysUntilNextSunday = date.getUTCDay() === 0 ? 7 : 7 - date.getUTCDay();
+      date.setUTCDate(date.getUTCDate() + daysUntilNextSunday);
       
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const dd = String(date.getDate()).padStart(2, '0');
-      const yy = String(date.getFullYear()).slice(-2);
+      const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(date.getUTCDate()).padStart(2, '0');
+      const yy = String(date.getUTCFullYear()).slice(-2);
       const code = (value.template || 'DFCCI-S-LU-{DATE}').replace(/{DATE}/gi, `${mm}${dd}${yy}`);
       
       value.currentCode = code;

@@ -137,7 +137,7 @@ const Navbar = () => {
                 DFCCI Threshold
               </Link>
               <span className="badge" style={{ fontSize: '0.62rem', padding: '0.12rem 0.35rem', borderRadius: '9999px', backgroundColor: 'color-mix(in srgb, var(--primary) 15%, transparent)', color: 'var(--primary)', border: '1px solid color-mix(in srgb, var(--primary) 30%, transparent)', fontWeight: '800', lineHeight: '1', flexShrink: 0, textTransform: 'uppercase', letterSpacing: '0.02em', display: 'inline-flex', alignItems: 'center' }}>
-                v2
+                v3
               </span>
             </div>
             <span className="navbar-tagline">

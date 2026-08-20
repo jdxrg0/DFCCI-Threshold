@@ -49,6 +49,12 @@ const DAY_PRESETS = [
 /* Placeholders the backend replaces on every run, whatever the roles are. */
 const BUILTIN_TOKENS = ['Date', 'WeeklyCode'];
 
+/* A reminder is resolved on a different code path that substitutes far less:
+   the person, the role name, the weekly code, and the calendar roles. No date
+   token is replaced there, so offering one would only ever be sent literally. */
+const REMINDER_TOKENS = ['Name', 'Role', 'WeeklyCode'];
+const REMINDER_DATE_TOKENS = ['date', 'date next sunday', 'date_next_sunday', 'date_today', 'date_tomorrow'];
+
 const EMPTY_FORM = {
   name: '',
   targetUrl: '',
@@ -60,7 +66,22 @@ const EMPTY_FORM = {
   enableCodeBroadcast: false,
   codeTime: '08:00',
   codeSelectedDays: [],
-  codeTemplate: 'DFCCI-S-LU-{DATE}'
+  codeTemplate: 'DFCCI-S-LU-{DATE}',
+  roleReminders: []
+};
+
+/* EMPTY_FORM carries nested arrays, so every reset takes a fresh clone — one
+   in-place edit would otherwise poison the constant for the page's lifetime. */
+const makeEmptyForm = () => ({
+  ...EMPTY_FORM,
+  selectedDays: [],
+  codeSelectedDays: [],
+  roleReminders: []
+});
+
+const NEW_REMINDER = {
+  daysPrior: [2, 4],
+  messageTemplate: 'Hi {Name}! Just a reminder that you are on {Role} this Sunday. Please confirm when you can.'
 };
 
 const LOCAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -187,6 +208,15 @@ const formatTimestamp = (value) => {
   return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 };
 
+/* Lineups fall on Sundays, so a reminder offset is really a weekday. Admins
+   reason in "Wednesday", not in "four days before". */
+const reminderDayLabel = (offset) => {
+  if (offset === 0) return 'Sun · day of';
+  const weekday = DAYS_OF_WEEK[(7 - (offset % 7)) % 7].label;
+  const weeks = Math.floor(offset / 7);
+  return weeks > 0 ? `${weekday} · ${weeks}w before` : weekday;
+};
+
 /* ── Token helpers ───────────────────────────────────────────────────────── */
 
 const TOKEN_RE = /\{([^{}]+)\}/g;
@@ -297,7 +327,13 @@ function Modal({ icon: Icon, title, subtitle, onClose, children, footer, size = 
 const readDraft = () => {
   try {
     const parsed = JSON.parse(localStorage.getItem('ma_draft') || 'null');
-    return parsed && parsed.isModalOpen ? parsed : null;
+    if (!parsed || !parsed.isModalOpen) return null;
+    // A draft written by an older build — or a corrupted one — must not be able
+    // to hand the editor something it will try to map over.
+    if (parsed.formData && !Array.isArray(parsed.formData.roleReminders)) {
+      parsed.formData.roleReminders = [];
+    }
+    return parsed;
   } catch {
     return null; // a corrupt draft is not worth surfacing
   }
@@ -332,11 +368,14 @@ export default function AutomationDashboard() {
   const [draft] = useState(readDraft);
   const [isEditorOpen, setIsEditorOpen] = useState(Boolean(draft));
   const [editingId, setEditingId] = useState(draft?.editingId || null);
-  const [formData, setFormData] = useState(draft ? { ...EMPTY_FORM, ...draft.formData } : EMPTY_FORM);
+  const [formData, setFormData] = useState(draft ? { ...makeEmptyForm(), ...draft.formData } : makeEmptyForm());
   const [isRoleMode, setIsRoleMode] = useState(Boolean(draft?.isRoleMode));
   // True when this schedule's per-date queue tracks the message template.
   const [autoQueue, setAutoQueue] = useState(Boolean(draft?.autoQueue));
   const [loadedQueue, setLoadedQueue] = useState(draft?.messageQueue || []);
+  /* The templates that produced loadedQueue. Rebuilding needs them to tell a
+     message an admin typed by hand from one the old template generated. */
+  const [savedTemplate, setSavedTemplate] = useState(draft?.savedTemplate || null);
   const [isSaving, setIsSaving] = useState(false);
 
   const [queueFor, setQueueFor] = useState(null);      // schedule id
@@ -344,8 +383,10 @@ export default function AutomationDashboard() {
   const [queueSearch, setQueueSearch] = useState('');
   const [queueTab, setQueueTab] = useState('upcoming');
   const [openQueueDate, setOpenQueueDate] = useState(null);
+  const [confirmations, setConfirmations] = useState({}); // schedule id -> payload, or null when it failed
 
   const [runsFor, setRunsFor] = useState(null);        // schedule id
+  const [runsData, setRunsData] = useState({});        // schedule id -> /runs payload
   const [preview, setPreview] = useState(null);        // { schedule, data }
   const [showCodePanel, setShowCodePanel] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
@@ -360,6 +401,7 @@ export default function AutomationDashboard() {
   const [isSavingDispatch, setIsSavingDispatch] = useState(false);
 
   const messageRef = useRef(null);
+  const askedForConfirmations = useRef(new Set());
 
   const showAlert = (title, message) =>
     setPopup({ isOpen: true, title, message, onConfirm: null, isAlert: true });
@@ -443,19 +485,45 @@ export default function AutomationDashboard() {
   }, [fetchSchedules, fetchWeeklyCodeConfig]);
 
   /* Role schedules rebuild their per-date queue from the serving calendar every
-     time the template changes, so it is derived rather than stored. */
+     time the template changes, so it is derived rather than stored. The rebuild
+     is a merge, not a replacement: a per-date chat URL, the sent flag, and any
+     message an admin hand-edited from the queue have to survive a template
+     change, otherwise saving the editor quietly undoes that work. */
   const messageQueue = useMemo(() => {
     if (!autoQueue) return loadedQueue;
     if (!formData.message) return [];
-    return generateQueueFromAssignments(assignments, formData.message, formData.codeTemplate);
-  }, [autoQueue, loadedQueue, formData.message, formData.codeTemplate, assignments]);
+
+    const generated = generateQueueFromAssignments(assignments, formData.message, formData.codeTemplate);
+    if (loadedQueue.length === 0) return generated;
+
+    const previous = new Map(loadedQueue.map(item => [item.targetDate, item]));
+    // What the stored template produced for each date; anything else is an edit.
+    const baseline = new Map(savedTemplate
+      ? generateQueueFromAssignments(assignments, savedTemplate.message, savedTemplate.codeTemplate)
+        .map(item => [item.targetDate, item.messageText])
+      : []);
+
+    return generated.map(item => {
+      const prior = previous.get(item.targetDate);
+      if (!prior) return item;
+      const isHandEdited = Boolean(prior.messageText)
+        && prior.messageText !== item.messageText
+        && prior.messageText !== baseline.get(item.targetDate);
+      return {
+        ...item,
+        ...(prior.overrideChatUrl ? { overrideChatUrl: prior.overrideChatUrl } : {}),
+        messageText: isHandEdited ? prior.messageText : item.messageText,
+        isSent: Boolean(prior.isSent)
+      };
+    });
+  }, [autoQueue, loadedQueue, savedTemplate, formData.message, formData.codeTemplate, assignments]);
 
   // Auto-save the editor draft
   useEffect(() => {
     localStorage.setItem('ma_draft', JSON.stringify({
-      isModalOpen: isEditorOpen, formData, editingId, messageQueue, isRoleMode, autoQueue
+      isModalOpen: isEditorOpen, formData, editingId, messageQueue, isRoleMode, autoQueue, savedTemplate
     }));
-  }, [isEditorOpen, formData, editingId, messageQueue, isRoleMode, autoQueue]);
+  }, [isEditorOpen, formData, editingId, messageQueue, isRoleMode, autoQueue, savedTemplate]);
 
   // ── Derived state ───────────────────────────────────────────────────────
   const today = todayKey();
@@ -520,6 +588,15 @@ export default function AutomationDashboard() {
     [formData.message, availableRoles]
   );
 
+  /* A reminder can only fire for a lineup the run actually looks at, and the
+     run looks `advanceWeeks` weeks ahead — so offsets beyond that are dead. */
+  const reminderHorizon = (isRoleMode ? parseInt(formData.advanceWeeks, 10) || 1 : 1) * 7;
+
+  const reminderOffsets = useMemo(
+    () => Array.from({ length: reminderHorizon + 1 }, (_, i) => i),
+    [reminderHorizon]
+  );
+
   const composerPreview = useMemo(
     () => resolveSample(formData.message, assignments[sampleDate], sampleDate, weeklyCodeConfig?.currentCode),
     [formData.message, assignments, sampleDate, weeklyCodeConfig]
@@ -542,15 +619,24 @@ export default function AutomationDashboard() {
         enableCodeBroadcast: schedule.enableCodeBroadcast || false,
         codeTime: code.time,
         codeSelectedDays: code.days,
-        codeTemplate: schedule.codeTemplate || 'DFCCI-S-LU-{DATE}'
+        codeTemplate: schedule.codeTemplate || 'DFCCI-S-LU-{DATE}',
+        roleReminders: (schedule.roleReminders || []).map(rule => ({
+          role: rule.role || '',
+          daysPrior: [...(rule.daysPrior || [])],
+          messageTemplate: rule.messageTemplate || ''
+        }))
       });
       setLoadedQueue(schedule.messageQueue || []);
+      // What the stored queue was generated from, so a later rebuild can tell a
+      // hand-edited message from one the old template produced.
+      setSavedTemplate({ message: schedule.message, codeTemplate: schedule.codeTemplate || 'DFCCI-S-LU-{DATE}' });
       setIsRoleMode(Boolean(schedule.targetRole));
       setAutoQueue(Boolean(schedule.targetRole) || (schedule.messageQueue || []).length > 0);
     } else {
       setEditingId(null);
-      setFormData(EMPTY_FORM);
+      setFormData(makeEmptyForm());
       setLoadedQueue([]);
+      setSavedTemplate(null);
       setIsRoleMode(false);
       setAutoQueue(false);
     }
@@ -560,8 +646,9 @@ export default function AutomationDashboard() {
   const closeEditor = () => {
     setIsEditorOpen(false);
     setEditingId(null);
-    setFormData(EMPTY_FORM);
+    setFormData(makeEmptyForm());
     setLoadedQueue([]);
+    setSavedTemplate(null);
     setIsRoleMode(false);
     setAutoQueue(false);
   };
@@ -576,6 +663,36 @@ export default function AutomationDashboard() {
       };
     });
   };
+
+  const addReminder = () => setFormData(prev => ({
+    ...prev,
+    roleReminders: [...prev.roleReminders, {
+      role: availableRoles[0] || '',
+      daysPrior: [...NEW_REMINDER.daysPrior],
+      messageTemplate: NEW_REMINDER.messageTemplate
+    }]
+  }));
+
+  const updateReminder = (index, patch) => setFormData(prev => ({
+    ...prev,
+    roleReminders: prev.roleReminders.map((rule, i) => (i === index ? { ...rule, ...patch } : rule))
+  }));
+
+  const removeReminder = (index) => setFormData(prev => ({
+    ...prev,
+    roleReminders: prev.roleReminders.filter((_, i) => i !== index)
+  }));
+
+  const toggleReminderDay = (index, offset) => setFormData(prev => ({
+    ...prev,
+    roleReminders: prev.roleReminders.map((rule, i) => {
+      if (i !== index) return rule;
+      const daysPrior = rule.daysPrior.includes(offset)
+        ? rule.daysPrior.filter(d => d !== offset)
+        : [...rule.daysPrior, offset].sort((a, b) => a - b);
+      return { ...rule, daysPrior };
+    })
+  }));
 
   const insertToken = (token) => {
     const field = messageRef.current;
@@ -606,6 +723,29 @@ export default function AutomationDashboard() {
       return;
     }
 
+    const incomplete = formData.roleReminders.find(
+      rule => !rule.role || rule.daysPrior.length === 0 || !rule.messageTemplate.trim()
+    );
+    if (incomplete) {
+      showAlert('Finish the reminder', 'Every role reminder needs a role, at least one day, and a message.');
+      return;
+    }
+
+    /* Saving sends the whole queue, and for an auto-queue schedule that queue is
+       rebuilt from the serving calendar. If the calendar has not arrived — a
+       failed fetch, or a restored draft that reopened the editor before the
+       request landed — rebuilding would send an empty queue and silently strand
+       every lineup. */
+    if (autoQueue && Object.keys(assignments).length === 0) {
+      showAlert(
+        isLoading ? 'Still loading' : 'No serving calendar',
+        isLoading
+          ? 'The serving calendar is still loading. Give it a moment and save again.'
+          : 'The serving calendar has no assignments, so saving now would clear this schedule’s queue. Fill in the calendar first.'
+      );
+      return;
+    }
+
     const payload = {
       scheduleName: formData.name,
       cronTime: localToUtcCron(formData.time, formData.selectedDays),
@@ -618,7 +758,8 @@ export default function AutomationDashboard() {
       targetRole: isRoleMode ? formData.targetRole : '',
       advanceWeeks: isRoleMode ? parseInt(formData.advanceWeeks, 10) : 1,
       message: formData.message,
-      messageQueue
+      messageQueue,
+      roleReminders: formData.roleReminders
     };
 
     try {
@@ -727,6 +868,37 @@ export default function AutomationDashboard() {
     setQueueSearch('');
     setQueueTab('upcoming');
     setOpenQueueDate(null);
+    loadConfirmations(schedule._id);
+  };
+
+  /* Who has replied with their confirmation code. The reader bot writes on its
+     own two-hourly cadence, so this is refetched each time the queue is opened
+     rather than cached for the session — but only once per open. */
+  const loadConfirmations = async (scheduleId) => {
+    if (askedForConfirmations.current.has(scheduleId)) return;
+    askedForConfirmations.current.add(scheduleId);
+    try {
+      const res = await api.get(`/automation/schedule/${scheduleId}/confirmations`);
+      setConfirmations(prev => ({ ...prev, [scheduleId]: res.data }));
+    } catch {
+      // A missing confirmation view is not worth interrupting the admin over;
+      // the rows simply render without a chip.
+      setConfirmations(prev => ({ ...prev, [scheduleId]: null }));
+    } finally {
+      askedForConfirmations.current.delete(scheduleId);
+    }
+  };
+
+  /* Run history is read from its own endpoint rather than the schedules payload,
+     because that request is what resolves pending GitHub run links. */
+  const openRuns = async (schedule) => {
+    setRunsFor(schedule._id);
+    try {
+      const res = await api.get(`/automation/schedule/${schedule._id}/runs`);
+      setRunsData(prev => ({ ...prev, [schedule._id]: res.data }));
+    } catch {
+      // The already-loaded runHistory stays on screen.
+    }
   };
 
   const saveQueueItem = async (item) => {
@@ -795,10 +967,11 @@ export default function AutomationDashboard() {
         : b.targetDate.localeCompare(a.targetDate)));
   }, [queueDraft, queueTab, queueSearch, today]);
 
-  const runRows = useMemo(
-    () => [...(runsSchedule?.runHistory || [])].sort((a, b) => new Date(b.at) - new Date(a.at)),
-    [runsSchedule]
-  );
+  const runRows = useMemo(() => {
+    const enriched = runsFor ? runsData[runsFor] : null;
+    const rows = enriched?.runs || runsSchedule?.runHistory || [];
+    return [...rows].sort((a, b) => new Date(b.at) - new Date(a.at));
+  }, [runsFor, runsData, runsSchedule]);
 
   return (
     <div className="ah-shell">
@@ -949,6 +1122,11 @@ export default function AutomationDashboard() {
                       {schedule.enableCodeBroadcast && (
                         <span className="ah-chip ah-chip--muted"><Key size={11} /> Code broadcast</span>
                       )}
+                      {schedule.roleReminders?.length > 0 && (
+                        <span className="ah-chip ah-chip--muted">
+                          <Users size={11} /> {schedule.roleReminders.length} reminder{schedule.roleReminders.length === 1 ? '' : 's'}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -1003,7 +1181,7 @@ export default function AutomationDashboard() {
                     <button type="button" className="ah-icon-btn" title={`Message queue (${schedule.upcomingCount} upcoming)`} onClick={() => openQueue(schedule)}>
                       <List size={15} />
                     </button>
-                    <button type="button" className="ah-icon-btn" title="Run history" onClick={() => setRunsFor(schedule._id)}>
+                    <button type="button" className="ah-icon-btn" title="Run history" onClick={() => openRuns(schedule)}>
                       <RotateCcw size={15} />
                     </button>
                     <button type="button" className="ah-icon-btn" title="Edit" onClick={() => openEditor(schedule)}>
@@ -1310,6 +1488,140 @@ export default function AutomationDashboard() {
               )}
             </div>
 
+            {/* 5 — Personal nudges */}
+            <div className="ah-section">
+              <div className="ah-section-head">
+                <span className="ah-section-title"><Users size={15} /> Role reminders</span>
+                <span className="ah-hint">
+                  {formData.roleReminders.length === 0
+                    ? 'None'
+                    : `${formData.roleReminders.length} rule${formData.roleReminders.length === 1 ? '' : 's'}`}
+                </span>
+              </div>
+
+              <span className="ah-hint">
+                A private message to whoever holds a role, sent a set number of days before their
+                lineup. These go out on the daily run, separately from the message above.
+              </span>
+
+              {formData.roleReminders.length === 0 && (
+                <div className="ah-callout">
+                  <Info size={14} />
+                  <span>No reminders on this schedule. Add one to nudge a person before their date.</span>
+                </div>
+              )}
+
+              {formData.roleReminders.map((rule, idx) => {
+                const strays = tokensIn(rule.messageTemplate)
+                  .filter(token => REMINDER_DATE_TOKENS.includes(token.trim().toLowerCase()));
+                const unreachable = rule.daysPrior.filter(offset => offset > reminderHorizon);
+                const nextName = rule.role ? assignments[sampleDate]?.[rule.role] : '';
+                return (
+                  <div key={idx} className="ah-queue-item" style={{ padding: 'var(--sp-3) var(--sp-4)' }}>
+                    <div className="ah-field-row">
+                      <div className="ah-field">
+                        <span className="ah-label"><Target size={13} /> Role</span>
+                        <select
+                          className="ah-select"
+                          value={rule.role}
+                          onChange={(e) => updateReminder(idx, { role: e.target.value })}
+                        >
+                          <option value="">Select a role…</option>
+                          {availableRoles.map(role => <option key={role} value={role}>{role}</option>)}
+                        </select>
+                        {nextName && <span className="ah-hint">Next: {nextName}</span>}
+                      </div>
+                      <div className="ah-field">
+                        <span className="ah-label"><Calendar size={13} /> Send on</span>
+                        <div className="ah-day-presets">
+                          {reminderOffsets.map(offset => (
+                            <button
+                              key={offset}
+                              type="button"
+                              aria-pressed={rule.daysPrior.includes(offset)}
+                              className={`ah-day${rule.daysPrior.includes(offset) ? ' is-on' : ''}`}
+                              style={{ padding: '0.4rem 0.55rem' }}
+                              onClick={() => toggleReminderDay(idx, offset)}
+                              title={`${offset} day${offset === 1 ? '' : 's'} before the lineup`}
+                            >
+                              {reminderDayLabel(offset)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="ah-field">
+                      <span className="ah-label"><MessageSquare size={13} /> Message</span>
+                      <div className="ah-tokens">
+                        {[...REMINDER_TOKENS, ...availableRoles].map(token => (
+                          <button
+                            key={token}
+                            type="button"
+                            className="ah-token-btn"
+                            onClick={() => updateReminder(idx, {
+                              messageTemplate: `${rule.messageTemplate}{${token}}`
+                            })}
+                          >
+                            {`{${token}}`}
+                          </button>
+                        ))}
+                      </div>
+                      <textarea
+                        className="ah-textarea"
+                        style={{ minHeight: '6rem' }}
+                        value={rule.messageTemplate}
+                        onChange={(e) => updateReminder(idx, { messageTemplate: e.target.value })}
+                        placeholder="Hi {Name}! Just a reminder that you are on {Role} this Sunday."
+                      />
+                    </div>
+
+                    {strays.length > 0 && (
+                      <div className="ah-callout ah-callout--warning">
+                        <AlertTriangle size={14} />
+                        <span>
+                          {strays.map(t => `{${t}}`).join(', ')} {strays.length === 1 ? 'is' : 'are'} not replaced in
+                          reminders — only {'{Name}'}, {'{Role}'}, {'{WeeklyCode}'} and role names are. It would be sent literally.
+                        </span>
+                      </div>
+                    )}
+
+                    {unreachable.length > 0 && (
+                      <div className="ah-callout ah-callout--warning">
+                        <AlertTriangle size={14} />
+                        <span>
+                          {unreachable.map(o => reminderDayLabel(o)).join(', ')} never fires: this schedule only looks
+                          {` ${isRoleMode ? formData.advanceWeeks : 1} `}week ahead.
+                        </span>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                      <button
+                        type="button"
+                        className="ah-icon-btn is-danger"
+                        title="Remove this reminder"
+                        onClick={() => removeReminder(idx)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="ah-day-presets">
+                <button
+                  type="button"
+                  className="ah-mini-btn"
+                  onClick={addReminder}
+                  disabled={availableRoles.length === 0}
+                >
+                  + Add reminder
+                </button>
+              </div>
+            </div>
+
             {autoQueue && messageQueue.length > 0 && (
               <div className="ah-callout">
                 <Info size={14} />
@@ -1393,6 +1705,26 @@ export default function AutomationDashboard() {
                         : item.targetDate < today
                           ? <span className="ah-chip ah-chip--muted">Archived</span>
                           : <span className="ah-chip ah-chip--warning">Pending</span>}
+                      {(() => {
+                        // Absent whenever the reader bot has told us nothing — a
+                        // missing chip is honest, an invented "0 of 0" is not.
+                        const state = confirmations[queueFor]?.byDate?.[item.targetDate];
+                        if (!state) return null;
+                        if (state.requiredCount === 0) {
+                          return <span className="ah-chip ah-chip--muted">No roles tracked</span>;
+                        }
+                        if (state.isComplete) {
+                          return <span className="ah-chip ah-chip--success"><CheckCircle2 size={11} /> Confirmed</span>;
+                        }
+                        return (
+                          <span
+                            className={`ah-chip ${state.receivedCount > 0 ? 'ah-chip--info' : 'ah-chip--muted'}`}
+                            title={`Waiting on ${state.missing.join(', ')}`}
+                          >
+                            {state.receivedCount} of {state.requiredCount} confirmed
+                          </span>
+                        );
+                      })()}
                     </button>
 
                     {isOpen && (
@@ -1559,6 +1891,21 @@ export default function AutomationDashboard() {
                       <span className="ah-chip ah-chip--muted">{run.trigger === 'manual' ? 'Manual' : 'Cron'}</span>
                       {run.recipients > 0 && (
                         <span className="ah-chip ah-chip--muted">{run.recipients} message{run.recipients === 1 ? '' : 's'}</span>
+                      )}
+                      {run.ghRunConclusion && (
+                        <span className={`ah-chip ${run.ghRunConclusion === 'success' ? 'ah-chip--success' : 'ah-chip--danger'}`}>
+                          {run.ghRunConclusion}
+                        </span>
+                      )}
+                      {run.ghRunUrl && (
+                        <a
+                          className="ah-chip ah-chip--info"
+                          href={run.ghRunUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <LinkIcon size={11} /> View run
+                        </a>
                       )}
                     </span>
                     <span className="ah-run-detail">{run.detail}</span>

@@ -1,4 +1,5 @@
 const cron = require('node-cron');
+const mongoose = require('mongoose');
 const Schedule = require('../models/Schedule');
 const AppSetting = require('../models/AppSetting');
 
@@ -16,6 +17,29 @@ const roleValue = (parsedRoles, role) => {
   if (typeof parsedRoles.get === 'function') return parsedRoles.get(role);
   return parsedRoles[role];
 };
+
+/* Role names are Excel column headers — arbitrary admin text — so one stray
+   metacharacter would throw out of the replace loop and abort the whole run. */
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/* A YYYY-MM-DD key is a calendar date, not an instant: it parses to UTC
+   midnight and then reads back through the host's zone, so a host behind UTC
+   announces the previous day. Parse it and read it in UTC throughout, and take
+   "today" from the Manila calendar — the clock every cutoff here is stated in. */
+const parseDateKey = (key) => {
+  const [y, m, d] = String(key).split('-').map(Number);
+  if (!y || !m || !d) return new Date(key);
+  return new Date(Date.UTC(y, m - 1, d));
+};
+
+const shiftDays = (dateObj, days) => new Date(dateObj.getTime() + days * 86400000);
+
+const manilaDateKey = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+
+const formatServiceDate = (dateObj) => dateObj
+  .toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', day: '2-digit', year: 'numeric' })
+  .toUpperCase();
 
 class AutomationScheduler {
   constructor() {
@@ -40,7 +64,13 @@ class AutomationScheduler {
       console.log(`[Scheduler] Found ${schedules.length} schedules (${activeCount} active). Starting timers...`);
       
       schedules.forEach(schedule => {
-        this.addJob(schedule);
+        try {
+          this.addJob(schedule);
+        } catch (e) {
+          // One unparseable cronTime must not cost every other schedule its
+          // timers, nor the global crons registered below.
+          console.error(`[Scheduler] Could not start "${schedule.scheduleName}" (${schedule._id}): ${e.message}`);
+        }
       });
 
       // Global Reader Bot Cron Job (Runs every 2 hours)
@@ -95,16 +125,15 @@ class AutomationScheduler {
 
         const chatsToCheck = [];
         
-        // Hardcoded roles we care about reading from for now based on user specs
-        const requiredRoles = ['Song Leader', 'Opening Song'];
+        // The same rule the report endpoint completes against, so the bot never
+        // reads a chat whose reply could not count towards completion.
+        const requiredRoles = Schedule.requiredRolesFor(targetQueueItem);
         
         for (const role of requiredRoles) {
-          if (targetQueueItem.parsedRoles.get(role)) {
-            const assignedName = targetQueueItem.parsedRoles.get(role);
-            const member = allMembers.find(m => m.name.toLowerCase() === assignedName.toLowerCase());
-            if (member && member.facebookChatUrl) {
-              chatsToCheck.push({ url: member.facebookChatUrl, role });
-            }
+          const assignedName = roleValue(targetQueueItem.parsedRoles, role);
+          const member = allMembers.find(m => m.name.toLowerCase() === String(assignedName).toLowerCase());
+          if (member && member.facebookChatUrl) {
+            chatsToCheck.push({ url: member.facebookChatUrl, role });
           }
         }
 
@@ -141,14 +170,15 @@ class AutomationScheduler {
       }
       const value = { ...setting.value };
       
-      // Calculate MMDDYY based on next Sunday's date
-      const date = new Date();
-      const daysUntilNextSunday = date.getDay() === 0 ? 7 : 7 - date.getDay();
-      date.setDate(date.getDate() + daysUntilNextSunday);
+      // Calculate MMDDYY based on next Sunday's date. This cron fires on Manila
+      // time, so the Sunday it means is the one on the Manila calendar.
+      const today = parseDateKey(manilaDateKey());
+      const daysUntilNextSunday = today.getUTCDay() === 0 ? 7 : 7 - today.getUTCDay();
+      const date = shiftDays(today, daysUntilNextSunday);
 
-      const mm = String(date.getMonth() + 1).padStart(2, '0');
-      const dd = String(date.getDate()).padStart(2, '0');
-      const yy = String(date.getFullYear()).slice(-2);
+      const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(date.getUTCDate()).padStart(2, '0');
+      const yy = String(date.getUTCFullYear()).slice(-2);
       const code = (value.template || 'DFCCI-S-LU-{DATE}').replace(/{DATE}/gi, `${mm}${dd}${yy}`);
       
       value.currentCode = code;
@@ -208,9 +238,15 @@ class AutomationScheduler {
   removeJob(id) {
     const jobs = this.jobs.get(id);
     if (jobs) {
-      if (jobs.mainJob) jobs.mainJob.stop();
-      if (jobs.reminderJob) jobs.reminderJob.stop();
-      if (jobs.codeJob) jobs.codeJob.stop();
+      // A stopped task stays registered with node-cron; destroy() releases it.
+      const release = (job) => {
+        if (!job) return;
+        if (typeof job.destroy === 'function') job.destroy();
+        else job.stop();
+      };
+      release(jobs.mainJob);
+      release(jobs.reminderJob);
+      release(jobs.codeJob);
       this.jobs.delete(id);
       console.log(`[Scheduler] Removed jobs for ${id}`);
     }
@@ -234,16 +270,18 @@ class AutomationScheduler {
     const sortedQueue = [...(schedule.messageQueue || [])]
       .sort((a, b) => String(a.targetDate).localeCompare(String(b.targetDate)));
 
-    const todayStr = new Date().toISOString().split('T')[0]; // role-reminder diff math
+    // Both of these are Manila calendar dates. The cutoff just below is a Manila
+    // wall-clock decision, and a UTC date disagrees with it for the eight hours
+    // Manila is already on the next day — long enough to pull a lineup that has
+    // already happened back into scope and to count every reminder a day out.
+    const todayStr = manilaDateKey(); // role-reminder diff math
 
     // Past noon on a Sunday (Manila) that day's lineup has already happened, so
     // the window starts tomorrow instead of today.
     const nowManila = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
-    const cutoffDateObj = new Date();
-    if (nowManila.getDay() === 0 && nowManila.getHours() >= 12) {
-      cutoffDateObj.setDate(cutoffDateObj.getDate() + 1);
-    }
-    const cutoffDateStr = cutoffDateObj.toISOString().split('T')[0];
+    const cutoffDateStr = (nowManila.getDay() === 0 && nowManila.getHours() >= 12)
+      ? shiftDays(parseDateKey(todayStr), 1).toISOString().split('T')[0]
+      : todayStr;
 
     // How many upcoming lineups a single run processes.
     const limit = schedule.advanceWeeks && schedule.advanceWeeks > 0 ? schedule.advanceWeeks : 1;
@@ -292,19 +330,17 @@ class AutomationScheduler {
       for (const queuedItem of upcomingItems) {
         let finalMessage = queuedItem.messageText || schedule.message;
 
-        const targetDateObj = new Date(queuedItem.targetDate);
-        const dateFormatted = targetDateObj
-          .toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' })
-          .toUpperCase();
+        const targetDateObj = parseDateKey(queuedItem.targetDate);
+        const dateFormatted = formatServiceDate(targetDateObj);
 
         finalMessage = finalMessage.replace(/{Date Next Sunday}/gi, dateFormatted);
         finalMessage = finalMessage.replace(/{Date}/gi, dateFormatted);
         finalMessage = finalMessage.replace(/{DATE_NEXT_SUNDAY}/gi, dateFormatted);
-        finalMessage = finalMessage.replace(/{WeeklyCode}/gi, weeklyCode);
+        finalMessage = finalMessage.replace(/{WeeklyCode}/gi, queuedItem.weeklyConfirmationCode || weeklyCode);
 
         // Dynamic role tags — {Presider}, {Song Leader}, …
         for (const [roleName, assignedMember] of roleEntries(queuedItem.parsedRoles)) {
-          finalMessage = finalMessage.replace(new RegExp(`{${roleName}}`, 'gi'), assignedMember);
+          finalMessage = finalMessage.replace(new RegExp(`{${escapeRegex(roleName)}}`, 'gi'), assignedMember);
         }
 
         // Role-targeted delivery: the message goes to one person's inbox
@@ -336,9 +372,12 @@ class AutomationScheduler {
           finalMessage = '';
         }
 
-        // Role reminders — extra nudges N days before the target date.
-        const diffDays = Math.ceil((targetDateObj - new Date(todayStr)) / (1000 * 60 * 60 * 24));
-        if (schedule.roleReminders && schedule.roleReminders.length > 0 && queuedItem.parsedRoles) {
+        // Role reminders — extra nudges N days before the target date. REMINDER
+        // runs only: the daily reminder cron and the main cron share a clock
+        // minute, so evaluating this on MAIN too sent every nudge that fell due
+        // on the main run's weekday twice, from two independent dispatches.
+        const diffDays = Math.ceil((targetDateObj - parseDateKey(todayStr)) / (1000 * 60 * 60 * 24));
+        if (actionType === 'REMINDER' && schedule.roleReminders && schedule.roleReminders.length > 0 && queuedItem.parsedRoles) {
           schedule.roleReminders.forEach(reminder => {
             if (!reminder.daysPrior || !reminder.daysPrior.includes(diffDays)) return;
             const assignedName = roleValue(queuedItem.parsedRoles, reminder.role);
@@ -350,9 +389,11 @@ class AutomationScheduler {
               .replace(/{Name}/gi, assignedName)
               .replace(/{Role}/gi, reminder.role);
             for (const [rName, mName] of roleEntries(queuedItem.parsedRoles)) {
-              msg = msg.replace(new RegExp(`{${rName}}`, 'gi'), mName);
+              msg = msg.replace(new RegExp(`{${escapeRegex(rName)}}`, 'gi'), mName);
             }
-            msg = msg.replace(/{WeeklyCode}/gi, weeklyCode);
+            // The member has to be told the code the reader bot scans their chat
+            // for, which is this item's own code rather than the global one.
+            msg = msg.replace(/{WeeklyCode}/gi, queuedItem.weeklyConfirmationCode || weeklyCode);
 
             reminderTasks.push({
               url: member.facebookChatUrl,
@@ -369,11 +410,7 @@ class AutomationScheduler {
       }
     } else {
       // ── No queue items: generic schedule falling back to the raw template ──
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const dateFormatted = tomorrow
-        .toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' })
-        .toUpperCase();
+      const dateFormatted = formatServiceDate(shiftDays(parseDateKey(todayStr), 1));
 
       lastFinalMessage = lastFinalMessage
         .replace(/{DATE_TOMORROW}/gi, dateFormatted)
@@ -382,8 +419,18 @@ class AutomationScheduler {
         .replace(/{Date}/gi, dateFormatted)
         .replace(/{DATE_NEXT_SUNDAY}/gi, dateFormatted)
         .replace(/{WeeklyCode}/gi, weeklyCode);
+
+      // With no lineup to resolve role tags against, anything still in braces
+      // would go to the whole chat verbatim — and be logged as a success.
+      const unresolved = lastFinalMessage.match(/{[^{}]+}/g);
+      if (unresolved) {
+        return skip(`Queue is empty and the template still has unresolved placeholders: ${[...new Set(unresolved)].join(', ')}.`);
+      }
     }
 
+    // Reminders are gated to REMINDER runs above, so on a MAIN run this array
+    // can only hold role-target tasks: empty here really does mean "nobody
+    // reachable", never "no nudge happened to be due today".
     if (actionType === 'MAIN' && schedule.targetRole && reminderTasks.length === 0) {
       return skip(`No reachable member for role "${schedule.targetRole}" — check the Member Directory.`);
     }
@@ -392,12 +439,23 @@ class AutomationScheduler {
       return skip('No role reminders fall due today.');
     }
 
+    // Two rules can resolve to the same person for the same lineup — a role
+    // reminder plus a role-target, or overlapping daysPrior — and the workflow
+    // sends one message per task, so an undeduped list is a duplicate nudge.
+    const seenTasks = new Set();
+    const uniqueTasks = reminderTasks.filter(task => {
+      const key = `${task.url} ${task.message}`;
+      if (seenTasks.has(key)) return false;
+      seenTasks.add(key);
+      return true;
+    });
+
     return {
       shouldDispatch: true,
       reason: '',
       message: lastFinalMessage,
       codeMessage: '',
-      reminderTasks,
+      reminderTasks: uniqueTasks,
       items: upcomingItems.map(q => q.targetDate)
     };
   }
@@ -425,7 +483,8 @@ class AutomationScheduler {
    * mirror it onto lastRun so lists render without loading the whole array.
    */
   async recordRun(id, entry) {
-    const record = { at: new Date(), recipients: 0, ...entry };
+    // Its own id up front so a later run-link lookup can address this exact row.
+    const record = { _id: new mongoose.Types.ObjectId(), at: new Date(), recipients: 0, ...entry };
     try {
       await Schedule.findByIdAndUpdate(id, {
         $set: { lastRun: record },
@@ -457,7 +516,12 @@ class AutomationScheduler {
 
       if (!resolved.shouldDispatch) {
         this.log(`[Scheduler] ${schedule.scheduleName} / ${actionType} skipped: ${resolved.reason}`);
-        await this.recordRun(id, { status: 'skipped', actionType, trigger, detail: resolved.reason });
+        // Only the daily REMINDER cron is routine noise — it is a no-op on most
+        // days, and recording each one buries the dispatch that did happen. A
+        // MAIN or CODE run that skipped is a real event worth keeping.
+        if (trigger === 'manual' || actionType !== 'REMINDER') {
+          await this.recordRun(id, { status: 'skipped', actionType, trigger, detail: resolved.reason });
+        }
         return { ok: false, status: 'skipped', detail: resolved.reason, resolved };
       }
 
@@ -497,7 +561,16 @@ class AutomationScheduler {
       const detail = resolved.items.length
         ? `Dispatched for ${resolved.items.join(', ')}`
         : 'Dispatched from the raw template';
-      await this.recordRun(id, { status: 'success', actionType, trigger, detail, recipients });
+      // GitHub's own clock, taken off the 204's header, so the run lookup's
+      // created floor needs no allowance for skew. Reading a header cannot fail
+      // and costs no request: the run itself is matched later, on demand.
+      const ghDate = new Date(response.headers.get('date') || Date.now());
+      await this.recordRun(id, {
+        status: 'success', actionType, trigger, detail, recipients,
+        ghWorkflowFile: schedule.githubFileName,
+        ghDispatchedAt: Number.isNaN(ghDate.getTime()) ? new Date() : ghDate,
+        ghLookupState: 'pending'
+      });
 
       return { ok: true, status: 'success', detail, resolved };
     } catch (error) {

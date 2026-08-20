@@ -123,8 +123,15 @@ export const generateQueueFromAssignments = (assignments, messageTemplate, codeT
     // E.g., if dateKey is "2026-07-05", that is the target date (Sunday).
     // The user's template might use {DATE_TOMORROW} because the cron runs on Saturday.
     // So we just replace {DATE_TOMORROW} with the formatted dateKey.
-    const dateObj = new Date(dateKey);
-    const dateFormatted = dateObj.toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' }).toUpperCase();
+    /* 'YYYY-MM-DD' parses as UTC midnight, so reading it back with local getters
+       shifts the whole lineup a day earlier for any admin west of UTC — the
+       announced date and the confirmation code both drift, and the code stops
+       matching the one the server generates. Stay in UTC on both ends. */
+    const [dyear, dmonth, dday] = dateKey.split('-').map(Number);
+    const dateObj = new Date(Date.UTC(dyear, dmonth - 1, dday));
+    const dateFormatted = dateObj
+      .toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', day: '2-digit', year: 'numeric' })
+      .toUpperCase();
 
     generatedMessage = generatedMessage.replace(/{DATE_NEXT_SUNDAY}/gi, dateFormatted);
 
@@ -140,9 +147,9 @@ export const generateQueueFromAssignments = (assignments, messageTemplate, codeT
     // Generate Semantic Code
     let semanticCode = codeTemplate;
     // Format {DATE} to MMDDYY (e.g. 071926)
-    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const dd = String(dateObj.getDate()).padStart(2, '0');
-    const yy = String(dateObj.getFullYear()).slice(-2);
+    const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dateObj.getUTCDate()).padStart(2, '0');
+    const yy = String(dateObj.getUTCFullYear()).slice(-2);
     semanticCode = semanticCode.replace(/{DATE}/gi, `${mm}${dd}${yy}`);
 
     queue.push({

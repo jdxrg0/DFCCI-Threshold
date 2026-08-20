@@ -28,4 +28,7 @@ const duesPaymentSchema = new mongoose.Schema({
 // Prevent duplicate payment for the same member + collectionDate
 duesPaymentSchema.index({ member: 1, collectionDate: 1 }, { unique: true });
 
+// Cascade delete when a transaction is removed, and the boot-time orphan sweep.
+duesPaymentSchema.index({ transactionId: 1 });
+
 module.exports = mongoose.model('DuesPayment', duesPaymentSchema);

@@ -26,6 +26,7 @@ const calendarRoutes = require('./routes/calendar');
 const settingsRoutes = require('./routes/settings');
 const automationScheduler = require('./services/automationScheduler');
 const { initReminderScheduler } = require('./utils/reminderScheduler');
+const { initSnapshotScheduler } = require('./services/platformSnapshot');
 
 
 const app = express();
@@ -68,24 +69,62 @@ mongoose.connect(process.env.MONGODB_URI)
       // Ignore if index doesn't exist
     }
 
-    // AUTOMATED HEALING: Cleanup orphaned Weekly Dues transactions
+    // AUTOMATED HEALING: Cleanup orphaned Weekly Dues transactions.
+    //
+    // Scoped to source:'DUES_LEDGER' — rows this server created itself while
+    // upserting a dues cell. It used to match on category alone, which also
+    // caught any transaction a treasurer had entered by hand under the "Weekly
+    // Dues" category: those never have a DuesPayment, so real money (and, once
+    // receipts landed, its receipt image) was deleted on the next restart with
+    // no trace. Legacy rows predate the marker, so they are reported for review
+    // rather than deleted.
     try {
       const Transaction = require('./models/Transaction');
       const DuesPayment = require('./models/DuesPayment');
-      
-      const duesTransactions = await Transaction.find({ category: 'Weekly Dues' });
+      const { recordFundAudit, describe } = require('./utils/fundAudit');
+
+      const candidates = await Transaction.find({ category: 'Weekly Dues' }).select(
+        '_id amount type category date source receiptCloudinaryId'
+      );
+
       let orphansRemoved = 0;
-      
-      for (const t of duesTransactions) {
+      let unmarked = 0;
+
+      for (const t of candidates) {
         const payment = await DuesPayment.findOne({ transactionId: t._id });
-        if (!payment) {
-          await Transaction.findByIdAndDelete(t._id);
-          orphansRemoved++;
+        if (payment) continue;
+
+        if (t.source !== 'DUES_LEDGER') {
+          unmarked++;
+          continue;
         }
+
+        // findByIdAndDelete fires the receipt-cleanup hook on the model.
+        await Transaction.findByIdAndDelete(t._id);
+        orphansRemoved++;
+
+        // A sweep that deletes money silently is indistinguishable from money
+        // going missing. Leave a row naming the sweep as the actor.
+        await recordFundAudit({
+          req: null,
+          action: 'DELETE',
+          entityId: t._id,
+          label: describe(t),
+          amount: t.amount,
+          actorName: 'System (startup cleanup)',
+          actorRole: 'SYSTEM',
+          note: 'Weekly dues transaction had no matching payment row and was removed automatically.',
+        });
       }
-      
+
       if (orphansRemoved > 0) {
         console.log(`[Self-Healing] Removed ${orphansRemoved} orphaned Weekly Dues transaction(s).`);
+      }
+      if (unmarked > 0) {
+        console.warn(
+          `[Self-Healing] ${unmarked} "Weekly Dues" transaction(s) have no payment row but are not ledger-created. ` +
+          'Left in place — review them in the Fund Tracker rather than deleting blind.'
+        );
       }
     } catch (err) {
       console.error('[Self-Healing] Error cleaning up orphans:', err);
@@ -142,4 +181,7 @@ app.listen(PORT, () => {
 
   // Start the background scheduler
   initReminderScheduler();
+
+  // Daily platform usage rows can only be captured while the process is alive
+  initSnapshotScheduler();
 });

@@ -60,7 +60,9 @@ const sendEmail = async (to, subject, html, retries = 3, backoff = 1000) => {
       } catch (logError) {
         console.error('Failed to create mock email log in development:', logError.message);
       }
-      return;
+      // `dev: true` is the ONLY signal that a green run delivered nothing.
+      // Callers that report success to a human must surface it.
+      return { ok: true, dev: true };
     }
 
     // Google Apps Script doesn't explicitly need headers, just the body
@@ -94,7 +96,7 @@ const sendEmail = async (to, subject, html, retries = 3, backoff = 1000) => {
       console.error('Failed to create email success log:', logError.message);
     }
 
-    return data;
+    return { ok: true, dev: false, data };
   } catch (error) {
     if (retries > 0) {
       console.warn(`Apps Script proxy failed. Retrying in ${backoff}ms... (${retries} attempts left)`);
@@ -115,6 +117,10 @@ const sendEmail = async (to, subject, html, retries = 3, backoff = 1000) => {
       } catch (logError) {
         console.error('Failed to create email failure log:', logError.message);
       }
+
+      // Deliberately does NOT throw — every existing caller relies on a failed
+      // send being non-fatal. Callers that care must check `.ok`.
+      return { ok: false, dev: false, error: error.message };
     }
   }
 };

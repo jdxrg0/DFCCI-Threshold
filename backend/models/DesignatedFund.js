@@ -29,4 +29,7 @@ const designatedFundSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
+// Fund list ordering.
+designatedFundSchema.index({ createdAt: -1 });
+
 module.exports = mongoose.model('DesignatedFund', designatedFundSchema);

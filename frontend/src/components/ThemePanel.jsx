@@ -1,12 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Palette, Check, Sun, Moon, Monitor } from 'lucide-react';
+import { Palette, Check, Sun, Moon, Monitor, Shuffle } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
 const MODE_ICONS = { light: Sun, dark: Moon, system: Monitor };
 
 // ── Reusable inner panel content (used by both floating & inline variants) ──
 export const ThemePanelContent = ({ onThemeChange }) => {
-  const { theme, setTheme, families, mode, setMode, modes, resolvedMode } = useTheme();
+  const {
+    theme, setTheme, families, mode, setMode, modes, resolvedMode,
+    shuffle, setShuffle, modeLocked,
+  } = useTheme();
+
+  // While the dice are choosing the mode, no button is "the" mode. Highlighting
+  // one would claim a choice the user never made.
+  const modeIsChosen = modeLocked || !shuffle;
 
   const handleThemeClick = (key) => {
     setTheme(key);
@@ -20,7 +27,7 @@ export const ThemePanelContent = ({ onThemeChange }) => {
       <div className="mode-switch" role="group" aria-label="Appearance">
         {modes.map(({ key, label }) => {
           const Icon = MODE_ICONS[key];
-          const active = mode === key;
+          const active = modeIsChosen && mode === key;
           return (
             <button
               key={key}
@@ -36,27 +43,53 @@ export const ThemePanelContent = ({ onThemeChange }) => {
           );
         })}
       </div>
-      {mode === 'system' && (
+      {modeIsChosen && mode === 'system' && (
         <p className="theme-panel-hint">
           Following your device — currently {resolvedMode}.
+        </p>
+      )}
+      {!modeIsChosen && (
+        <p className="theme-panel-hint">
+          Light and dark are shuffling too — currently {resolvedMode}. Pick one to keep it.
         </p>
       )}
 
       {/* ── Family ── */}
       <p className="theme-panel-title" style={{ marginTop: '1rem' }}>Theme</p>
+
+      <button
+        type="button"
+        className={`shuffle-toggle${shuffle ? ' active' : ''}`}
+        onClick={() => setShuffle(!shuffle)}
+        aria-pressed={shuffle}
+      >
+        <Shuffle size={15} aria-hidden="true" />
+        <span className="shuffle-toggle__text">
+          <span className="shuffle-toggle__label">Surprise me</span>
+          <span className="shuffle-toggle__sub">
+            {shuffle ? 'Pick a theme below to stop' : 'A different palette every visit'}
+          </span>
+        </span>
+        <span className="shuffle-switch" aria-hidden="true"><span /></span>
+      </button>
+
       <div className="theme-swatches">
         {families.map((f) => {
           // Preview the variant the user will actually get in the current mode.
           const pair = (resolvedMode === 'dark' ? f.dark : f.light) || f.dark || f.light;
           const active = theme === f.key;
+          // A rolled theme is what is SHOWING, not what was CHOSEN. Reporting
+          // aria-pressed for it tells a screen-reader user they picked this.
+          const chosen = active && !shuffle;
           return (
             <button
               key={f.key}
               type="button"
               className={`theme-swatch${active ? ' active' : ''}`}
               onClick={() => handleThemeClick(f.key)}
-              title={f.label}
-              aria-pressed={active}
+              title={active && shuffle ? `${f.label} — showing now` : f.label}
+              aria-pressed={chosen}
+              aria-current={active && shuffle ? 'true' : undefined}
               style={{ background: 'none', cursor: 'pointer' }}
             >
               <div className="theme-swatch-circle" style={{ position: 'relative' }}>

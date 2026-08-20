@@ -9,16 +9,33 @@ const START_DATE = new Date('2026-05-01');
 /**
  * Calculates current arrears for a user.
  */
+// displayName is user-controlled and went straight into a RegExp. A name
+// containing regex metacharacters ("A. (Jr)") threw or matched the wrong row;
+// a crafted one could match everybody.
+const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The one definition of which roster row belongs to a user account.
+ *
+ * Exported because the reminder preview endpoint has to resolve members the
+ * exact same way — when it only checked linkedUser, the preview showed "no
+ * roster" for people the email then greeted with a real balance.
+ */
+const resolveRosterMember = async (user) => {
+  if (!user) return null;
+  return DuesMember.findOne({
+    $or: [
+      { linkedUser: user._id },
+      { name: new RegExp('^' + escapeRegex(user.displayName || '') + '$', 'i') },
+    ],
+    isActive: true,
+  });
+};
+
 const calculateArrears = async (user) => {
   try {
-    const member = await DuesMember.findOne({ 
-      $or: [
-        { linkedUser: user._id },
-        { name: new RegExp('^' + user.displayName + '$', 'i') }
-      ],
-      isActive: true 
-    });
-    
+    const member = await resolveRosterMember(user);
+
     if (!member) return null;
 
     const payments = await DuesPayment.find({ member: member._id });
@@ -55,6 +72,12 @@ const arrearsHtml = (arrears) => {
   }
 };
 
+// Day-neutral wording, matching the one-off statement sent from the roster.
+const MANUAL_TEMPLATE = {
+  subject: 'Your dues statement',
+  greeting: (name) => `Hi <strong>${name}</strong>! Here's where your weekly dues stand as of today.`,
+};
+
 const SATURDAY_TEMPLATES = [
   {
     subject: "Reminder: Tomorrow is Sunday!",
@@ -89,20 +112,32 @@ const SUNDAY_TEMPLATES = [
  * Sends dues reminders to all subscribed and verified users.
  */
 const sendDuesReminders = async (timing) => {
+  // Returns a per-run summary so a manual trigger can report what actually
+  // happened instead of an unconditional "success". The cron callers ignore it.
+  const result = { timing, attempted: 0, sent: 0, failed: 0, subject: '', dev: false, errors: [] };
   try {
     const users = await User.find({
       isVerified: true,
       subscribedToDuesReminders: true
     });
 
-    if (users.length === 0) return;
+    if (users.length === 0) return result;
+    result.attempted = users.length;
 
     const nowSystem = new Date();
     const now = new Date(nowSystem.getTime() + 8 * 60 * 60 * 1000);
     const weekNum = Math.floor((now - START_DATE) / (7 * 24 * 60 * 60 * 1000));
     
-    const templates = (timing === 'Saturday Night' || timing === 'Manual') ? SATURDAY_TEMPLATES : SUNDAY_TEMPLATES;
-    const template = templates[weekNum % templates.length];
+    // A manual send can happen on any weekday, so it must not reuse the
+    // Saturday copy that opens with "Tomorrow is Sunday!".
+    let template;
+    if (timing === 'Manual') {
+      template = MANUAL_TEMPLATE;
+    } else {
+      const templates = timing === 'Saturday Night' ? SATURDAY_TEMPLATES : SUNDAY_TEMPLATES;
+      template = templates[weekNum % templates.length];
+    }
+    result.subject = template.subject;
 
     for (const user of users) {
       const arrears = await calculateArrears(user);
@@ -147,11 +182,28 @@ const sendDuesReminders = async (timing) => {
         </table>
       `;
 
-      await sendEmail(user.email, template.subject, html);
+      // sendEmail swallows its own failures and returns an outcome rather than
+      // throwing, so check the flag. The try/catch is only for the unexpected.
+      try {
+        const outcome = await sendEmail(user.email, template.subject, html);
+        if (outcome?.dev) result.dev = true;
+        if (outcome?.ok === false) {
+          result.failed += 1;
+          result.errors.push({ email: user.email, message: outcome.error || 'Unknown send failure' });
+        } else {
+          result.sent += 1;
+        }
+      } catch (err) {
+        result.failed += 1;
+        result.errors.push({ email: user.email, message: err.message });
+        console.error(`[Scheduler] Failed to send dues reminder to ${user.email}:`, err.message);
+      }
     }
   } catch (error) {
     console.error(`[Scheduler] Error in ${timing} reminder job:`, error);
+    result.errors.push({ email: '*', message: error.message });
   }
+  return result;
 };
 
 /**
@@ -331,4 +383,5 @@ const initReminderScheduler = () => {
   }, 60000);
 };
 
-module.exports = { initReminderScheduler, sendDuesReminders, sendDevotionalStreakReminders };
+module.exports = {
+  resolveRosterMember, initReminderScheduler, sendDuesReminders, sendDevotionalStreakReminders };

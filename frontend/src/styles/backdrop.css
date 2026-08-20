@@ -9,24 +9,50 @@
      .bg-fx-glow  a light that trails the cursor (transform driven from
                   components/AnimatedBackdrop.jsx)
 
-   Everything lives at z-index -1 inside a `contain: strict` box, so it paints
-   above the grain, below the app, and never triggers layout elsewhere.
+   Everything lives at z-index -1 inside a contained box, so it paints above
+   the grain, below the app, and never triggers layout elsewhere.
    ========================================================================== */
 
-/* ── Tint strengths. Light themes get a whisper, dark themes can take more ─ */
+/* ── Tint strengths ───────────────────────────────────────────────────────
+   Light and dark need OPPOSITE strategies, not one token scaled.
+
+   On a light ground you cannot add light — anything painted is a darkening.
+   Every light variant's --primary is a dark AA-contrast colour (azure #0369a1,
+   ember #9a4a07, mono #18181b), so mixing it straight to transparent paints a
+   SHADOW, not a glow; on the near-neutral families it was literally grey dirt.
+   Lift the seed toward white first: that keeps the hue while collapsing the
+   luminance drop, and the eye reads a chromatic shift as light where it reads
+   a neutral darkening as grime. A higher alpha is then safe.
+
+   Dark mode is the honest case — the seed IS lighter than the ground — so it
+   paints direct, and can take far more alpha than it was getting.
+   (mono dark: #fafafa at 40% over #000 = rgb(100,100,100). That is a glow.) */
 :root {
-  --bg-fx-1: color-mix(in srgb, var(--primary) 20%, transparent);
-  --bg-fx-2: color-mix(in srgb, var(--secondary) 16%, transparent);
-  --bg-fx-3: color-mix(in srgb, var(--primary) 12%, transparent);
-  --bg-fx-cursor: color-mix(in srgb, var(--primary) 14%, transparent);
+  --bg-fx-lift-1: color-mix(in srgb, var(--primary) 30%, #ffffff);
+  --bg-fx-lift-2: color-mix(in srgb, var(--secondary) 30%, #ffffff);
+
+  --bg-fx-1: color-mix(in srgb, var(--bg-fx-lift-1) 42%, transparent);
+  --bg-fx-2: color-mix(in srgb, var(--bg-fx-lift-2) 36%, transparent);
+  --bg-fx-3: color-mix(in srgb, var(--bg-fx-lift-1) 30%, transparent);
+
+  --bg-fx-cursor: color-mix(in srgb, var(--bg-fx-lift-1) 38%, transparent);
 }
 
 :root.dark {
-  --bg-fx-1: color-mix(in srgb, var(--primary) 30%, transparent);
-  --bg-fx-2: color-mix(in srgb, var(--secondary) 26%, transparent);
-  --bg-fx-3: color-mix(in srgb, var(--primary) 20%, transparent);
-  --bg-fx-cursor: color-mix(in srgb, var(--primary) 22%, transparent);
+  --bg-fx-1: color-mix(in srgb, var(--primary) 40%, transparent);
+  --bg-fx-2: color-mix(in srgb, var(--secondary) 34%, transparent);
+  --bg-fx-3: color-mix(in srgb, var(--primary) 28%, transparent);
+
+  --bg-fx-cursor: color-mix(in srgb, var(--primary) 30%, transparent);
 }
+
+/* index.css:4906 declares a SECOND position:fixed z-index:-1 layer on
+   .auth-page::before, and auth.css:12 repoints it at the very same --bg-mesh
+   that body::before already paints. .auth-page is position:relative with
+   z-index:auto so it creates no stacking context — both land in the root
+   negative-z bucket and the deeper one wins, double-painting the mesh over
+   this whole layer on login and signup. The index.css rule is deleted; this
+   note records why, so it does not get reintroduced. */
 
 .bg-fx {
   position: fixed;
@@ -34,8 +60,11 @@
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
-  /* Keeps the blobs from ever contributing to layout or overflow */
-  contain: strict;
+  /* NOT `contain: strict`. Strict adds size containment, which is safe only
+     while this box stays inset-sized — the moment anyone adds a content-sized
+     child it silently collapses to 0x0. These three give the same isolation
+     with no landmine. */
+  contain: layout paint style;
 }
 
 /* ── Drifting orbs ──────────────────────────────────────────────────────── */
@@ -119,24 +148,190 @@
    fades in where the cursor actually is rather than flashing at 0,0. */
 .bg-fx-glow.is-live { opacity: 1; }
 
-/* ── Opt-out ────────────────────────────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-  /* base.css already clamps every animation to ~0ms, which would strand the
-     orbs on their end keyframe. Drop the animation instead so they sit where
-     they were authored, and lose the follow light entirely. */
-  .bg-fx-orb { animation: none !important; }
-  .bg-fx-glow { display: none; }
-}
+/* ── No pointer-driven light on touch ──────────────────────────────────────
+   A cursor light works because a cursor is ALWAYS present — it reads as
+   ambient. A finger is not: it arrives, leaves, and is gone most of the time,
+   so the same effect becomes an artifact that flares up under a thumb and then
+   lingers as it fades. Touch devices get the drifting orbs and the scroll
+   parallax, both of which are continuous and need no finger on the glass.
 
-/* Touch devices have no cursor to follow, and the third orb is the one most
-   likely to overlap content on a narrow viewport. */
+   `pointer: coarse` tests the PRIMARY input, so a touchscreen laptop driven by
+   its trackpad still gets the light. AnimatedBackdrop.jsx makes the matching
+   check and skips its listeners entirely, so this is belt-and-braces for the
+   case where JS has not run yet. */
 @media (pointer: coarse) {
   .bg-fx-glow { display: none; }
 }
 
-@media (max-width: 768px) {
-  .bg-fx-orb-3 { display: none; }
+/* ── Opt-out ────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  /* base.css already clamps every animation to ~0ms, which would strand the
+     orbs on their end keyframe. Drop the animation instead so they sit where
+     they were authored, and lose the reactive layers entirely. */
+  .bg-fx-orb { animation: none !important; }
+  .bg-fx-glow { display: none; }
+}
 
-  .bg-fx-orb-1 { animation-duration: 48s; }
-  .bg-fx-orb-2 { animation-duration: 60s; }
+/* Nothing to animate for a reader who cannot see it. Set by AnimatedBackdrop
+   on visibilitychange — a fixed, promoted, infinitely animating layer will
+   otherwise keep the compositor awake behind other tabs. */
+.bg-fx.is-idle .bg-fx-orb { animation-play-state: paused; }
+
+/* ── Mobile ─────────────────────────────────────────────────────────────── */
+/* The desktop orbs are sized in vmax, which on a 390x844 portrait phone
+   resolves against the HEIGHT: a 62vmax orb is 523px wide on a 390px screen.
+   It covers the viewport edge to edge, so it reads as a flat tint rather than
+   a shape, and no amount of drift is visible because there is no edge to see
+   move. Phones get their own composition: smaller orbs sized in vw so they
+   read as distinct forms, more of them, and enough travel per cycle to be
+   legible on a small screen. Painted area goes DOWN, not up. */
+@media (max-width: 768px) {
+  .bg-fx-orb {
+    /* Closed-loop paths at constant velocity. `alternate` plus a symmetric
+       ease decelerates to a literal standstill at both ends of every cycle, so
+       a large share of the time nothing moves at all — which is most of why
+       this read as dead. A linear loop has no dead zones and costs exactly the
+       same per frame; for a compositor-only animation, slower is not cheaper. */
+    animation-direction: normal;
+    animation-timing-function: linear;
+  }
+
+  /* Vertical ellipses, not circles. A circle wide enough to be seen on a 390px
+     screen has its falloff clipped by both viewport edges, which is what turns
+     it back into flat wash. Sized in vw on BOTH axes so the ratio is a fixed
+     aspect rather than a function of viewport shape. Anchors alternate
+     left/right down the page so light spans the full height instead of
+     huddling in the top third behind the navbar. */
+  .bg-fx-orb-1 {
+    top: 4vh;
+    left: -22vw;
+    right: auto;
+    bottom: auto;
+    width: 66vw;
+    height: 100vw;
+    animation-name: bg-fx-mobile-1;
+    animation-duration: 19s;
+  }
+
+  .bg-fx-orb-2 {
+    top: 32vh;
+    right: -20vw;
+    left: auto;
+    bottom: auto;
+    width: 54vw;
+    height: 80vw;
+    animation-name: bg-fx-mobile-2;
+    animation-duration: 26s;
+  }
+
+  /* Restored — it was hidden before, which left a phone with two near-static
+     washes and nothing else. */
+  .bg-fx-orb-3 {
+    display: block;
+    top: auto;
+    right: auto;
+    bottom: -5vh;
+    left: -2vw;
+    width: 60vw;
+    height: 88vw;
+    animation-name: bg-fx-mobile-3;
+    animation-duration: 31s;
+  }
+
+}
+
+/* 19 / 26 / 31 are pairwise coprime, so the three-way arrangement does not
+   repeat for hours. These ride `translate` and `scale` — the independent
+   transform properties — rather than `transform`, which is what lets the
+   scroll parallax below compose with them on the same element instead of
+   overwriting them. Folding both into one `transform` loses the ambient layer. */
+@keyframes bg-fx-mobile-1 {
+  0%   { translate: 0 0;        scale: 1;    }
+  25%  { translate: 26vw 9vh;   scale: 1.16; }
+  50%  { translate: 15vw 21vh;  scale: 1.02; }
+  75%  { translate: -9vw 11vh;  scale: 1.20; }
+  100% { translate: 0 0;        scale: 1;    }
+}
+
+@keyframes bg-fx-mobile-2 {
+  0%   { translate: 0 0;        scale: 1.12; }
+  25%  { translate: -22vw 12vh; scale: 0.96; }
+  50%  { translate: -8vw 24vh;  scale: 1.14; }
+  75%  { translate: 12vw 10vh;  scale: 1.00; }
+  100% { translate: 0 0;        scale: 1.12; }
+}
+
+@keyframes bg-fx-mobile-3 {
+  0%   { translate: 0 0;        scale: 0.94; }
+  25%  { translate: 18vw -13vh; scale: 1.14; }
+  50%  { translate: -6vw -25vh; scale: 0.98; }
+  75%  { translate: -20vw -9vh; scale: 1.18; }
+  100% { translate: 0 0;        scale: 0.94; }
+}
+
+/* ── Scroll-reactive parallax ───────────────────────────────────────────── */
+/* Scrolling is the primary gesture on a phone, so the backdrop answers it.
+   This rides `transform`, while the ambient drift above rides the independent
+   `translate`/`scale` properties — the two compose instead of overwriting each
+   other, so an orb drifts AND parallaxes at once. Both stay on the compositor
+   and neither needs a scroll listener on the main thread.
+
+   VERIFY BEFORE SHIPPING: scroll-driven timeline support on the iOS Safari
+   version you target. Where it is missing the @supports block simply never
+   applies and orbs keep their ambient drift, which is already far livelier
+   than what mobile had. */
+@supports (animation-timeline: scroll()) {
+  @media (max-width: 768px) and (prefers-reduced-motion: no-preference) {
+    .bg-fx-orb {
+      animation-composition: replace;
+      animation-timeline: auto, scroll(root block);
+      /* A <length> range, not `normal`. `normal` maps progress onto
+         (scrollHeight - clientHeight); when the iOS URL bar collapses,
+         clientHeight grows ~60px, the denominator shrinks, and every orb jumps
+         mid-scroll. A fixed range cannot shift, gives a short page and a long
+         one the same thumb-to-light gearing, and simply holds past 170vh. */
+      animation-range: normal, 0 170vh;
+    }
+
+    .bg-fx-orb-1 {
+      animation-name: bg-fx-mobile-1, bg-fx-parallax-near;
+      animation-duration: 19s, auto;
+      animation-iteration-count: infinite, 1;
+      animation-direction: alternate, normal;
+      animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1), linear;
+    }
+
+    .bg-fx-orb-2 {
+      animation-name: bg-fx-mobile-2, bg-fx-parallax-far;
+      animation-duration: 25s, auto;
+      animation-iteration-count: infinite, 1;
+      animation-direction: alternate, normal;
+      animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1), linear;
+    }
+
+    .bg-fx-orb-3 {
+      animation-name: bg-fx-mobile-3, bg-fx-parallax-mid;
+      animation-duration: 31s, auto;
+      animation-iteration-count: infinite, 1;
+      animation-direction: alternate, normal;
+      animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1), linear;
+    }
+  }
+}
+
+/* Counter-scrolling at three different rates is what sells depth: the far orb
+   barely moves, the near one tracks the thumb closely. */
+@keyframes bg-fx-parallax-near {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, -22vh, 0); }
+}
+
+@keyframes bg-fx-parallax-mid {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, -13vh, 0); }
+}
+
+@keyframes bg-fx-parallax-far {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, 6vh, 0); }
 }

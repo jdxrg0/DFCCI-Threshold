@@ -58,6 +58,24 @@ router.post('/verify-otp', async (req, res) => {
     if (!pendingUser) {
       const existingUser = await User.findOne({ email });
       if (existingUser) {
+        // An admin can re-issue an OTP straight onto an existing unverified row, which leaves
+        // no PendingUser to match. A pendingEmail code belongs to the email-change flow, so it
+        // must never be redeemable as a signup verification.
+        if (
+          !existingUser.isVerified &&
+          !existingUser.pendingEmail &&
+          existingUser.otp &&
+          existingUser.otp === otp &&
+          existingUser.otpExpires &&
+          existingUser.otpExpires > Date.now()
+        ) {
+          existingUser.isVerified = true;
+          existingUser.otp = undefined;
+          existingUser.otpExpires = undefined;
+          await existingUser.save();
+
+          return res.json({ message: 'Account verified successfully. You can now log in.' });
+        }
         return res.status(400).json({ message: 'User is already verified' });
       }
       return res.status(404).json({ message: 'Pending registration not found or expired. Please sign up again.' });

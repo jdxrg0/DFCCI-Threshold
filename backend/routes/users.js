@@ -11,6 +11,12 @@ const Devotional = require('../models/Devotional');
 const { requireAuth, requireRole, requireVerified } = require('../middleware/authMiddleware');
 const { cloudinary } = require('../utils/cloudinary');
 const sendEmail = require('../utils/sendEmail');
+const mongoose = require('mongoose');
+const PendingUser = require('../models/PendingUser');
+const AdminAudit = require('../models/AdminAudit');
+const PlatformSnapshot = require('../models/PlatformSnapshot');
+const { recordAudit, AUDIT_ACTIONS } = require('../utils/auditLog');
+const { collectPlatformStats } = require('../services/platformSnapshot');
 
 const getUTC8Today = () => {
   const now = new Date();
@@ -20,6 +26,91 @@ const getUTC8Today = () => {
 };
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+// Declared in seniority order: the members list's 'role' sort reads the key order, and the
+// audit summaries read the labels, so both stay in step from this one place.
+const ROLE_LABELS = {
+  ADMIN: 'Admin',
+  COUNSELOR: 'Counselor',
+  YOUTH_TREASURER: 'Youth Treasurer',
+  MEMBER: 'Member',
+};
+const ROLE_ORDER = Object.keys(ROLE_LABELS);
+
+// Admin-typed text goes straight into a $regex, so anything with regex meaning has to be
+// neutralised first — otherwise a search for "(" 500s the endpoint.
+const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const memberCount = (n) => `${n} member${n === 1 ? '' : 's'}`;
+
+// Bulk endpoints all take the same shaped body, so they share one guard. The 200 cap keeps a
+// runaway client from asking a 512 MB free-tier Mongo to rewrite the whole collection at once.
+const validateBulkIds = (ids) => {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return 'Select at least one member.';
+  }
+  if (ids.length > 200) {
+    return 'You can only act on 200 members at a time.';
+  }
+  return null;
+};
+
+// Filters a raw id list down to the ones we are willing to touch. The caller is always dropped:
+// an admin bulk-demoting or bulk-deleting a selection that happens to include themselves is how
+// the platform loses its last administrator.
+const parseBulkIds = (ids, selfId) => {
+  const skipped = [];
+  const candidates = [];
+  const seen = new Set();
+
+  for (const raw of ids) {
+    const input = String(raw);
+    if (!mongoose.Types.ObjectId.isValid(input)) {
+      skipped.push({ id: input, reason: 'invalid-id' });
+      continue;
+    }
+    // Canonical lowercase hex. Mongo casts '6A84…' and '6a84…' to the very same _id, so
+    // comparing the raw strings would let an uppercase spelling of the caller's own id walk
+    // straight past the self-guard below — and would desync the found/missing reconciliation
+    // in resolveBulkTargets, which compares against Mongo's own lowercase form.
+    const id = new mongoose.Types.ObjectId(input).toString();
+    if (id === selfId) {
+      skipped.push({ id, reason: 'self' });
+      continue;
+    }
+    if (seen.has(id)) continue;
+    seen.add(id);
+    candidates.push(id);
+  }
+
+  return { candidates, skipped };
+};
+
+// Same trap as above, for the single-target routes: `req.params.id === req.user._id.toString()`
+// is a case-sensitive string compare standing in for an identity check.
+const isSelf = (req, id) => mongoose.Types.ObjectId.isValid(id) && req.user._id.equals(id);
+
+// A malformed :id otherwise reaches findById and surfaces a CastError as a 500 'Server error',
+// which tells the admin the server is broken when the link they followed was simply stale.
+const badObjectId = (res, id) => {
+  if (mongoose.Types.ObjectId.isValid(id)) return false;
+  res.status(400).json({ message: 'Invalid id' });
+  return true;
+};
+
+// Resolves surviving ids to real users, so a stale row in the admin's browser is reported back
+// as 'not-found' instead of quietly shrinking the modified count with no explanation.
+const resolveBulkTargets = async (candidates) => {
+  const targets = await User.find({ _id: { $in: candidates } })
+    .select('_id displayName role isVerified subscribedToDuesReminders')
+    .lean();
+  const foundIds = new Set(targets.map((u) => u._id.toString()));
+  const missing = candidates
+    .filter((id) => !foundIds.has(id))
+    .map((id) => ({ id, reason: 'not-found' }));
+
+  return { targets, missing };
+};
 
 const profileStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
@@ -39,13 +130,442 @@ const uploadProfile = multer({
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-// Get all users (Admin only)
+// Get a page of users, plus whole-collection stats (Admin only)
 router.get('/', requireAuth, requireRole(['ADMIN']), async (req, res) => {
   try {
-    const users = await User.find({}).select('-password');
-    res.json(users);
+    const { search, role, status, sort } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 12));
+
+    const query = {};
+    if (search && String(search).trim() !== '') {
+      const rx = new RegExp(escapeRegex(String(search).trim()), 'i');
+      query.$or = [{ displayName: rx }, { email: rx }];
+    }
+    if (ROLE_ORDER.includes(role)) {
+      query.role = role;
+    }
+    if (status === 'verified') {
+      query.isVerified = true;
+    } else if (status === 'unverified') {
+      query.isVerified = false;
+    }
+
+    const sortSpecs = {
+      'name': { displayName: 1 },
+      'name-desc': { displayName: -1 },
+      'newest': { createdAt: -1 },
+      'oldest': { createdAt: 1 },
+      'role': { roleRank: 1, displayName: 1 },
+    };
+    const sortSpec = sortSpecs[sort] || sortSpecs.name;
+
+    const [users, totalCount, facet] = await Promise.all([
+      // Aggregated rather than found because the 'role' sort is by seniority, which is not the
+      // alphabetical order of the enum and so needs a computed rank to sort on.
+      User.aggregate([
+        { $match: query },
+        { $addFields: { roleRank: { $indexOfArray: [ROLE_ORDER, '$role'] } } },
+        { $sort: sortSpec },
+        { $skip: (page - 1) * limit },
+        { $limit: limit },
+        // otp/otpExpires join password on the way out now that an admin can trigger one.
+        { $project: { password: 0, otp: 0, otpExpires: 0, roleRank: 0 } },
+      ]),
+      User.countDocuments(query),
+      // Deliberately unfiltered: the dashboard's KPI rail reads these and must not move when
+      // the admin types in the search box. One $facet keeps it to a single round trip.
+      User.aggregate([
+        {
+          $facet: {
+            total: [{ $count: 'n' }],
+            verified: [{ $match: { isVerified: true } }, { $count: 'n' }],
+            byRole: [{ $group: { _id: '$role', n: { $sum: 1 } } }],
+          },
+        },
+      ]),
+    ]);
+
+    const total = facet[0]?.total?.[0]?.n || 0;
+    const verified = facet[0]?.verified?.[0]?.n || 0;
+    const byRole = { ADMIN: 0, COUNSELOR: 0, YOUTH_TREASURER: 0, MEMBER: 0 };
+    for (const row of facet[0]?.byRole || []) {
+      if (row._id in byRole) byRole[row._id] = row.n;
+    }
+
+    res.json({
+      users,
+      page,
+      totalPages: Math.max(1, Math.ceil(totalCount / limit)),
+      totalCount,
+      stats: { total, verified, unverified: total - verified, byRole },
+    });
   } catch (error) {
     console.error('Error fetching users:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+/* Express 5 still matches in declaration order, so every literal-prefixed admin route below
+   has to stay ABOVE the '/:id' routes that follow — otherwise '/bulk/role' binds as id='bulk'. */
+
+// Bulk role change (Admin only)
+router.patch('/bulk/role', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const { ids, role } = req.body;
+
+    const invalid = validateBulkIds(ids);
+    if (invalid) {
+      return res.status(400).json({ message: invalid });
+    }
+    if (!ROLE_ORDER.includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+
+    const { candidates, skipped } = parseBulkIds(ids, req.user._id.toString());
+    const { targets, missing } = await resolveBulkTargets(candidates);
+    skipped.push(...missing);
+
+    const targetIds = targets.map((u) => u._id);
+    const result = await User.updateMany({ _id: { $in: targetIds } }, { $set: { role } });
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_BULK_ROLE,
+      targetType: 'USER',
+      // resolveBulkTargets already fetched the prior values; without them the log can say
+      // 40 members became Members but not which of them were Counselors first.
+      before: { members: targets.map((u) => ({ id: u._id.toString(), role: u.role })) },
+      after: { role, ids: targetIds.map((id) => id.toString()) },
+      summary: `Set ${memberCount(result.modifiedCount)} to ${ROLE_LABELS[role]}`,
+    });
+
+    res.json({
+      message: `Set ${memberCount(result.modifiedCount)} to ${ROLE_LABELS[role]}`,
+      matched: targets.length,
+      modified: result.modifiedCount,
+      skipped,
+    });
+  } catch (error) {
+    console.error('Error bulk updating roles:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Bulk dues reminders subscription (Admin only)
+router.patch('/bulk/reminders', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const { ids, subscribed } = req.body;
+
+    const invalid = validateBulkIds(ids);
+    if (invalid) {
+      return res.status(400).json({ message: invalid });
+    }
+    if (typeof subscribed !== 'boolean') {
+      return res.status(400).json({ message: 'subscribed must be true or false' });
+    }
+
+    const { candidates, skipped } = parseBulkIds(ids, req.user._id.toString());
+    const { targets, missing } = await resolveBulkTargets(candidates);
+    skipped.push(...missing);
+
+    const targetIds = targets.map((u) => u._id);
+    const result = await User.updateMany(
+      { _id: { $in: targetIds } },
+      { $set: { subscribedToDuesReminders: subscribed } }
+    );
+
+    const verb = subscribed ? 'Enabled' : 'Disabled';
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_BULK_REMINDERS,
+      targetType: 'USER',
+      before: { members: targets.map((u) => ({ id: u._id.toString(), subscribedToDuesReminders: !!u.subscribedToDuesReminders })) },
+      after: { subscribedToDuesReminders: subscribed, ids: targetIds.map((id) => id.toString()) },
+      summary: `${verb} dues reminders for ${memberCount(result.modifiedCount)}`,
+    });
+
+    res.json({
+      message: `${verb} dues reminders for ${memberCount(result.modifiedCount)}`,
+      matched: targets.length,
+      modified: result.modifiedCount,
+      skipped,
+    });
+  } catch (error) {
+    console.error('Error bulk updating reminders:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Bulk verification (Admin only)
+router.patch('/bulk/verify', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const { ids, isVerified } = req.body;
+
+    const invalid = validateBulkIds(ids);
+    if (invalid) {
+      return res.status(400).json({ message: invalid });
+    }
+    if (typeof isVerified !== 'boolean') {
+      return res.status(400).json({ message: 'isVerified must be true or false' });
+    }
+
+    const { candidates, skipped } = parseBulkIds(ids, req.user._id.toString());
+    const { targets, missing } = await resolveBulkTargets(candidates);
+    skipped.push(...missing);
+
+    const targetIds = targets.map((u) => u._id);
+    const update = { $set: { isVerified } };
+    // A verified account has no business still holding a live code to redeem.
+    if (isVerified) {
+      update.$unset = { otp: '', otpExpires: '' };
+    }
+    const result = await User.updateMany({ _id: { $in: targetIds } }, update);
+
+    const verb = isVerified ? 'Verified' : 'Unverified';
+    // No confirmation emails here on purpose: 200 of them in one click would eat most of the
+    // 500-a-day sending allowance. The single-user route is the one that notifies.
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_BULK_VERIFY,
+      targetType: 'USER',
+      before: { members: targets.map((u) => ({ id: u._id.toString(), isVerified: !!u.isVerified })) },
+      after: { isVerified, ids: targetIds.map((id) => id.toString()) },
+      summary: `${verb} ${memberCount(result.modifiedCount)}`,
+    });
+
+    res.json({
+      message: `${verb} ${memberCount(result.modifiedCount)}`,
+      matched: targets.length,
+      modified: result.modifiedCount,
+      skipped,
+    });
+  } catch (error) {
+    console.error('Error bulk updating verification:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Bulk delete (Admin only)
+router.post('/bulk/delete', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const { ids } = req.body;
+
+    const invalid = validateBulkIds(ids);
+    if (invalid) {
+      return res.status(400).json({ message: invalid });
+    }
+
+    const { candidates, skipped } = parseBulkIds(ids, req.user._id.toString());
+    const { targets, missing } = await resolveBulkTargets(candidates);
+    skipped.push(...missing);
+
+    const targetIds = targets.map((u) => u._id);
+    const result = await User.deleteMany({ _id: { $in: targetIds } });
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_BULK_DELETE,
+      targetType: 'USER',
+      before: { names: targets.map((u) => u.displayName) },
+      after: { deleted: result.deletedCount, ids: targetIds.map((id) => id.toString()) },
+      summary: `Deleted ${memberCount(result.deletedCount)}`,
+    });
+
+    res.json({
+      message: `Deleted ${memberCount(result.deletedCount)}`,
+      matched: targets.length,
+      modified: result.deletedCount,
+      skipped,
+    });
+  } catch (error) {
+    console.error('Error bulk deleting users:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// List signups that never made it past the OTP screen (Admin only)
+router.get('/admin/pending-signups', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    // These rows live in PendingUser, not User, so they never show up in the members list —
+    // which is exactly why "my code never arrived" needs a screen of its own.
+    const pending = await PendingUser.find({})
+      .select('_id displayName email createdAt otpExpires')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const now = Date.now();
+    const signups = pending.map((p) => ({
+      _id: p._id,
+      displayName: p.displayName,
+      email: p.email,
+      createdAt: p.createdAt,
+      otpExpires: p.otpExpires,
+      expired: !p.otpExpires || new Date(p.otpExpires).getTime() < now,
+    }));
+
+    res.json({ signups });
+  } catch (error) {
+    console.error('Error fetching pending signups:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Re-send the signup code for a stuck registration (Admin only)
+router.post('/admin/pending-signups/:id/resend', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    if (badObjectId(res, req.params.id)) return;
+
+    const pending = await PendingUser.findById(req.params.id);
+    if (!pending) {
+      return res.status(404).json({ message: 'Pending signup not found or already expired.' });
+    }
+
+    const otp = generateOTP();
+    pending.otp = otp;
+    pending.otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    // The collection's 15-minute TTL hangs off createdAt. Without this reset the row is swept
+    // away moments after we email a code that is meant to be good for another quarter hour.
+    pending.createdAt = Date.now();
+    await pending.save();
+
+    await sendEmail(
+      pending.email,
+      'Your New DFCCI Threshold Verification Code',
+      `<p>Your new verification code is: <strong>${otp}</strong></p><p>It will expire in 15 minutes.</p>`
+    );
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.SIGNUP_OTP_RESEND,
+      target: pending._id,
+      targetLabel: pending.email,
+      summary: `Resent the signup verification code to ${pending.email}`,
+    });
+
+    res.json({ message: `A new verification code has been sent to ${pending.email}.` });
+  } catch (error) {
+    console.error('Error resending signup OTP:', error);
+    res.status(500).json({ message: 'Server error while resending verification code' });
+  }
+});
+
+// Drop an abandoned signup (Admin only)
+router.delete('/admin/pending-signups/:id', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    if (badObjectId(res, req.params.id)) return;
+
+    const pending = await PendingUser.findByIdAndDelete(req.params.id);
+    if (!pending) {
+      return res.status(404).json({ message: 'Pending signup not found or already expired.' });
+    }
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.SIGNUP_DELETE,
+      target: pending._id,
+      targetLabel: pending.email,
+      before: { displayName: pending.displayName, email: pending.email },
+      summary: `Deleted the abandoned signup for ${pending.email}`,
+    });
+
+    res.json({ message: `Signup for ${pending.email} deleted.` });
+  } catch (error) {
+    console.error('Error deleting pending signup:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Admin action log (Admin only)
+router.get('/admin/audit', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const { action, actor, search, from, to } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+
+    const query = {};
+    if (action && Object.values(AUDIT_ACTIONS).includes(action)) {
+      query.action = action;
+    }
+    if (actor && mongoose.Types.ObjectId.isValid(actor)) {
+      query.actor = actor;
+    }
+    if (search && String(search).trim() !== '') {
+      const rx = new RegExp(escapeRegex(String(search).trim()), 'i');
+      query.$or = [{ summary: rx }, { targetLabel: rx }, { actorName: rx }];
+    }
+
+    const createdAt = {};
+    const fromDate = from ? new Date(from) : null;
+    const toDate = to ? new Date(to) : null;
+    if (fromDate && !isNaN(fromDate.getTime())) {
+      createdAt.$gte = fromDate;
+    }
+    if (toDate && !isNaN(toDate.getTime())) {
+      // A bare 'YYYY-MM-DD' parses to that day's midnight, which would exclude everything that
+      // actually happened on the day the admin picked. Stretch it to the end of that day.
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(to).trim())) {
+        toDate.setUTCHours(23, 59, 59, 999);
+      }
+      createdAt.$lte = toDate;
+    }
+    if (Object.keys(createdAt).length > 0) {
+      query.createdAt = createdAt;
+    }
+
+    const [entries, totalCount, actions] = await Promise.all([
+      // Nothing is populated: the denormalised actorName/targetLabel are the whole point, since
+      // the commonest entry to read back is one whose target no longer exists.
+      AdminAudit.find(query)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
+      AdminAudit.countDocuments(query),
+      // Drawn from what is actually stored, so the filter dropdown can never offer a value that
+      // would only ever return an empty page.
+      AdminAudit.distinct('action'),
+    ]);
+
+    res.json({
+      entries,
+      page,
+      totalPages: Math.max(1, Math.ceil(totalCount / limit)),
+      totalCount,
+      actions: actions.sort(),
+    });
+  } catch (error) {
+    console.error('Error fetching audit log:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Daily platform usage history (Admin only)
+// Get platform limits & usage stats (Admin only)
+router.get('/admin/platform-limits', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    // The collection walk, email tally and Cloudinary call now live in the snapshot service so
+    // this endpoint and the daily snapshot can never report different numbers for the same day.
+    const stats = await collectPlatformStats();
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching platform limits:', error);
+    res.status(500).json({ message: 'Server error fetching platform limits' });
+  }
+});
+
+router.get('/admin/platform-history', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 30));
+
+    // Snapshot `date` is a 'YYYY-MM-DD' Manila key, so a lexical $gte against the same format is
+    // the whole window filter — same UTC+8 shift the rest of this file uses to find "today".
+    const cutoff = new Date(Date.now() + 8 * 60 * 60 * 1000 - (days - 1) * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+
+    // Ascending: the chart plots left to right and should not have to reverse this.
+    const snapshots = await PlatformSnapshot.find({ date: { $gte: cutoff } })
+      .sort({ date: 1 })
+      .lean();
+
+    res.json({ snapshots, days });
+  } catch (error) {
+    console.error('Error fetching platform history:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -55,7 +575,7 @@ router.put('/:id/role', requireAuth, requireRole(['ADMIN']), async (req, res) =>
   try {
     const { role } = req.body;
     
-    if (req.params.id === req.user._id.toString()) {
+    if (isSelf(req, req.params.id)) {
       return res.status(400).json({ message: 'You cannot change your own role.' });
     }
 
@@ -68,8 +588,18 @@ router.put('/:id/role', requireAuth, requireRole(['ADMIN']), async (req, res) =>
       return res.status(404).json({ message: 'User not found' });
     }
 
+    const previousRole = user.role;
     user.role = role;
     await user.save();
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_ROLE_CHANGE,
+      target: user._id,
+      targetLabel: user.displayName,
+      before: { role: previousRole },
+      after: { role: user.role },
+      summary: `Changed ${user.displayName} from ${ROLE_LABELS[previousRole]} to ${ROLE_LABELS[user.role]}`,
+    });
 
     res.json({ message: `User role updated to ${role}`, user: { _id: user._id, displayName: user.displayName, role: user.role } });
   } catch (error) {
@@ -86,8 +616,18 @@ router.put('/:id/toggle-reminders', requireAuth, requireRole(['ADMIN']), async (
       return res.status(404).json({ message: 'User not found' });
     }
 
+    const wasSubscribed = user.subscribedToDuesReminders;
     user.subscribedToDuesReminders = !user.subscribedToDuesReminders;
     await user.save();
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_REMINDERS_TOGGLE,
+      target: user._id,
+      targetLabel: user.displayName,
+      before: { subscribedToDuesReminders: wasSubscribed },
+      after: { subscribedToDuesReminders: user.subscribedToDuesReminders },
+      summary: `${user.subscribedToDuesReminders ? 'Enabled' : 'Disabled'} dues reminders for ${user.displayName}`,
+    });
 
     res.json({ 
       message: `Dues reminders ${user.subscribedToDuesReminders ? 'enabled' : 'disabled'} for ${user.displayName}`,
@@ -107,8 +647,20 @@ router.put('/:id/request-name-change', requireAuth, requireRole(['ADMIN']), asyn
       return res.status(404).json({ message: 'User not found' });
     }
 
+    const wasRequested = user.nameChangeRequested;
     user.nameChangeRequested = !user.nameChangeRequested;
     await user.save();
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_RENAME_REQUEST,
+      target: user._id,
+      targetLabel: user.displayName,
+      before: { nameChangeRequested: wasRequested },
+      after: { nameChangeRequested: user.nameChangeRequested },
+      summary: user.nameChangeRequested
+        ? `Asked ${user.displayName} to change their display name`
+        : `Revoked the name change request for ${user.displayName}`,
+    });
 
     res.json({ 
       message: `Name change request ${user.nameChangeRequested ? 'sent to' : 'revoked for'} ${user.displayName}`,
@@ -134,6 +686,7 @@ router.put('/:id/custom-date-power', requireAuth, requireRole(['ADMIN']), async 
       return res.status(400).json({ message: 'Invalid durationMinutes' });
     }
 
+    const previousExpiry = user.customDatePowerExpires;
     if (durationMinutes === 0) {
       user.customDatePowerExpires = null;
     } else {
@@ -141,6 +694,17 @@ router.put('/:id/custom-date-power', requireAuth, requireRole(['ADMIN']), async 
     }
     
     await user.save();
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_DATE_POWER,
+      target: user._id,
+      targetLabel: user.displayName,
+      before: { customDatePowerExpires: previousExpiry },
+      after: { customDatePowerExpires: user.customDatePowerExpires },
+      summary: durationMinutes === 0
+        ? `Revoked custom date power from ${user.displayName}`
+        : `Granted custom date power to ${user.displayName} for ${durationMinutes} minutes`,
+    });
 
     res.json({
       message: durationMinutes === 0 
@@ -160,6 +724,137 @@ router.put('/:id/custom-date-power', requireAuth, requireRole(['ADMIN']), async 
   } catch (error) {
     console.error('Error setting custom date power:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Manually flip a member's verified flag (Admin only)
+router.put('/:id/verify', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    if (badObjectId(res, req.params.id)) return;
+
+    const { isVerified } = req.body;
+
+    if (typeof isVerified !== 'boolean') {
+      return res.status(400).json({ message: 'isVerified must be true or false' });
+    }
+
+    // Re-verifying yourself is harmless, but unverifying yourself locks you straight out.
+    if (!isVerified && isSelf(req, req.params.id)) {
+      return res.status(400).json({ message: 'You cannot unverify yourself.' });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const wasVerified = user.isVerified;
+    user.isVerified = isVerified;
+    if (isVerified) {
+      user.otp = undefined;
+      user.otpExpires = undefined;
+    }
+    await user.save();
+
+    // Only on the false to true transition — re-confirming an already verified member would
+    // email them about something that did not change.
+    if (isVerified && !wasVerified) {
+      try {
+        await sendEmail(
+          user.email,
+          'Your DFCCI Threshold account is verified',
+          `<h3>Your account is ready</h3>
+           <p>Hi ${user.displayName}, an administrator has verified your DFCCI Threshold account.</p>
+           <p>You can now sign in with your email and password — no verification code needed.</p>`
+        );
+      } catch (err) {
+        // The account is verified in the database by this point, so a mail failure is a missed
+        // notification, not a failed request. Failing here would only invite a pointless retry.
+        console.error('Failed to send verification confirmation email:', err);
+      }
+    }
+
+    await recordAudit(req, {
+      action: isVerified ? AUDIT_ACTIONS.USER_VERIFY : AUDIT_ACTIONS.USER_UNVERIFY,
+      target: user._id,
+      targetLabel: user.displayName,
+      before: { isVerified: wasVerified },
+      after: { isVerified: user.isVerified },
+      summary: `${isVerified ? 'Verified' : 'Unverified'} the account of ${user.displayName}`,
+    });
+
+    res.json({
+      message: `${user.displayName} is now ${isVerified ? 'verified' : 'unverified'}`,
+      user: {
+        _id: user._id,
+        displayName: user.displayName,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified
+      }
+    });
+  } catch (error) {
+    console.error('Error updating verification status:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Re-send a verification code to an existing member (Admin only)
+router.post('/:id/resend-otp', requireAuth, requireRole(['ADMIN']), async (req, res) => {
+  try {
+    if (badObjectId(res, req.params.id)) return;
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!user.pendingEmail && user.isVerified) {
+      return res.status(400).json({ message: 'This member is already verified and has no pending email change.' });
+    }
+
+    const otp = generateOTP();
+    // A pending email change is the code the member is actually waiting on, and it has to go to
+    // the address being claimed rather than the one still on the account.
+    const destination = user.pendingEmail || user.email;
+    user.otp = otp;
+    user.otpExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+    await user.save();
+
+    if (user.pendingEmail) {
+      await sendEmail(
+        destination,
+        'Verify Your New Email Address - DFCCI Threshold',
+        `<h3>New Email Verification Code</h3>
+         <p>You requested to change your email to this address on your DFCCI Threshold account.</p>
+         <p>Your new 6-digit verification code is: <strong>${otp}</strong></p>
+         <p>This code will expire in 15 minutes.</p>
+         <p>If you did not request this change, please ignore this email.</p>`
+      );
+    } else {
+      await sendEmail(
+        destination,
+        'Your New DFCCI Threshold Verification Code',
+        `<h3>New Verification Code</h3>
+         <p>Hi ${user.displayName}, an administrator has issued a new code for your DFCCI Threshold account.</p>
+         <p>Your 6-digit verification code is: <strong>${otp}</strong></p>
+         <p>Enter it on the sign-in verification screen to finish activating your account.</p>
+         <p>This code will expire in 15 minutes.</p>`
+      );
+    }
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_OTP_RESEND,
+      target: user._id,
+      targetLabel: user.displayName,
+      after: { sentTo: destination, forPendingEmail: !!user.pendingEmail },
+      summary: `Resent a verification code to ${destination} for ${user.displayName}`,
+    });
+
+    res.json({ message: `A new verification code has been sent to ${destination}.` });
+  } catch (error) {
+    console.error('Error resending member OTP:', error);
+    res.status(500).json({ message: 'Server error while resending verification code' });
   }
 });
 
@@ -615,7 +1310,7 @@ router.get('/search', requireAuth, requireVerified, async (req, res) => {
     }
 
     const users = await User.find({
-      displayName: { $regex: q, $options: 'i' },
+      displayName: new RegExp(escapeRegex(String(q).trim()), 'i'),
     })
     .select('_id displayName role')
     .limit(10);
@@ -630,7 +1325,7 @@ router.get('/search', requireAuth, requireVerified, async (req, res) => {
 // Delete user (Admin only)
 router.delete('/:id', requireAuth, requireRole(['ADMIN']), async (req, res) => {
   try {
-    if (req.params.id === req.user._id.toString()) {
+    if (isSelf(req, req.params.id)) {
       return res.status(400).json({ message: 'You cannot delete yourself.' });
     }
     
@@ -640,123 +1335,24 @@ router.delete('/:id', requireAuth, requireRole(['ADMIN']), async (req, res) => {
     }
 
     await User.findByIdAndDelete(req.params.id);
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.USER_DELETE,
+      target: user._id,
+      targetLabel: user.displayName,
+      before: {
+        displayName: user.displayName,
+        email: user.email,
+        role: user.role,
+        isVerified: user.isVerified
+      },
+      summary: `Deleted the account of ${user.displayName} (${user.email})`,
+    });
     
     res.json({ message: 'User deleted successfully' });
   } catch (error) {
     console.error('Error deleting user:', error);
     res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Get platform limits & usage stats (Admin only)
-router.get('/admin/platform-limits', requireAuth, requireRole(['ADMIN']), async (req, res) => {
-  try {
-    const mongoose = require('mongoose');
-    const EmailLog = require('../models/EmailLog');
-
-    // 1. Fetch MongoDB statistics
-    let dbStats = { dataSize: 0, storageSize: 0, collectionsCount: 0, objectsCount: 0 };
-    let collectionsList = [];
-
-    try {
-      if (mongoose.connection.readyState === 1) {
-        const stats = await mongoose.connection.db.command({ dbStats: 1 });
-        dbStats = {
-          dataSize: stats.dataSize || 0,
-          storageSize: stats.storageSize || 0,
-          collectionsCount: stats.collections || 0,
-          objectsCount: stats.objects || 0
-        };
-
-        // Query individual collection stats
-        const collections = await mongoose.connection.db.listCollections().toArray();
-        for (const col of collections) {
-          if (col.type && col.type !== 'collection') continue;
-          try {
-            const colStats = await mongoose.connection.db.command({ collStats: col.name });
-            collectionsList.push({
-              name: col.name,
-              count: colStats.count || 0,
-              size: colStats.size || 0,
-              storageSize: colStats.storageSize || 0
-            });
-          } catch (colErr) {
-            console.error(`Error fetching stats for collection ${col.name}:`, colErr);
-            // Fallback: count documents using collection countDocuments
-            try {
-              const count = await mongoose.connection.db.collection(col.name).countDocuments();
-              collectionsList.push({
-                name: col.name,
-                count: count,
-                size: 0,
-                storageSize: 0
-              });
-            } catch (_) {}
-          }
-        }
-        // Sort collections by size descending, then count descending
-        collectionsList.sort((a, b) => (b.size || b.count) - (a.size || a.count));
-      }
-    } catch (dbErr) {
-      console.error('Error fetching MongoDB stats:', dbErr);
-    }
-
-    // 2. Fetch Email daily usage stats (Gmail free tier limits to 500 emails/day)
-    let emailStats = { sentLast24h: 0, limit: 500 };
-    try {
-      const past24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-      const sentCount = await EmailLog.countDocuments({
-        status: 'sent',
-        sentAt: { $gte: past24Hours }
-      });
-      emailStats.sentLast24h = sentCount;
-    } catch (emailErr) {
-      console.error('Error fetching EmailLog stats:', emailErr);
-    }
-
-    // 3. Fetch Cloudinary usage statistics
-    let cloudinaryStats = null;
-    try {
-      const usage = await cloudinary.api.usage();
-      if (usage) {
-        cloudinaryStats = {
-          plan: usage.plan || 'Free',
-          lastUpdated: usage.last_updated || new Date().toISOString(),
-          credits: usage.credits ? { usage: usage.credits.usage, limit: usage.credits.limit, usedPercent: usage.credits.used_percent } : null,
-          transformations: usage.transformations ? { 
-            usage: usage.transformations.usage, 
-            limit: usage.transformations.limit || 25000, 
-            usedPercent: usage.transformations.used_percent !== undefined ? usage.transformations.used_percent : ((usage.transformations.usage / 25000) * 100) 
-          } : null,
-          storage: usage.storage ? { 
-            usage: usage.storage.usage, 
-            limit: usage.storage.limit || (25 * 1024 * 1024 * 1024), 
-            usedPercent: usage.storage.used_percent !== undefined ? usage.storage.used_percent : ((usage.storage.usage / (25 * 1024 * 1024 * 1024)) * 100) 
-          } : null,
-          bandwidth: usage.bandwidth ? { 
-            usage: usage.bandwidth.usage, 
-            limit: usage.bandwidth.limit || (25 * 1024 * 1024 * 1024), 
-            usedPercent: usage.bandwidth.used_percent !== undefined ? usage.bandwidth.used_percent : ((usage.bandwidth.usage / (25 * 1024 * 1024 * 1024)) * 100) 
-          } : null
-        };
-      }
-    } catch (cloudinaryErr) {
-      console.error('Error fetching Cloudinary usage stats:', cloudinaryErr.message);
-    }
-
-    res.json({
-      success: true,
-      database: {
-        ...dbStats,
-        collections: collectionsList,
-        limitBytes: 512 * 1024 * 1024 // 512 MB Hobby Limit
-      },
-      emails: emailStats,
-      cloudinary: cloudinaryStats
-    });
-  } catch (error) {
-    console.error('Error fetching platform limits:', error);
-    res.status(500).json({ message: 'Server error fetching platform limits' });
   }
 });
 

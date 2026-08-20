@@ -9,10 +9,6 @@
   padding: var(--sp-6) var(--sp-5);
 }
 
-.auth-page::before {
-  background: var(--bg-mesh);
-}
-
 .auth-card {
   max-width: 1000px;
   display: grid;

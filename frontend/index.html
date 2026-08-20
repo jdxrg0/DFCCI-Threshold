@@ -40,27 +40,97 @@
             claret: 1, beacon: 1
           };
 
-          var stored = localStorage.getItem('theme') || 'azure';
+          var FAMILIES = {
+            azure: 1, aurora: 1, ember: 1, dusk: 1, rose: 1, tide: 1, mono: 1,
+            nord: 1, dracula: 1, vapor: 1, neon: 1, roast: 1, signal: 1,
+            slate: 1, sage: 1
+          };
+
+          var stored = localStorage.getItem('theme');
           var mode = localStorage.getItem('themeMode');
 
-          // First run after the paired-variant upgrade: a legacy key encodes a
-          // mode as well as a family, so honour it instead of falling to system.
-          if (!mode) mode = LEGACY[stored] && stored !== 'azure'
-            ? (DARK_LEGACY[stored] ? 'dark' : 'light')
-            : (stored === 'dark' ? 'dark' : stored === 'light' ? 'light' : 'system');
+          // Has the user actually chosen a mode? 'themeModeLocked' is the
+          // modern signal, but it is new — and before shuffle existed the app
+          // wrote 'themeMode' on every mount, so for everyone who was already
+          // using the site an explicit light/dark there is the ONLY evidence
+          // they ever gave. Without this clause a returning user who picked
+          // dark for photosensitivity gets coin-flipped into white.
+          // 'system' is genuinely ambiguous — it was also the default — so it
+          // does not count as a choice.
+          var modeLocked = localStorage.getItem('themeModeLocked') === '1'
+            || mode === 'light' || mode === 'dark';
 
-          var family = LEGACY[stored] || stored;
+          // Note the order: a key that is BOTH a legacy theme and a family name
+          // (aurora, dusk, nord, dracula, slate) is treated as legacy only while
+          // themeMode is absent — i.e. exactly once, on the first load after the
+          // upgrade. After that themeMode always exists and wins.
+          if (mode !== 'light' && mode !== 'dark' && mode !== 'system') {
+            mode = LEGACY[stored]
+              ? (DARK_LEGACY[stored] ? 'dark' : 'light')
+              : 'system';
+          }
+
+          // Unknown values must not reach data-theme, or the page renders with
+          // no seed colours at all until React mounts.
+          var family = FAMILIES[stored] ? stored : (LEGACY[stored] || 'azure');
           var resolved = mode === 'system'
             ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
             : mode;
+
+          // Shuffle: a fresh look on every visit, opt-in from the theme panel.
+          //
+          // The roll happens HERE and nowhere else. ThemeContext reads the result
+          // back off the element rather than rolling again — two rolls would mean
+          // the palette visibly changes the moment React mounts.
+          //
+          // It deliberately never writes 'theme'. A saved pick has to survive
+          // shuffle being switched on and off again, so the rolled family lives
+          // in its own key.
+          if (localStorage.getItem('themeShuffle') === '1') {
+            // A VISIT, not a page load. src/api.js sends an expired session to
+            // /login with window.location.href, OAuth bounces through a
+            // redirect, and people reload forms — re-rolling on any of those
+            // repaints the site out from under someone mid-task. So the roll is
+            // remembered and reused for anything inside the gap.
+            //
+            // The timestamp is refreshed on EVERY load, so the gap measures
+            // time away rather than time since the roll: browse all afternoon
+            // and the theme holds; come back tomorrow and it is new.
+            var GAP = 30 * 60 * 1000;
+            var now = Date.now();
+            var at = parseInt(localStorage.getItem('themeRollAt'), 10);
+            var roll = localStorage.getItem('themeRoll');
+            var rollMode = localStorage.getItem('themeRollMode');
+            var sameVisit = roll && FAMILIES[roll] && at && (now - at) < GAP;
+
+            if (!sameVisit) {
+              // Excluding the previous roll: back-to-back repeats read as
+              // 'the shuffle is broken' far more than they read as chance.
+              var pool = [];
+              for (var k in FAMILIES) { if (k !== roll) pool.push(k); }
+              if (!pool.length) pool = Object.keys(FAMILIES);
+              roll = pool[Math.floor(Math.random() * pool.length)];
+              rollMode = Math.random() < 0.5 ? 'dark' : 'light';
+              localStorage.setItem('themeRoll', roll);
+              localStorage.setItem('themeRollMode', rollMode);
+            }
+            localStorage.setItem('themeRollAt', String(now));
+
+            family = roll;
+            // Mode rides along only until the user states a preference.
+            if (!modeLocked) resolved = rollMode === 'dark' ? 'dark' : 'light';
+          }
 
           var el = document.documentElement;
           el.className = resolved;
           el.setAttribute('data-theme', family);
           el.style.colorScheme = resolved;
         } catch (e) {
+          // Without colorScheme here, a dark-OS device paints the light
+          // fallback while its native scrollbars and date pickers stay dark.
           document.documentElement.className = 'light';
           document.documentElement.setAttribute('data-theme', 'azure');
+          document.documentElement.style.colorScheme = 'light';
         }
       })();
     </script>

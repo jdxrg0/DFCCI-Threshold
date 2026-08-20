@@ -9,7 +9,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "audit:themes": "node scripts/audit-themes.mjs"
+    "audit:themes": "node scripts/audit-themes.mjs",
+    "test:shuffle": "node scripts/test-shuffle.mjs"
   },
   "dependencies": {
     "@react-oauth/google": "^0.13.5",

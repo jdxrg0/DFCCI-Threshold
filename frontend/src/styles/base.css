@@ -6,7 +6,9 @@
 body::before {
   background-color: var(--bg-color);
   background-image: var(--bg-mesh);
-  background-attachment: fixed;
+  /* No background-attachment: fixed — this element is already position:fixed
+     and viewport-sized, so it bought nothing and only hinted at a costlier
+     compositing path on the hottest full-screen layer. */
 }
 
 /* A fine grain over the mesh keeps large flat areas from banding. */

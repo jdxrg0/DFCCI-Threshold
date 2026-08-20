@@ -51,16 +51,10 @@ router.post('/report', async (req, res) => {
     console.log(`[Submissions API] Received part for ${referenceCode} -> Role: ${role}`);
 
     // 4. Check if we have all the required parts to complete the aggregator
-    // For now, we hardcode the required roles based on the user's example, 
-    // or we can deduce them from the Schedule's configuration.
-    // The user mentioned: "Song Leader" (Praise/Worship) and "Opening Song".
-    // If the queue item has people assigned to these roles, we expect submissions from them.
-    
-    // Determine which roles are actually assigned in this week's lineup
-    const requiredRoles = [];
-    if (targetQueueItem.parsedRoles.get('Song Leader')) requiredRoles.push('Song Leader');
-    if (targetQueueItem.parsedRoles.get('Opening Song')) requiredRoles.push('Opening Song');
-    // You could expand this list based on the user's needs.
+    // The rule lives on the model so the reader bot, this endpoint and the
+    // confirmations read can never disagree about what "complete" means, and
+    // so an item with no parsedRoles (PATCH /queue makes those) cannot 500.
+    const requiredRoles = Schedule.requiredRolesFor(targetQueueItem);
 
     let isComplete = true;
     for (const reqRole of requiredRoles) {
@@ -80,12 +74,12 @@ router.post('/report', async (req, res) => {
       let finalMessage = `${targetQueueItem.targetDate}\n\n`;
       
       if (submission.partsReceived.has('Opening Song')) {
-        finalMessage += `Officiant: ${targetQueueItem.parsedRoles.get('Opening Song')}\n`;
+        finalMessage += `Officiant: ${Schedule.roleValue(targetQueueItem.parsedRoles, 'Opening Song')}\n`;
         finalMessage += `Opening Song:\n${submission.partsReceived.get('Opening Song')}\n\n`;
       }
 
       if (submission.partsReceived.has('Song Leader')) {
-        finalMessage += `Officiant: ${targetQueueItem.parsedRoles.get('Song Leader')}\n`;
+        finalMessage += `Officiant: ${Schedule.roleValue(targetQueueItem.parsedRoles, 'Song Leader')}\n`;
         finalMessage += `${submission.partsReceived.get('Song Leader')}\n`;
       }
 

@@ -1,0 +1,282 @@
+/* ==========================================================================
+   DFCCI Threshold — Platform usage trend chart
+   --------------------------------------------------------------------------
+   Styles for components/UsageTrendChart.jsx: the small-multiple growth charts
+   on the Admin Dashboard's Platform Limits tab. Everything derives from
+   tokens.css so the marks, grid and tooltip follow the active theme.
+
+   Namespace: .utc-*
+   ========================================================================== */
+
+/* ── Series hues ─────────────────────────────────────────────────────────
+   Declared here, resolved through `data-series`, so the JSX never names a
+   colour. --tone-violet comes from .adm-page in admin.css; the literal is
+   the fallback for anywhere else the chart might be mounted. */
+.utc {
+  --utc-violet: var(--tone-violet, #8b5cf6);
+  --utc-ring: var(--surface-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.utc-facet[data-series="storage"] { --utc-hue: var(--success); }
+.utc-facet[data-series="members"] { --utc-hue: var(--primary); }
+.utc-facet[data-series="emails"] { --utc-hue: var(--utc-violet); }
+.utc-facet[data-series="credits"] { --utc-hue: var(--info); }
+
+/* ── Control row ────────────────────────────────────────────────────────
+   Reuses .adm-toolbar; the gap on .utc supplies the spacing the toolbar's
+   own margin would otherwise double up. */
+.utc-bar { margin-bottom: 0; }
+
+.utc-bar__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.utc-bar__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-main);
+}
+
+.utc-bar__sub {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ── Small multiples ────────────────────────────────────────────────────
+   Two columns, one below 900px. Four separate plots rather than one chart
+   with four y-scales: the measures share no unit, and stacking them on a
+   common axis would invent a correlation the data does not contain. */
+.utc-facets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+  transition: opacity var(--dur) var(--ease);
+}
+
+/* Refetch with data already on screen: hold the render, do not flash. */
+.utc-facets.is-stale,
+.utc .adm-table-wrap.is-stale { opacity: 0.55; }
+
+.utc-facet {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  background: var(--grad-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.utc-facet__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.utc-facet__title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-main);
+}
+
+.utc-facet__delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.utc-facet__caption {
+  margin: 0;
+  font-size: var(--fs-eyebrow);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.utc-skel { height: 232px; border-radius: var(--r-lg); }
+
+/* ── Plot ───────────────────────────────────────────────────────────────
+   The SVG is sized in real pixels by the component, so nothing here scales
+   it. min-height is set inline from the same constant that draws the axis
+   band, which keeps the date labels inside the card. */
+.utc-plot {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  margin-top: 0.15rem;
+}
+
+/* max-width guards the frame between a container shrinking and the observer
+   reporting the new width: the SVG must never widen its own grid column. */
+.utc-svg { display: block; max-width: 100%; touch-action: pan-y; }
+
+.utc-svg:focus { outline: none; }
+
+.utc-svg:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+/* Solid hairlines, one shade off the surface. Dashing a grid reads as a
+   threshold or a projection when it is only chrome. */
+.utc-grid {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.utc-cross {
+  stroke: var(--hairline-strong);
+  stroke-width: 1;
+}
+
+/* Axis text and the one direct label wear text tokens, never the series
+   hue — a light hue is illegible as type on eight of the themes. */
+.utc-tick,
+.utc-xtick {
+  font-size: 0.66rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  fill: var(--text-muted);
+}
+
+.utc-endlabel {
+  font-size: 0.74rem;
+  font-weight: 800;
+  fill: var(--text-main);
+}
+
+.utc-area {
+  fill: var(--utc-hue);
+  fill-opacity: 0.1;
+}
+
+.utc-line {
+  fill: none;
+  stroke: var(--utc-hue);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* The 2px ring is the surface showing through, so the marker stays legible
+   where it sits on top of its own line. */
+.utc-dot {
+  fill: var(--utc-hue);
+  stroke: var(--utc-ring);
+  stroke-width: 2;
+}
+
+.utc-hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+
+/* ── Readout ────────────────────────────────────────────────────────────
+   Hidden with opacity rather than display, so the live region still
+   announces the value a keyboard reader stepped onto. */
+.utc-tip {
+  position: absolute;
+  top: 2px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-xs);
+  background: var(--surface-solid);
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.utc-tip.is-on { opacity: 1; }
+
+.utc-tip__value {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.utc-tip__date {
+  font-size: var(--fs-eyebrow);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* ── Thin data ──────────────────────────────────────────────────────────
+   One snapshot cannot be a trend, so the facet states the value instead of
+   drawing a line through a single point. Proportional figures: tabular-nums
+   makes a large standalone number look loose. */
+.utc-figure {
+  margin: 0.15rem 0 0;
+  font-size: 1.55rem;
+  font-weight: 850;
+  line-height: 1.1;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-main);
+}
+
+.utc-thin {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* ── Table view ─────────────────────────────────────────────────────────
+   The twin of the four plots: nothing is hover-only. */
+.utc-caption {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-align: left;
+  color: var(--text-muted);
+}
+
+.utc-table td { font-variant-numeric: tabular-nums; }
+
+.utc-table__date {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────
+   One column at the app's single breakpoint; the plots re-measure
+   themselves, so nothing needs a second set of geometry. */
+@media (max-width: 900px) {
+  .utc { gap: var(--sp-3); }
+  .utc-facets { grid-template-columns: 1fr; gap: 0.75rem; }
+  .utc-facet { padding: 0.85rem; border-radius: var(--r-md); }
+  .utc-bar__title { font-size: 0.9rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .utc-facets,
+  .utc-tip { transition: none; }
+}

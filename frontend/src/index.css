@@ -1434,8 +1434,6 @@ a.btn-primary:hover:not(:disabled) {
   overflow: hidden;
 }
 
-
-
 /* Dark-mode fun-card — let CSS vars handle it, no override needed */
 
 /* Title */
@@ -1620,15 +1618,11 @@ a.btn-primary:hover:not(:disabled) {
   border-left: 4px solid #ef4444;
 }
 
-
-
 .ff-alert-success {
   background: #f0fdf4;
   color: #15803d;
   border-left: 4px solid #22c55e;
 }
-
-
 
 :root.dark .ff-alert-error,
 :root.aurora .ff-alert-error,
@@ -4901,19 +4895,6 @@ select.mirror-input-glass, select.affirmation-input-glass {
   padding: 2rem 1rem;
   position: relative;
   overflow: hidden;
-}
-
-/* Ambient mesh gradient background */
-.auth-page::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background:
-    radial-gradient(ellipse 60% 50% at 15% 20%, color-mix(in srgb, var(--primary) 12%, transparent) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 40% at 85% 75%, color-mix(in srgb, var(--secondary) 10%, transparent) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 35% at 50% 50%, color-mix(in srgb, var(--primary) 5%, transparent) 0%, transparent 60%);
-  pointer-events: none;
 }
 
 .auth-card {

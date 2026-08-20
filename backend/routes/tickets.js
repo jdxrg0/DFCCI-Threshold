@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Ticket = require('../models/Ticket');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
+const { recordAudit, AUDIT_ACTIONS } = require('../utils/auditLog');
 const auth = requireAuth;
 const adminAuth = [requireAuth, requireRole(['ADMIN'])];
 
@@ -84,10 +85,39 @@ router.patch('/:id/admin', adminAuth, async (req, res) => {
       return res.status(404).json({ msg: 'Ticket not found' });
     }
 
+    const prevStatus = ticket.status;
+    const prevResponse = ticket.adminResponse;
+
     if (status) ticket.status = status;
     if (adminResponse !== undefined) ticket.adminResponse = adminResponse;
 
     await ticket.save();
+
+    // Comparing the saved doc against the captured values, rather than against the request
+    // body, is what keeps a no-op PATCH from writing a row that says nothing changed.
+    if (ticket.status !== prevStatus) {
+      await recordAudit(req, {
+        action: AUDIT_ACTIONS.TICKET_STATUS,
+        targetType: 'TICKET',
+        target: ticket._id,
+        targetLabel: ticket.title,
+        before: { status: prevStatus },
+        after: { status: ticket.status },
+        summary: `Moved ticket "${ticket.title}" from ${prevStatus} to ${ticket.status}`,
+      });
+    }
+
+    if (ticket.adminResponse !== prevResponse) {
+      await recordAudit(req, {
+        action: AUDIT_ACTIONS.TICKET_RESPONSE,
+        targetType: 'TICKET',
+        target: ticket._id,
+        targetLabel: ticket.title,
+        before: { adminResponse: prevResponse },
+        after: { adminResponse: ticket.adminResponse },
+        summary: `${prevResponse ? 'Updated' : 'Added'} the admin response on ticket "${ticket.title}"`,
+      });
+    }
     
     // Fetch updated ticket with populated user
     const updatedTicket = await Ticket.findById(req.params.id).populate('createdBy', 'displayName email');

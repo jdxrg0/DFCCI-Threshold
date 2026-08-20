@@ -29,6 +29,11 @@ import {
   Users,
   Wallet,
   X,
+  Camera,
+  FileText,
+  History,
+  Send,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -67,6 +72,22 @@ const peso = (n) =>
   `₱${Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const pesoWhole = (n) => `₱${Math.round(Number(n) || 0).toLocaleString('en-PH')}`;
+
+// Audit diffs store raw field values; make them readable without leaking
+// implementation detail like ObjectIds into the feed. `funds` resolves a
+// designatedFund id to its name — printing "a fund → a fund" told the reader
+// nothing about what actually moved.
+function formatAuditValue(field, value, funds = []) {
+  if (value === null || value === undefined || value === '') return 'none';
+  if (field === 'amount') return peso(value);
+  if (field === 'date') return new Date(value).toLocaleDateString();
+  if (field === 'designatedFund') {
+    return funds.find((f) => f._id === value)?.name || 'a deleted fund';
+  }
+  if (field === 'receiptUrl') return 'a receipt';
+  const str = String(value);
+  return str.length > 60 ? `${str.slice(0, 60)}…` : str;
+}
 
 const initials = (name = '') =>
   name
@@ -132,6 +153,43 @@ function Modal({ onClose, children, size = '', accent, titleId }) {
         {accent && <div className="ft-modal__accent" />}
         {children}
       </div>
+    </div>
+  );
+}
+
+// Shares Modal's stack so Escape closes the topmost dialog only, and locks
+// body scroll the same way.
+function LightboxOverlay({ onClose, children }) {
+  const tokenRef = useRef({});
+
+  useEffect(() => {
+    const token = tokenRef.current;
+    modalStack.push(token);
+    const onKey = (e) => {
+      if (e.key === 'Escape' && modalStack[modalStack.length - 1] === token) onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+      const i = modalStack.indexOf(token);
+      if (i >= 0) modalStack.splice(i, 1);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="ft-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Receipt"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      {children}
     </div>
   );
 }
@@ -297,6 +355,24 @@ export default function FundTrackerDashboard() {
   const refreshTimer = useRef(null);
   const committedRef = useRef(null);
 
+  // ── Receipts ──
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [receiptPreview, setReceiptPreview] = useState('');
+  const [removeReceipt, setRemoveReceipt] = useState(false);
+  const [lightbox, setLightbox] = useState('');
+
+  // ── Audit trail ──
+  const [auditEntries, setAuditEntries] = useState([]);
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotalPages, setAuditTotalPages] = useState(1);
+  const [loadingAudit, setLoadingAudit] = useState(false);
+
+  // ── Batch reminders ──
+  const [reminderPreview, setReminderPreview] = useState(null);
+  const [loadingReminders, setLoadingReminders] = useState(false);
+  const [sendingBatch, setSendingBatch] = useState(false);
+  const [showRecipients, setShowRecipients] = useState(false);
+
   // ── Insights ──
   const [analytics, setAnalytics] = useState(null);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
@@ -435,10 +511,46 @@ export default function FundTrackerDashboard() {
     }
   }, []);
 
+  const fetchAudit = useCallback(async (page = 1) => {
+    try {
+      setLoadingAudit(true);
+      const res = await api.get(`/funds/audit?page=${page}&limit=20`);
+      setAuditEntries(res.data.entries);
+      setAuditTotalPages(res.data.totalPages);
+      setAuditPage(res.data.page);
+    } catch (err) {
+      console.error('Failed to load audit log:', err);
+    } finally {
+      setLoadingAudit(false);
+    }
+  }, []);
+
+  const fetchReminderPreview = useCallback(async () => {
+    if (!isPrivileged) return;
+    try {
+      setLoadingReminders(true);
+      const res = await api.get('/funds/dues/reminder-preview');
+      setReminderPreview(res.data);
+    } catch (err) {
+      console.error('Failed to load reminder preview:', err);
+    } finally {
+      setLoadingReminders(false);
+    }
+  }, [isPrivileged]);
+
   useEffect(() => { fetchOverview(); }, [fetchOverview]);
   useEffect(() => { fetchLedger(); }, [fetchLedger]);
   useEffect(() => { fetchDesignatedFunds(); }, [fetchDesignatedFunds]);
   useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
+
+  // Loaded on demand — most visits never open these tabs.
+  useEffect(() => {
+    if (activeTab === 'activity' && !auditEntries.length) fetchAudit(1);
+  }, [activeTab, auditEntries.length, fetchAudit]);
+
+  useEffect(() => {
+    if (activeTab === 'dues' && isPrivileged && !reminderPreview) fetchReminderPreview();
+  }, [activeTab, isPrivileged, reminderPreview, fetchReminderPreview]);
 
   // Debounce the search box so typing does not fire a request per keystroke
   useEffect(() => {
@@ -653,6 +765,9 @@ export default function FundTrackerDashboard() {
   const openForm = (tx = null) => {
     setShowManageCategories(false);
     setEditingCategory(null);
+    setReceiptFile(null);
+    setRemoveReceipt(false);
+    setReceiptPreview(tx?.receiptUrl || '');
     if (tx) {
       setEditingId(tx._id);
       setFormData({
@@ -675,16 +790,67 @@ export default function FundTrackerDashboard() {
     setShowForm(true);
   };
 
+  const handlePickReceipt = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Guard client-side too: multer rejects oversized files, but failing here
+    // saves the member a pointless upload over mobile data.
+    if (file.size > 5 * 1024 * 1024) {
+      showAlert('Image too large', 'Receipts must be under 5MB. Try taking the photo at a lower resolution.');
+      e.target.value = '';
+      return;
+    }
+    setReceiptFile(file);
+    setRemoveReceipt(false);
+    setReceiptPreview((prev) => {
+      // Release the previous blob; otherwise every re-pick pins a whole File
+      // for the lifetime of the page.
+      if (prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    // Clearing the input means picking the SAME file again still fires change.
+    e.target.value = '';
+  };
+
+  const handleClearReceipt = () => {
+    setReceiptFile(null);
+    setReceiptPreview((prev) => {
+      if (prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+      return '';
+    });
+    // Only meaningful when editing something that already had one.
+    setRemoveReceipt(Boolean(editingId));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (saving) return;
     setSaving(true);
     try {
-      if (editingId) await api.put(`/funds/${editingId}`, formData);
-      else await api.post('/funds', formData);
+      // Multipart only when a file is actually involved, so ordinary edits keep
+      // going out as plain JSON.
+      let payload = formData;
+      let config;
+      if (receiptFile || removeReceipt) {
+        const body = new FormData();
+        Object.entries(formData).forEach(([k, v]) => body.append(k, v ?? ''));
+        if (removeReceipt) body.append('removeReceipt', 'true');
+        // File last — the ordering the existing upload modal relies on.
+        if (receiptFile) body.append('receipt', receiptFile);
+        payload = body;
+        config = { headers: { 'Content-Type': 'multipart/form-data' } };
+      }
+
+      if (editingId) await api.put(`/funds/${editingId}`, payload, config);
+      else await api.post('/funds', payload, config);
+
+      setReceiptFile(null);
+      setReceiptPreview('');
+      setRemoveReceipt(false);
       setShowForm(false);
       await Promise.all([fetchOverview(), fetchDesignatedFunds({ silent: true })]);
       fetchAnalytics();
+      fetchAudit(1);
     } catch (err) {
       showAlert('Could not save', err.response?.data?.message || 'Failed to save the transaction. Please try again.');
     } finally {
@@ -722,6 +888,7 @@ export default function FundTrackerDashboard() {
           await api.delete(`/funds/${tx._id}`);
           await Promise.all([fetchOverview(), fetchLedger({ silent: true }), fetchDesignatedFunds({ silent: true })]);
           fetchAnalytics();
+          fetchAudit(1);
         } catch (err) {
           showAlert('Could not delete', err.response?.data?.message || 'Failed to delete the transaction.');
         }
@@ -1169,6 +1336,26 @@ ${formattedDesc}
     );
   };
 
+  const handleSendBatchReminders = () => {
+    if (!reminderPreview || sendingBatch) return;
+    showConfirm(
+      'Send dues reminders',
+      `Email a dues statement to ${reminderPreview.total} subscribed member${reminderPreview.total === 1 ? '' : 's'} right now?`,
+      async () => {
+        setSendingBatch(true);
+        try {
+          const res = await api.post('/funds/dues/send-batch-reminders', { timing: 'Manual' });
+          showAlert('Reminders sent', res.data.message);
+          fetchReminderPreview();
+        } catch (err) {
+          showAlert('Could not send', err.response?.data?.message || 'The batch did not go out.');
+        } finally {
+          setSendingBatch(false);
+        }
+      }
+    );
+  };
+
   const handleSendDuesEmail = async (member) => {
     if (!member.linkedUser || sendingEmail) return;
     setSendingEmail(member._id);
@@ -1209,6 +1396,7 @@ ${formattedDesc}
     { id: 'dues', label: t('weekly_dues_tab') || 'Weekly Dues', icon: <Users size={15} />, count: ledgerData.members.length || null },
     { id: 'budgets', label: 'Funds', icon: <Briefcase size={15} />, count: designatedFunds.length || null },
     { id: 'insights', label: 'Insights', icon: <ChartColumn size={15} /> },
+    { id: 'activity', label: 'Activity', icon: <History size={15} /> },
   ];
 
   /* ══════════════════════════════════════════════════════════════════════
@@ -1454,6 +1642,16 @@ ${formattedDesc}
                         </td>
                         <td>
                           <div className="ft-rowactions">
+                            {tx.receiptUrl && (
+                              <button
+                                type="button"
+                                className="ft-receipt-thumb-btn"
+                                onClick={() => setLightbox(tx.receiptUrl)}
+                                aria-label={`View receipt for ${tx.category}`}
+                              >
+                                <img className="ft-receipt-thumb" src={tx.receiptUrl} alt="" />
+                              </button>
+                            )}
                             <button className="ft-iconbtn" title="Copy announcement" onClick={() => handleCopyAnnouncement(tx)}>
                               <Copy size={14} />
                             </button>
@@ -1498,6 +1696,17 @@ ${formattedDesc}
                         </div>
                         {tx.description && <div className="ft-txcard__desc">{tx.description}</div>}
                         <div className="ft-txcard__foot">
+                          {tx.receiptUrl && (
+                            <button
+                              type="button"
+                              className="ft-receipt-thumb-btn"
+                              style={{ marginRight: 'auto' }}
+                              onClick={() => setLightbox(tx.receiptUrl)}
+                              aria-label={`View receipt for ${tx.category}`}
+                            >
+                              <img className="ft-receipt-thumb" src={tx.receiptUrl} alt="" />
+                            </button>
+                          )}
                           <button className="ft-iconbtn" title="Copy announcement" onClick={() => handleCopyAnnouncement(tx)}>
                             <Copy size={14} />
                           </button>
@@ -1843,6 +2052,102 @@ ${formattedDesc}
               )}
             </section>
           )}
+
+          {/* Batch reminders */}
+          {isPrivileged && (
+            <section className="ft-panel">
+              <div className="ft-panel__head">
+                <div>
+                  <h2 className="ft-panel__title">
+                    <Send size={18} /> Dues reminders
+                  </h2>
+                  <p className="ft-panel__desc">
+                    Emails each subscribed member their own balance. Sends automatically every Saturday 9PM and Sunday 6AM — this is for sending one now.
+                  </p>
+                </div>
+              </div>
+
+              {loadingReminders && !reminderPreview ? (
+                <SkeletonList rows={2} />
+              ) : !reminderPreview ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>Could not load the recipient list.</p>
+              ) : (
+                <div className="ft-reminder__grid">
+                  <div>
+                    <div className="ft-stats" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(8rem, 1fr))' }}>
+                      <div className="ft-stat">
+                        <span className="ft-stat__label"><Mail size={12} /> Will receive</span>
+                        <p className={`ft-stat__value ${reminderPreview.total ? '' : 'is-warn'}`}>{reminderPreview.total}</p>
+                        <p className="ft-stat__hint">subscribed members</p>
+                      </div>
+                      <div className="ft-stat">
+                        <span className="ft-stat__label"><Users size={12} /> Not subscribed</span>
+                        <p className="ft-stat__value">{reminderPreview.unsubscribedCount}</p>
+                        <p className="ft-stat__hint">of {reminderPreview.verifiedCount} verified</p>
+                      </div>
+                      <div className="ft-stat">
+                        <span className="ft-stat__label"><Wallet size={12} /> Expected each</span>
+                        <p className="ft-stat__value">{pesoWhole(reminderPreview.expectedToDate)}</p>
+                        <p className="ft-stat__hint">to date</p>
+                      </div>
+                    </div>
+
+                    {reminderPreview.total === 0 && (
+                      <p className="ft-note" style={{ marginTop: '0.85rem' }}>
+                        <Info size={14} />
+                        <span>
+                          Nobody has opted in yet, so nothing would be sent. Dues reminders are off by default —
+                          an admin turns them on per member from the Admin Panel.
+                        </span>
+                      </p>
+                    )}
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.85rem' }}>
+                      <button
+                        className="btn btn-primary"
+                        style={{ borderRadius: '9999px' }}
+                        onClick={handleSendBatchReminders}
+                        disabled={sendingBatch || reminderPreview.total === 0}
+                      >
+                        <Send size={15} /> {sendingBatch ? 'Sending…' : 'Send now'}
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ borderRadius: '9999px' }}
+                        onClick={() => setShowRecipients((v) => !v)}
+                        disabled={reminderPreview.total === 0}
+                      >
+                        {showRecipients ? 'Hide' : 'Preview'} recipients
+                      </button>
+                    </div>
+                  </div>
+
+                  {showRecipients && reminderPreview.total > 0 && (
+                    <div className="ft-recipients">
+                      {reminderPreview.recipients.map((r) => (
+                        <div key={r._id} className="ft-recipient">
+                          <span className="ft-avatar" aria-hidden="true">{initials(r.displayName)}</span>
+                          <span className="ft-recipient__name">
+                            {r.displayName}
+                            <span className="ft-recipient__email">{r.email}</span>
+                          </span>
+                          {r.arrears === null ? (
+                            <span className="ft-chip" title="No roster entry linked to this account">No roster</span>
+                          ) : r.arrears > 0 ? (
+                            <span className="ft-pill ft-pill--behind">−{Math.round(r.arrears)}</span>
+                          ) : r.arrears < 0 ? (
+                            <span className="ft-pill ft-pill--ahead">+{Math.round(Math.abs(r.arrears))}</span>
+                          ) : (
+                            <span className="ft-pill ft-pill--ok">Updated</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       )}
 
@@ -2175,6 +2480,98 @@ ${formattedDesc}
         </div>
       )}
 
+      {/* ══ ACTIVITY / AUDIT TRAIL ══ */}
+      {activeTab === 'activity' && (
+        <div className="ft-stack">
+          <section className="ft-panel">
+            <div className="ft-panel__head">
+              <div>
+                <h2 className="ft-panel__title">
+                  <ShieldCheck size={18} /> Activity log
+                </h2>
+                <p className="ft-panel__desc">
+                  Every manual change to the ledger, and who made it. Weekly dues entries are not listed here — each amount is already visible in the dues grid.
+                </p>
+              </div>
+              <div className="ft-panel__actions">
+                <button className="btn btn-secondary" onClick={() => fetchAudit(auditPage)} disabled={loadingAudit} style={{ borderRadius: '9999px', padding: '0.4rem 0.9rem', fontSize: '0.78rem' }}>
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {loadingAudit && auditEntries.length === 0 ? (
+              <SkeletonList rows={6} />
+            ) : auditEntries.length === 0 ? (
+              <EmptyState
+                icon={<History size={26} />}
+                title="Nothing recorded yet"
+                text="Once a transaction is added, edited or deleted, it shows up here with the name of whoever did it."
+              />
+            ) : (
+              <>
+                <div className="ft-audit">
+                  {auditEntries.map((entry) => {
+                    const verb = entry.action === 'CREATE' ? 'added' : entry.action === 'DELETE' ? 'deleted' : 'edited';
+                    const icon =
+                      entry.action === 'CREATE' ? <Plus size={14} /> :
+                      entry.action === 'DELETE' ? <Trash2 size={14} /> :
+                      <Pencil size={14} />;
+
+                    return (
+                      <article key={entry._id} className="ft-audit-item">
+                        <span className={`ft-audit__icon is-${entry.action.toLowerCase()}`}>{icon}</span>
+                        <div className="ft-audit__body">
+                          <div className="ft-audit__head">
+                            <span className="ft-audit__actor">{entry.actorName}</span>
+                            {entry.actorRole && <span className="ft-chip">{entry.actorRole.replace(/_/g, ' ')}</span>}
+                            <span className="ft-audit__action">{verb}</span>
+                            <span className="ft-audit__label">{entry.label}</span>
+                            <time className="ft-audit__time" dateTime={entry.createdAt}>
+                              {new Date(entry.createdAt).toLocaleString(undefined, {
+                                month: 'short', day: 'numeric', year: 'numeric',
+                                hour: 'numeric', minute: '2-digit',
+                              })}
+                            </time>
+                          </div>
+
+                          {entry.changes?.length > 0 && (
+                            <div className="ft-diff">
+                              {entry.changes.map((c) => (
+                                <div key={c.field} className="ft-diff__row">
+                                  <span className="ft-diff__field">{c.field.replace(/([A-Z])/g, ' $1')}</span>
+                                  <span className="ft-diff__from">{formatAuditValue(c.field, c.from, designatedFunds)}</span>
+                                  <span className="ft-diff__arrow">→</span>
+                                  <span className="ft-diff__to">{formatAuditValue(c.field, c.to, designatedFunds)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {entry.note && <p className="ft-audit__note">{entry.note}</p>}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+
+                {auditTotalPages > 1 && (
+                  <nav className="ft-pager" aria-label="Activity pages">
+                    <button className="ft-pager__btn" onClick={() => fetchAudit(auditPage - 1)} disabled={auditPage === 1}>
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="ft-pager__info">Page {auditPage} of {auditTotalPages}</span>
+                    <button className="ft-pager__btn" onClick={() => fetchAudit(auditPage + 1)} disabled={auditPage === auditTotalPages}>
+                      <ChevronRight size={14} />
+                    </button>
+                  </nav>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+      )}
+
       {/* ══════════════ MODALS ══════════════ */}
 
       {/* Transaction form */}
@@ -2340,6 +2737,36 @@ ${formattedDesc}
                   <span className="ft-field__label">{t('date') || 'Date'}</span>
                   <input className="ft-input" type="date" name="date" value={formData.date} onChange={handleInput} required style={{ maxWidth: '12rem' }} />
                 </label>
+
+                <div className="ft-field">
+                  <span className="ft-field__label">Receipt <span>(optional)</span></span>
+                  <div className={`ft-receipt-field ${receiptPreview ? 'has-file' : ''}`}>
+                    {receiptPreview ? (
+                      <img className="ft-receipt-preview" src={receiptPreview} alt="Receipt preview" />
+                    ) : (
+                      <span className="ft-receipt-placeholder"><Camera size={18} /></span>
+                    )}
+                    <div className="ft-receipt-field__text">
+                      <p className="ft-receipt-field__title">
+                        {receiptPreview ? 'Receipt attached' : 'No receipt yet'}
+                      </p>
+                      <p className="ft-receipt-field__hint">
+                        JPG, PNG or WebP up to 5MB. Anyone in the community can view it, so avoid photos showing personal bank details.
+                      </p>
+                    </div>
+                    <div className="ft-receipt-actions">
+                      <label className="ft-filebtn">
+                        <Camera size={13} /> {receiptPreview ? 'Replace' : 'Attach'}
+                        <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handlePickReceipt} />
+                      </label>
+                      {receiptPreview && (
+                        <button type="button" className="ft-iconbtn is-danger" onClick={handleClearReceipt} title="Remove receipt">
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="ft-modal__foot">
@@ -2737,6 +3164,30 @@ ${formattedDesc}
             </button>
           </div>
         </Modal>
+      )}
+
+      {/* Receipt lightbox. Uses the same Escape/scroll-lock handling as the
+          other dialogs rather than a bare div. */}
+      {lightbox && (
+        <LightboxOverlay onClose={() => setLightbox('')}>
+          <div className="ft-lightbox__bar">
+            <a
+              className="ft-iconbtn"
+              href={lightbox}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              title="Open full size"
+              style={{ color: '#fff' }}
+            >
+              <FileText size={18} />
+            </a>
+            <button className="ft-iconbtn" style={{ color: '#fff' }} onClick={() => setLightbox('')} aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
+          <img src={lightbox} alt="Receipt" onClick={(e) => e.stopPropagation()} />
+        </LightboxOverlay>
       )}
 
       {/* Confirm */}

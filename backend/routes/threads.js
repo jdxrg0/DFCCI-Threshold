@@ -4,6 +4,10 @@ const Thread = require('../models/Thread');
 const sendEmail = require('../utils/sendEmail');
 const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
 const appEmitter = require('../utils/eventEmitter');
+const { recordAudit, AUDIT_ACTIONS } = require('../utils/auditLog');
+
+// An admin reviewing the log recognises a thread by who it is between, never by its id.
+const threadLabel = (thread) => `${thread.sender?.displayName || 'Unknown'} → ${thread.receiver?.displayName || 'Unknown'}`;
 
 // Get all pending deletion requests (Admin only)
 router.get('/admin/deletion-requests', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
@@ -29,9 +33,22 @@ router.put('/admin/:id/approve-deletion', requireAuth, requireVerified, requireR
       return res.status(400).json({ message: 'Request is not pending.' });
     }
 
+    const label = threadLabel(thread);
+    const before = { deletionRequestStatus: thread.deletionRequestStatus, deletedAt: thread.deletedAt };
+
     thread.deletionRequestStatus = 'Approved';
     thread.deletedAt = new Date();
     await thread.save();
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.THREAD_DELETION_APPROVE,
+      targetType: 'THREAD',
+      target: thread._id,
+      targetLabel: label,
+      before,
+      after: { deletionRequestStatus: thread.deletionRequestStatus, deletedAt: thread.deletedAt },
+      summary: `Approved the deletion of the thread ${label}`,
+    });
 
     sendEmail(
       thread.sender.email,
@@ -55,15 +72,29 @@ router.put('/admin/:id/approve-deletion', requireAuth, requireVerified, requireR
 // Reject deletion request (Admin only)
 router.put('/admin/:id/reject-deletion', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
   try {
-    const thread = await Thread.findById(req.params.id).populate('sender');
+    // receiver is populated only so the audit label can name both sides of the thread.
+    const thread = await Thread.findById(req.params.id).populate('sender').populate('receiver');
     if (!thread) return res.status(404).json({ message: 'Thread not found' });
 
     if (thread.deletionRequestStatus !== 'Pending') {
       return res.status(400).json({ message: 'Request is not pending.' });
     }
 
+    const label = threadLabel(thread);
+    const before = { deletionRequestStatus: thread.deletionRequestStatus };
+
     thread.deletionRequestStatus = 'Rejected';
     await thread.save();
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.THREAD_DELETION_REJECT,
+      targetType: 'THREAD',
+      target: thread._id,
+      targetLabel: label,
+      before,
+      after: { deletionRequestStatus: thread.deletionRequestStatus },
+      summary: `Rejected the deletion request for the thread ${label}`,
+    });
 
     sendEmail(
       thread.sender.email,
@@ -102,11 +133,24 @@ router.put('/admin/:id/approve-restore', requireAuth, requireVerified, requireRo
       return res.status(400).json({ message: 'Restore request is not pending.' });
     }
 
+    const label = threadLabel(thread);
+    const before = { restoreRequestStatus: thread.restoreRequestStatus, deletedAt: thread.deletedAt };
+
     thread.deletedAt = null;
     thread.restoreRequestStatus = 'Approved';
     thread.deletionRequestStatus = 'None';
     thread.lastRestoredAt = new Date();
     await thread.save();
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.THREAD_RESTORE_APPROVE,
+      targetType: 'THREAD',
+      target: thread._id,
+      targetLabel: label,
+      before,
+      after: { restoreRequestStatus: thread.restoreRequestStatus, deletedAt: thread.deletedAt },
+      summary: `Approved the restoration of the thread ${label}`,
+    });
 
     sendEmail(
       thread.sender.email,
@@ -130,15 +174,29 @@ router.put('/admin/:id/approve-restore', requireAuth, requireVerified, requireRo
 // Reject restore request (Admin only)
 router.put('/admin/:id/reject-restore', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
   try {
-    const thread = await Thread.findById(req.params.id).populate('sender');
+    // receiver is populated only so the audit label can name both sides of the thread.
+    const thread = await Thread.findById(req.params.id).populate('sender').populate('receiver');
     if (!thread) return res.status(404).json({ message: 'Thread not found' });
 
     if (thread.restoreRequestStatus !== 'Pending') {
       return res.status(400).json({ message: 'Restore request is not pending.' });
     }
 
+    const label = threadLabel(thread);
+    const before = { restoreRequestStatus: thread.restoreRequestStatus };
+
     thread.restoreRequestStatus = 'Rejected';
     await thread.save();
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.THREAD_RESTORE_REJECT,
+      targetType: 'THREAD',
+      target: thread._id,
+      targetLabel: label,
+      before,
+      after: { restoreRequestStatus: thread.restoreRequestStatus },
+      summary: `Rejected the restore request for the thread ${label}`,
+    });
 
     sendEmail(
       thread.sender.email,

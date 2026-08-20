@@ -1,22 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const Schedule = require('../models/Schedule');
+const Submission = require('../models/Submission');
 const automationScheduler = require('../services/automationScheduler');
+const { GH_OWNER, GH_REPO, ghHeaders, floorSec, listRunsSince } = require('../services/githubRuns');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 
 // Apply auth and admin role check to all automation routes
 router.use(requireAuth);
 router.use(requireRole(['ADMIN']));
 
-const GH_OWNER = 'd0ul0s';
-const GH_REPO = 'Residential-Proxy-Method';
 const GH_API = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/.github/workflows`;
-
-const ghHeaders = () => ({
-  'Authorization': `token ${process.env.GITHUB_PAT}`,
-  'Accept': 'application/vnd.github.v3+json',
-  'Content-Type': 'application/json'
-});
 
 /**
  * The Puppeteer workflow that actually posts to Messenger. One file per
@@ -111,10 +105,17 @@ const latestSha = async (fileName, fallback) => {
 const fillConfirmationCodes = (messageQueue, codeTemplate) => {
   messageQueue.forEach(q => {
     if (q.weeklyConfirmationCode) return;
-    const dateObj = new Date(q.targetDate || Date.now());
-    const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const dd = String(dateObj.getDate()).padStart(2, '0');
-    const yy = String(dateObj.getFullYear()).slice(-2);
+    // A YYYY-MM-DD key parses to UTC midnight, so reading it back with local
+    // getters stamps the previous day's code on any host behind UTC. Parse and
+    // read in UTC, and fall back to the Manila date this app schedules against.
+    const key = /^\d{4}-\d{2}-\d{2}$/.test(String(q.targetDate || ''))
+      ? q.targetDate
+      : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila' }).format(new Date());
+    const [year, month, day] = key.split('-').map(Number);
+    const dateObj = new Date(Date.UTC(year, month - 1, day));
+    const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dateObj.getUTCDate()).padStart(2, '0');
+    const yy = String(dateObj.getUTCFullYear()).slice(-2);
     q.weeklyConfirmationCode = (codeTemplate || 'DFCCI-S-LU-{DATE}').replace(/{DATE}/gi, `${mm}${dd}${yy}`);
   });
   return messageQueue;
@@ -180,32 +181,55 @@ router.get('/schedules', async (req, res) => {
 // PUT /api/automation/schedule/:id
 router.put('/schedule/:id', async (req, res) => {
   try {
-    const { scheduleName, cronTime, codeCronTime, enableCodeBroadcast, codeTemplate, chatUrl = '', targetRole = '', advanceWeeks = 0, message, messageQueue = [], roleReminders = [] } = req.body;
-
-    if (!scheduleName || !cronTime || (!chatUrl && !targetRole) || !message) {
-      return res.status(400).json({ msg: 'Please provide all required fields (Target Chat URL or Target Role is required)' });
-    }
+    const { scheduleName, cronTime, message } = req.body;
 
     const schedule = await Schedule.findById(req.params.id);
     if (!schedule) {
       return res.status(404).json({ msg: 'Schedule not found' });
     }
 
-    const sha = await latestSha(schedule.githubFileName, schedule.githubFileSha);
-    const newSha = await pushWorkflow(schedule.githubFileName, scheduleName, chatUrl, `Update schedule: ${scheduleName}`, sha);
+    // Validated against the merged document, not the request body. A client that
+    // omits chatUrl or targetRole is leaving it alone rather than clearing it,
+    // and checking the body alone rejected every role-targeted schedule.
+    const nextChatUrl = req.body.chatUrl !== undefined ? req.body.chatUrl : (schedule.chatUrl || '');
+    const nextTargetRole = req.body.targetRole !== undefined ? req.body.targetRole : (schedule.targetRole || '');
+
+    if (!scheduleName || !cronTime || (!nextChatUrl && !nextTargetRole) || !message) {
+      return res.status(400).json({ msg: 'Please provide all required fields (Target Chat URL or Target Role is required)' });
+    }
 
     schedule.scheduleName = scheduleName;
     schedule.cronTime = cronTime;
-    schedule.codeCronTime = codeCronTime;
-    schedule.enableCodeBroadcast = enableCodeBroadcast;
-    schedule.codeTemplate = codeTemplate;
-    schedule.chatUrl = chatUrl;
-    schedule.targetRole = targetRole;
-    schedule.advanceWeeks = advanceWeeks;
+    schedule.chatUrl = nextChatUrl;
     schedule.message = message;
-    schedule.messageQueue = fillConfirmationCodes(messageQueue, codeTemplate);
-    schedule.roleReminders = roleReminders;
-    schedule.githubFileSha = newSha;
+
+    // Omitted means unchanged, for every optional field. Defaulting them here
+    // let a client that only knows part of the form wipe the rest of it: a save
+    // from the main editor erased every role reminder, and a save from the
+    // reminder editor turned a role schedule back into a group one.
+    ['codeCronTime', 'enableCodeBroadcast', 'codeTemplate', 'targetRole', 'advanceWeeks', 'roleReminders']
+      .forEach(field => {
+        if (req.body[field] !== undefined) schedule[field] = req.body[field];
+      });
+
+    if (req.body.messageQueue !== undefined) {
+      const codeTemplate = req.body.codeTemplate !== undefined ? req.body.codeTemplate : schedule.codeTemplate;
+      schedule.messageQueue = fillConfirmationCodes(req.body.messageQueue, codeTemplate);
+    }
+
+    // Validate before writing to GitHub. A malformed reminder rule should be a
+    // 400 the editor can show, not a rewritten workflow file for a save that
+    // then fails on the way to the database.
+    try {
+      await schedule.validate();
+    } catch (validationError) {
+      return res.status(400).json({ msg: validationError.message });
+    }
+
+    const sha = await latestSha(schedule.githubFileName, schedule.githubFileSha);
+    schedule.githubFileSha = await pushWorkflow(
+      schedule.githubFileName, scheduleName, nextChatUrl, `Update schedule: ${scheduleName}`, sha
+    );
 
     const savedSchedule = await schedule.save();
 
@@ -321,17 +345,220 @@ router.post('/schedule/:id/duplicate', async (req, res) => {
   }
 });
 
+// A run that has not surfaced within a day never will, so stop asking for it.
+const GH_PENDING_TTL_MS = 24 * 60 * 60 * 1000;
+const GH_RUNS_CACHE_MS = 15 * 1000;
+const ghRunsCache = new Map();
+
+/* Opening the history modal twice in a row must not cost two GitHub calls. */
+const cachedRunsSince = async (workflowFile, since) => {
+  const key = `${workflowFile}|${since.toISOString()}`;
+  const hit = ghRunsCache.get(key);
+  if (hit && Date.now() - hit.at < GH_RUNS_CACHE_MS) return hit.result;
+
+  const result = await listRunsSince(workflowFile, since);
+  for (const [cached, entry] of ghRunsCache) {
+    if (Date.now() - entry.at >= GH_RUNS_CACHE_MS) ghRunsCache.delete(cached);
+  }
+  ghRunsCache.set(key, { at: Date.now(), result });
+  return result;
+};
+
+/**
+ * Attach GitHub Actions run links to a schedule's history, lazily.
+ *
+ * A dispatch only records that it fired and when — the run it produced is not
+ * visible for seconds to tens of seconds afterwards — so the matching happens
+ * here, on the admin's first look, and costs at most one GitHub request.
+ * Mutates the loaded document so the response carries whatever was resolved.
+ */
+const enrichRunLinks = async (schedule) => {
+  const history = schedule.runHistory || [];
+  if (!schedule.githubFileName || history.length === 0) return;
+
+  const writes = [];
+  const stage = (row, fields) => {
+    Object.assign(row, fields);
+    writes.push({ row, fields });
+  };
+
+  const pending = [];
+  const refreshing = [];
+  const now = Date.now();
+
+  for (const row of history) {
+    if (row.ghRunId && row.ghRunStatus !== 'completed') { refreshing.push(row); continue; }
+    if (row.ghLookupState !== 'pending' || !row.ghDispatchedAt) continue;
+    if (now - new Date(row.ghDispatchedAt).getTime() > GH_PENDING_TTL_MS) {
+      stage(row, { ghLookupState: 'not_found' });
+      continue;
+    }
+    pending.push(row);
+  }
+
+  const needed = [...pending, ...refreshing];
+  if (needed.length > 0) {
+    const since = new Date(Math.min(...needed.map(r => new Date(r.ghDispatchedAt || r.at).getTime())));
+    const { state, runs } = await cachedRunsSince(schedule.githubFileName, since);
+
+    if (state === 'unavailable') {
+      // The token cannot read Actions. A dispatch that worked must not start
+      // looking like a failure because its link could not be fetched.
+      pending.forEach(row => stage(row, { ghLookupState: 'unavailable' }));
+    } else if (state === 'ok') {
+      const byRunId = new Map(runs.map(r => [r.id, r]));
+      for (const row of refreshing) {
+        const run = byRunId.get(row.ghRunId);
+        if (!run) continue;
+        stage(row, { ghRunStatus: run.status, ghRunConclusion: run.conclusion || '' });
+      }
+
+      // Run ids increase monotonically per repository, so demanding an id above
+      // every one already claimed makes it impossible to hand a row last week's
+      // run — every schedule reuses one workflow file for years.
+      let minRunId = history.reduce((max, r) => (r.ghRunId > max ? r.ghRunId : max), 0);
+      const oldestFirst = [...pending].sort((a, b) => new Date(a.at) - new Date(b.at));
+
+      for (const row of oldestFirst) {
+        const floor = floorSec(row.ghDispatchedAt);
+        const match = runs
+          .filter(r => new Date(r.created_at) >= floor && r.id > minRunId)
+          .sort((a, b) => a.id - b.id)[0];
+        // No match means "not visible yet", never a guess: it stays pending and
+        // resolves the next time the history is opened.
+        if (!match) continue;
+        minRunId = match.id;
+        stage(row, {
+          ghRunId: match.id,
+          ghRunUrl: match.html_url,
+          ghRunStatus: match.status,
+          ghRunConclusion: match.conclusion || '',
+          ghLookupState: 'resolved'
+        });
+      }
+    }
+  }
+
+  const addressable = writes.filter(write => write.row._id);
+  if (addressable.length === 0) return;
+
+  // Positional filters rather than a whole-array write, so a dispatch landing
+  // mid-enrichment is not clobbered.
+  const $set = {};
+  const arrayFilters = [];
+  addressable.forEach((write, i) => {
+    const alias = `r${i}`;
+    arrayFilters.push({ [`${alias}._id`]: write.row._id });
+    Object.entries(write.fields).forEach(([field, value]) => {
+      $set[`runHistory.$[${alias}].${field}`] = value;
+    });
+  });
+
+  const newest = history.reduce((a, b) => (new Date(b.at) > new Date(a.at) ? b : a));
+  const newestWrite = addressable.find(write => write.row === newest);
+  if (newestWrite) {
+    Object.entries(newestWrite.fields).forEach(([field, value]) => {
+      $set[`lastRun.${field}`] = value;
+      schedule.set(`lastRun.${field}`, value);
+    });
+  }
+
+  await Schedule.updateOne({ _id: schedule._id }, { $set }, { arrayFilters });
+};
+
 // GET /api/automation/schedule/:id/runs — newest first
 router.get('/schedule/:id/runs', async (req, res) => {
   try {
-    const schedule = await Schedule.findById(req.params.id).select('scheduleName runHistory lastRun');
+    const schedule = await Schedule.findById(req.params.id).select('scheduleName runHistory lastRun githubFileName');
     if (!schedule) return res.status(404).json({ msg: 'Schedule not found' });
+
+    try {
+      await enrichRunLinks(schedule);
+    } catch (e) {
+      // Run links are a nicety; the history itself must always render.
+      console.warn('Run link enrichment failed:', e.message);
+    }
 
     const runs = [...(schedule.runHistory || [])].sort((a, b) => new Date(b.at) - new Date(a.at));
     res.json({ scheduleName: schedule.scheduleName, lastRun: schedule.lastRun, runs });
   } catch (error) {
     console.error('Fetch Runs Error:', error.message);
     res.status(500).json({ msg: 'Server error fetching run history' });
+  }
+});
+
+// GET /api/automation/schedule/:id/confirmations — who has replied, per lineup
+router.get('/schedule/:id/confirmations', async (req, res) => {
+  try {
+    const schedule = await Schedule.findById(req.params.id)
+      .select('scheduleName messageQueue').lean();
+    if (!schedule) return res.status(404).json({ msg: 'Schedule not found' });
+
+    const queue = schedule.messageQueue || [];
+
+    // Scoped to the stored foreign key, never to the codes. Confirmation codes
+    // are a pure function of the lineup date, so two schedules sharing a
+    // template and a Sunday hold identical ones — matching on those would let a
+    // duplicated schedule that has messaged nobody claim the original's replies.
+    const submissions = await Submission.find({ scheduleId: schedule._id }).lean();
+    const byRef = new Map(submissions.map(s => [s.referenceCode, s]));
+
+    const byDate = {};
+    const byCode = {};
+
+    queue.forEach(item => {
+      // PATCH /queue creates items with neither a code nor roles, so nothing
+      // here may assume either exists — including the date itself.
+      if (!item.targetDate) return;
+      const referenceCode = item.weeklyConfirmationCode || null;
+      const submission = referenceCode ? byRef.get(referenceCode) : null;
+      const required = Schedule.requiredRolesFor(item);
+      const received = required.filter(role =>
+        Schedule.roleValue(submission && submission.partsReceived, role) !== undefined);
+      const missing = required.filter(role => !received.includes(role));
+
+      if (referenceCode) byCode[referenceCode] = item.targetDate;
+      byDate[item.targetDate] = {
+        targetDate: item.targetDate,
+        referenceCode,
+        required,
+        received,
+        missing,
+        receivedCount: received.length,
+        requiredCount: required.length,
+        isComplete: Boolean(submission) && missing.length === 0,
+        hasSubmission: Boolean(submission),
+        submissionId: submission ? String(submission._id) : null,
+        firstReceivedAt: submission ? submission.createdAt : null
+      };
+    });
+
+    // Replies filed under a code the queue no longer carries — the lineup was
+    // re-uploaded, or its code regenerated, after the member answered.
+    const orphans = submissions
+      .filter(s => !byCode[s.referenceCode])
+      .map(s => ({
+        referenceCode: s.referenceCode,
+        submissionId: String(s._id),
+        isComplete: Boolean(s.isComplete),
+        received: Schedule.roleKeys(s.partsReceived),
+        createdAt: s.createdAt
+      }));
+
+    // The reader bot writes on its own two-hourly cadence, so a cached view
+    // would show a confirmation that has already landed as still missing.
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      scheduleId: String(schedule._id),
+      scheduleName: schedule.scheduleName,
+      trackedRoles: Schedule.TRACKED_ROLES,
+      byDate,
+      byCode,
+      orphans
+    });
+  } catch (error) {
+    console.error('Fetch Confirmations Error:', error.message);
+    res.status(500).json({ msg: 'Server error fetching confirmations' });
   }
 });
 

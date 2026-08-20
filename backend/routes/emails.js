@@ -3,6 +3,7 @@ const router = express.Router();
 const EmailLog = require('../models/EmailLog');
 const sendEmail = require('../utils/sendEmail');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
+const { recordAudit, AUDIT_ACTIONS } = require('../utils/auditLog');
 
 // @route   GET /api/emails
 // @desc    Get all email logs (Admin only, paginated, searchable, filterable)
@@ -62,6 +63,15 @@ router.post('/:id/resend', requireAuth, requireRole(['ADMIN']), async (req, res)
     // Call sendEmail utility.
     // The utility itself will automatically log this new attempt (either as 'sent' or 'failed')!
     await sendEmail(emailLog.to, emailLog.subject, emailLog.html);
+
+    await recordAudit(req, {
+      action: AUDIT_ACTIONS.EMAIL_RESEND,
+      targetType: 'EMAIL',
+      target: emailLog._id,
+      targetLabel: emailLog.subject,
+      after: { to: emailLog.to },
+      summary: `Resent the email "${emailLog.subject}" to ${emailLog.to}`,
+    });
 
     res.json({ message: 'Email resent successfully!' });
   } catch (error) {

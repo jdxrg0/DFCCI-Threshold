@@ -1,7 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
 import { LanguageProvider } from './context/LanguageContext';
 import Navbar from './components/Navbar';
 import BackBar from './components/BackBar';
@@ -84,7 +83,14 @@ import NameChangePrompt from './components/NameChangePrompt';
 const App = () => {
   return (
     <LanguageProvider>
-    <ThemeProvider>
+      {/* ThemeProvider is mounted once, in main.jsx. It used to be mounted here
+          as well: two independent copies of the theme state, both running the
+          effect that writes <html>. Effects run child-first, so main.jsx's copy
+          ran last and won the DOM — while the picker, being inside this one,
+          only ever updated the copy that lost. Any re-render of the outer
+          provider (an OS light/dark change fires its matchMedia listener) then
+          reverted the page to its stale theme with the picker still showing the
+          user's choice. */}
       <AuthProvider>
         <Router>
           <div className="app-container">
@@ -145,7 +151,6 @@ const App = () => {
           </div>
         </Router>
       </AuthProvider>
-    </ThemeProvider>
     </LanguageProvider>
   );
 };

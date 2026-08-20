@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { Fragment, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -6,12 +6,14 @@ import { useNavigate } from 'react-router-dom';
 import PopupModal from '../components/PopupModal';
 import PageHeader from '../components/PageHeader';
 import { renderAvatarHelper } from '../utils/avatarHelper';
+import UsageTrendChart from '../components/UsageTrendChart';
 import {
   AlertTriangle,
   ArrowRight,
   Bell,
   BellOff,
   CheckCircle,
+  ChevronDown,
   Clock,
   Cloud,
   Cpu,
@@ -22,15 +24,18 @@ import {
   HardDrive,
   History,
   Info,
+  KeyRound,
   Mail,
   MessageSquare,
   RefreshCw,
   RotateCcw,
+  ScrollText,
   Search,
   ShieldAlert,
   ShieldCheck,
   Trash2,
   UserCog,
+  UserPlus,
   Users,
   X,
   Zap,
@@ -39,16 +44,24 @@ import {
 /* ──────────────────────────────────────────────────────────────────────────
    Admin Dashboard — /admin
 
-   Seven tabs over five APIs:
-     users               GET  /users                        (+ role, delete,
+   Nine tabs over eight APIs:
+     users               GET  /users                        (+ role, verify,
+                                                              resend-otp, delete,
                                                               reminders, rename
-                                                              request, date power)
+                                                              request, date power
+                                                              and the /bulk/* set)
+     signups             GET  /users/admin/pending-signups   (+ resend, delete)
      deletion-requests   GET  /threads/admin/deletion-requests   (+ approve/reject)
      restore-requests    GET  /threads/admin/restore-requests    (+ approve/reject)
      recently-deleted    GET  /threads/admin/recently-deleted
      tickets             GET  /tickets                       (+ PATCH /:id/admin)
      emails              GET  /emails                        (+ POST /:id/resend)
+     audit               GET  /users/admin/audit
      limits              GET  /users/admin/platform-limits
+                         GET  /users/admin/platform-history
+
+   Members, the email log and the audit feed are all paged and filtered by the
+   server; nothing on this page holds a whole collection in memory any more.
 
    Everything boots in parallel so the badge counts and the KPI rail are
    correct on first paint; switching a tab re-fetches just that tab. The
@@ -58,11 +71,62 @@ import {
 
 const USERS_PER_PAGE = 12;
 const EMAILS_PER_PAGE = 10;
+const AUDIT_PER_PAGE = 20;
 const RETENTION_DAYS = 60;
 
-const ROLE_ORDER = { ADMIN: 0, COUNSELOR: 1, YOUTH_TREASURER: 2, MEMBER: 3 };
+// GET /users caps `limit` at 100, so the CSV walk asks for the biggest page the
+// server will actually hand back. The page cap is a seatbelt: a totalPages that
+// ever came back wrong must not spin the browser forever.
+const CSV_PAGE_SIZE = 100;
+const CSV_MAX_PAGES = 200;
+
+// Stable identity, so the KPI rail does not see a new object on every failed load.
+const EMPTY_USER_STATS = { total: 0, verified: 0, unverified: 0, byRole: {} };
+
+const BULK_ROLES = ['MEMBER', 'COUNSELOR', 'YOUTH_TREASURER', 'ADMIN'];
 
 const TICKET_TONE = { bug: 'danger', feature: 'info', question: 'violet' };
+
+/* The audit feed stores the raw enum. Printed verbatim the table reads like a
+   stack trace, so every action the backend can write gets a label here. */
+const AUDIT_LABELS = {
+  USER_ROLE_CHANGE: 'Role change',
+  USER_BULK_ROLE: 'Bulk role change',
+  USER_VERIFY: 'Verify',
+  USER_UNVERIFY: 'Unverify',
+  USER_BULK_VERIFY: 'Bulk verify',
+  USER_DELETE: 'Delete member',
+  USER_BULK_DELETE: 'Bulk delete',
+  USER_REMINDERS_TOGGLE: 'Dues reminders',
+  USER_BULK_REMINDERS: 'Bulk dues reminders',
+  USER_RENAME_REQUEST: 'Rename request',
+  USER_DATE_POWER: 'Date power',
+  USER_OTP_RESEND: 'Resend code',
+  SIGNUP_OTP_RESEND: 'Resend signup code',
+  SIGNUP_DELETE: 'Delete signup',
+  THREAD_DELETION_APPROVE: 'Approve deletion',
+  THREAD_DELETION_REJECT: 'Reject deletion',
+  THREAD_RESTORE_APPROVE: 'Approve restore',
+  THREAD_RESTORE_REJECT: 'Reject restore',
+  TICKET_STATUS: 'Request status',
+  TICKET_RESPONSE: 'Request reply',
+  EMAIL_RESEND: 'Resend email',
+};
+
+const auditLabel = (action) =>
+  AUDIT_LABELS[action] || String(action || '').replace(/_/g, ' ').toLowerCase();
+
+// Approvals are tested first on purpose: THREAD_DELETION_APPROVE is an approval,
+// and the unverify check has to beat the generic VERIFY match below it.
+const auditTone = (action) => {
+  const key = String(action || '');
+  if (key.endsWith('_APPROVE')) return 'ok';
+  if (key.includes('DELETE') || key === 'USER_UNVERIFY') return 'danger';
+  if (key.includes('ROLE') || key.includes('VERIFY')) return 'violet';
+  return 'muted';
+};
+
+const memberCount = (n) => `${n} member${n === 1 ? '' : 's'}`;
 
 const usageTone = (percent) => {
   if (percent > 85) return 'var(--danger)';
@@ -86,6 +150,30 @@ const hoursUntil = (value) => {
   if (!value) return 0;
   const diff = new Date(value) - new Date();
   return diff > 0 ? Math.ceil(diff / 3600000) : 0;
+};
+
+// Minutes until `value`, or 0 when it has already passed.
+const minutesUntil = (value) => {
+  if (!value) return 0;
+  const diff = new Date(value) - new Date();
+  return diff > 0 ? Math.ceil(diff / 60000) : 0;
+};
+
+const stamp = (value) =>
+  value
+    ? new Date(value).toLocaleString(undefined, {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+      })
+    : '—';
+
+// Coarse "how long ago" for the signup queue, whose rows are only ever minutes old.
+const sinceLabel = (value) => {
+  if (!value) return 'just now';
+  const mins = Math.max(0, Math.round((new Date() - new Date(value)) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  return hours < 24 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
 };
 
 /* ── Small shared pieces ──────────────────────────────────────────────── */
@@ -179,12 +267,41 @@ const AdminPanel = () => {
   const [recentlyDeleted, setRecentlyDeleted] = useState([]);
   const [tickets, setTickets] = useState([]);
 
-  // Users tab controls
+  // Users tab — every control below is a query param, not a client-side filter
   const [userQuery, setUserQuery] = useState('');
   const [userRole, setUserRole] = useState('');
   const [userStatus, setUserStatus] = useState('');
   const [userSort, setUserSort] = useState('name');
   const [usersPage, setUsersPage] = useState(1);
+  const [usersTotalPages, setUsersTotalPages] = useState(1);
+  const [usersTotalCount, setUsersTotalCount] = useState(0);
+  const [userStats, setUserStats] = useState(EMPTY_USER_STATS);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [verifyingId, setVerifyingId] = useState(null);
+  const [otpUserId, setOtpUserId] = useState(null);
+
+  // Bulk selection, keyed by _id so it survives a re-fetch of the same page
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // Signups tab
+  const [signups, setSignups] = useState([]);
+  const [signupsLoading, setSignupsLoading] = useState(false);
+  const [signupBusyId, setSignupBusyId] = useState(null);
+
+  // Audit tab
+  const [auditEntries, setAuditEntries] = useState([]);
+  const [auditActions, setAuditActions] = useState([]);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditAction, setAuditAction] = useState('');
+  const [auditFrom, setAuditFrom] = useState('');
+  const [auditTo, setAuditTo] = useState('');
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditTotalPages, setAuditTotalPages] = useState(1);
+  const [auditTotalCount, setAuditTotalCount] = useState(0);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(null);
 
   // Tickets tab controls
   const [ticketStatus, setTicketStatus] = useState('');
@@ -205,6 +322,9 @@ const AdminPanel = () => {
   const [limitsData, setLimitsData] = useState(null);
   const [limitsLoading, setLimitsLoading] = useState(false);
   const [limitsError, setLimitsError] = useState('');
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyDays, setHistoryDays] = useState(30);
 
   const [popup, setPopup] = useState({
     isOpen: false, title: '', message: '', onConfirm: null,
@@ -213,6 +333,7 @@ const AdminPanel = () => {
 
   const bootedRef = useRef(false);
   const tabRefs = useRef([]);
+  const selectAllRef = useRef(null);
 
   const showAlert = (title, message) =>
     setPopup({ isOpen: true, title, message, onConfirm: null, isAlert: true, isPrompt: false, promptValue: '' });
@@ -238,7 +359,35 @@ const AdminPanel = () => {
     }
   }, []);
 
-  const fetchUsers = useCallback(() => load('/users', setUsers, 'members'), [load]);
+  // Members are paged, searched, filtered and sorted by the server, so this owns
+  // its own loading flag: the rows already on screen stay put while it runs.
+  const fetchUsers = useCallback(async () => {
+    setUsersLoading(true);
+    try {
+      const res = await api.get('/users', {
+        params: {
+          page: usersPage, limit: USERS_PER_PAGE, search: userQuery,
+          role: userRole, status: userStatus, sort: userSort,
+        },
+      });
+      const pages = res.data.totalPages || 1;
+      setUsers(res.data.users || []);
+      setUsersTotalPages(pages);
+      setUsersTotalCount(res.data.totalCount || 0);
+      // Deleting the last row of the last page leaves the admin standing on a page
+      // that no longer exists; walk back rather than claim nothing matches.
+      if (usersPage > pages) setUsersPage(pages);
+      // Whole-collection figures. The KPI rail reads these rather than users.length,
+      // which is now only ever one page of twelve.
+      setUserStats(res.data.stats || EMPTY_USER_STATS);
+      setError('');
+    } catch (err) {
+      setError(`Could not load members. ${err.response?.data?.message || err.message || ''}`.trim());
+    } finally {
+      setUsersLoading(false);
+    }
+  }, [usersPage, userQuery, userRole, userStatus, userSort]);
+
   const fetchDeletionRequests = useCallback(
     () => load('/threads/admin/deletion-requests', setDeletionRequests, 'deletion requests'), [load]);
   const fetchRestoreRequests = useCallback(
@@ -246,6 +395,42 @@ const AdminPanel = () => {
   const fetchRecentlyDeleted = useCallback(
     () => load('/threads/admin/recently-deleted', setRecentlyDeleted, 'the deletion archive'), [load]);
   const fetchTickets = useCallback(() => load('/tickets', setTickets, 'system requests'), [load]);
+
+  const fetchSignups = useCallback(async () => {
+    setSignupsLoading(true);
+    try {
+      const res = await api.get('/users/admin/pending-signups');
+      setSignups(res.data.signups || []);
+      setError('');
+    } catch (err) {
+      setError(`Could not load pending signups. ${err.response?.data?.message || err.message || ''}`.trim());
+    } finally {
+      setSignupsLoading(false);
+    }
+  }, []);
+
+  const fetchAudit = useCallback(async () => {
+    setAuditLoading(true);
+    try {
+      const res = await api.get('/users/admin/audit', {
+        params: {
+          page: auditPage, limit: AUDIT_PER_PAGE, search: auditSearch,
+          action: auditAction, from: auditFrom, to: auditTo,
+        },
+      });
+      setAuditEntries(res.data.entries || []);
+      setAuditTotalPages(res.data.totalPages || 1);
+      setAuditTotalCount(res.data.totalCount || 0);
+      // Comes from what is actually stored, so the dropdown can never offer a
+      // filter that only ever returns an empty page.
+      setAuditActions(res.data.actions || []);
+      setError('');
+    } catch (err) {
+      setError(`Could not load the audit log. ${err.response?.data?.message || err.message || ''}`.trim());
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [auditPage, auditSearch, auditAction, auditFrom, auditTo]);
 
   const fetchEmails = useCallback(async () => {
     setEmailsLoading(true);
@@ -280,6 +465,21 @@ const AdminPanel = () => {
     }
   }, []);
 
+  const fetchPlatformHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const res = await api.get('/users/admin/platform-history', { params: { days: historyDays } });
+      setHistory(res.data.snapshots || []);
+    } catch (err) {
+      // The trend chart is supplementary. A failure here must not take the limit
+      // cards down with it, so it is logged rather than raised into the banner.
+      console.error('Failed to load platform history:', err);
+      setHistory([]);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyDays]);
+
   /* ── Boot & tab sync ────────────────────────────────────────────────── */
 
   useEffect(() => {
@@ -293,7 +493,7 @@ const AdminPanel = () => {
 
     (async () => {
       await Promise.allSettled([
-        fetchUsers(), fetchDeletionRequests(), fetchRestoreRequests(),
+        fetchUsers(), fetchSignups(), fetchDeletionRequests(), fetchRestoreRequests(),
         fetchRecentlyDeleted(), fetchTickets(), fetchEmails(),
       ]);
       setLastSync(Date.now());
@@ -307,7 +507,7 @@ const AdminPanel = () => {
   // loads once and refreshes only on request.
   useEffect(() => {
     if (!bootedRef.current || loading) return;
-    if (activeTab === 'users') fetchUsers();
+    if (activeTab === 'signups') fetchSignups();
     if (activeTab === 'deletion-requests') fetchDeletionRequests();
     if (activeTab === 'restore-requests') fetchRestoreRequests();
     if (activeTab === 'recently-deleted') fetchRecentlyDeleted();
@@ -325,16 +525,84 @@ const AdminPanel = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, emailsSearch, emailsStatus, emailsPage]);
 
-  // Any change to the result set sends the pager home, so a filter can never
-  // leave the admin stranded on a page that no longer exists.
-  const setUserFilter = (setter) => (value) => { setter(value); setUsersPage(1); };
+  // Members moved onto the same footing as the email log, so the same 280ms
+  // debounce covers the search box; the selects and the pager settle instantly.
+  useEffect(() => {
+    if (!bootedRef.current || loading || activeTab !== 'users') return;
+    const id = setTimeout(fetchUsers, 280);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, userQuery, userRole, userStatus, userSort, usersPage]);
+
+  useEffect(() => {
+    if (!bootedRef.current || loading || activeTab !== 'audit') return;
+    const id = setTimeout(fetchAudit, 280);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, auditSearch, auditAction, auditFrom, auditTo, auditPage]);
+
+  // The growth chart re-queries whenever its window changes. Deferred a tick so
+  // running through the range options fires one request instead of one per step.
+  useEffect(() => {
+    if (!bootedRef.current || loading || activeTab !== 'limits') return;
+    const id = setTimeout(fetchPlatformHistory, 120);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, historyDays]);
+
+  /* ── Bulk selection ─────────────────────────────────────────────────── */
+
+  // The server refuses to bulk-target the caller, so their row is never offered
+  // as a checkbox and never lands in the selection.
+  const selectableIds = useMemo(
+    () => users.filter((u) => u._id !== user?._id).map((u) => u._id),
+    [users, user],
+  );
+
+  const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+
+  const clearSelection = () => setSelectedIds((prev) => (prev.size ? new Set() : prev));
+
+  // `indeterminate` is a DOM property with no HTML attribute behind it, so the
+  // partial-selection state on the header box can only be set imperatively.
+  useEffect(() => {
+    const box = selectAllRef.current;
+    if (!box) return;
+    const chosen = selectableIds.filter((id) => selectedIds.has(id)).length;
+    box.indeterminate = chosen > 0 && chosen < selectableIds.length;
+  }, [selectedIds, selectableIds]);
+
+  const toggleOne = (id) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+
+  const toggleSelectPage = () => setSelectedIds((prev) => {
+    const every = selectableIds.length > 0 && selectableIds.every((id) => prev.has(id));
+    const next = new Set(prev);
+    selectableIds.forEach((id) => (every ? next.delete(id) : next.add(id)));
+    return next;
+  });
+
+  // Any change to the result set sends the pager home and drops the selection —
+  // a ticked id the admin can no longer see is an action they cannot review.
+  const setUserFilter = (setter) => (value) => {
+    setter(value);
+    setUsersPage(1);
+    clearSelection();
+  };
+
+  const goUsersPage = (page) => { setUsersPage(page); clearSelection(); };
 
   const refreshAll = async () => {
     setRefreshing(true);
     await Promise.allSettled([
-      fetchUsers(), fetchDeletionRequests(), fetchRestoreRequests(),
-      fetchRecentlyDeleted(), fetchTickets(), fetchEmails(),
+      fetchUsers(), fetchSignups(), fetchDeletionRequests(), fetchRestoreRequests(),
+      fetchRecentlyDeleted(), fetchTickets(), fetchEmails(), fetchAudit(),
       limitsData ? fetchPlatformLimits() : Promise.resolve(),
+      limitsData ? fetchPlatformHistory() : Promise.resolve(),
     ]);
     setLastSync(Date.now());
     setRefreshing(false);
@@ -375,6 +643,129 @@ const AdminPanel = () => {
 
   const handleRequestNameChange = (id) =>
     mutate(() => api.put(`/users/${id}/request-name-change`), fetchUsers, 'Failed to request name change');
+
+  // Unverifying locks the member out until they redeem a fresh code, so only that
+  // direction confirms; granting verification is recoverable in one click.
+  const handleToggleVerify = (target) => {
+    const next = !target.isVerified;
+
+    const run = async () => {
+      setVerifyingId(target._id);
+      try {
+        const res = await api.put(`/users/${target._id}/verify`, { isVerified: next });
+        await fetchUsers();
+        showAlert('Done', res.data.message);
+      } catch (err) {
+        showAlert('Error', err.response?.data?.message || 'Failed to update verification');
+      } finally {
+        setVerifyingId(null);
+      }
+    };
+
+    if (next) {
+      run();
+      return;
+    }
+    showConfirm(
+      'Remove verification',
+      `Unverify ${target.displayName}? They will be locked out until they enter a new code.`,
+      run,
+    );
+  };
+
+  const handleResendOtp = async (target) => {
+    setOtpUserId(target._id);
+    try {
+      const res = await api.post(`/users/${target._id}/resend-otp`);
+      showAlert('Code sent', res.data.message);
+    } catch (err) {
+      showAlert('Error', err.response?.data?.message || 'Failed to resend the verification code');
+    } finally {
+      setOtpUserId(null);
+    }
+  };
+
+  /* Bulk endpoints all answer with matched/modified/skipped. `skipped` is the only
+     way an admin learns that a row was left alone — a stale id, or their own. */
+  const runBulk = (title, message, request) => {
+    showConfirm(title, message, async () => {
+      setBulkBusy(true);
+      try {
+        const res = await request(Array.from(selectedIds));
+        const skipped = res.data.skipped?.length || 0;
+        clearSelection();
+        await fetchUsers();
+        showAlert(
+          'Bulk action complete',
+          skipped
+            ? `${res.data.message}. ${res.data.modified} changed, ${skipped} skipped.`
+            : res.data.message,
+        );
+      } catch (err) {
+        showAlert('Error', err.response?.data?.message || 'The bulk action failed');
+      } finally {
+        setBulkBusy(false);
+      }
+    });
+  };
+
+  const handleBulkRole = (role) => {
+    const warning = role === 'ADMIN'
+      ? '\n\nAdministrators can manage every member, delete accounts in bulk, approve deletions and read the platform logs. Grant it only to people who should hold all of that.'
+      : '';
+    runBulk(
+      'Set role',
+      `Set ${memberCount(selectedIds.size)} to ${t(`role_${role.toLowerCase()}`)}?${warning}`,
+      (ids) => api.patch('/users/bulk/role', { ids, role }),
+    );
+  };
+
+  const handleBulkReminders = (subscribed) =>
+    runBulk(
+      subscribed ? 'Enable dues reminders' : 'Disable dues reminders',
+      `${subscribed ? 'Enable' : 'Disable'} dues reminder emails for ${memberCount(selectedIds.size)}?`,
+      (ids) => api.patch('/users/bulk/reminders', { ids, subscribed }),
+    );
+
+  const handleBulkVerify = (isVerified) =>
+    runBulk(
+      isVerified ? 'Verify members' : 'Unverify members',
+      isVerified
+        ? `Mark ${memberCount(selectedIds.size)} as verified? They will be able to sign in without a code.`
+        : `Remove verification from ${memberCount(selectedIds.size)}? They will be locked out until they enter a new code.`,
+      (ids) => api.patch('/users/bulk/verify', { ids, isVerified }),
+    );
+
+  const handleBulkDelete = () =>
+    runBulk(
+      'Delete members',
+      `Permanently delete ${memberCount(selectedIds.size)}? Their accounts, profiles and access are removed immediately. This cannot be undone.`,
+      (ids) => api.post('/users/bulk/delete', { ids }),
+    );
+
+  const handleResendSignup = async (signup) => {
+    setSignupBusyId(signup._id);
+    try {
+      const res = await api.post(`/users/admin/pending-signups/${signup._id}/resend`);
+      await fetchSignups();
+      showAlert('Code sent', res.data.message);
+    } catch (err) {
+      showAlert('Error', err.response?.data?.message || 'Failed to resend the signup code');
+    } finally {
+      setSignupBusyId(null);
+    }
+  };
+
+  const handleDeleteSignup = (signup) =>
+    showConfirm(
+      'Delete signup',
+      `Drop the unfinished signup for ${signup.email}? They would have to start registration again.`,
+      () => mutate(
+        () => api.delete(`/users/admin/pending-signups/${signup._id}`),
+        fetchSignups,
+        'Failed to delete the signup',
+      ),
+    );
 
   const handleDeleteUser = (target) => {
     showConfirm(
@@ -455,84 +846,89 @@ const AdminPanel = () => {
 
   /* ── Derived data ───────────────────────────────────────────────────── */
 
-  const verifiedUsers = users.filter((u) => u.isVerified).length;
   const pendingApprovals = deletionRequests.length + restoreRequests.length;
   const openTickets = tickets.filter((tk) => tk.status === 'open' || tk.status === 'in-progress').length;
+  // Expired rows are already dead weight, so the badge only counts the signups an
+  // admin can still rescue with a resend.
+  const liveSignups = signups.filter((s) => !s.expired).length;
 
   const tabs = useMemo(() => [
     { id: 'users', label: 'Members', icon: Users, count: 0 },
+    { id: 'signups', label: 'Signups', icon: UserPlus, count: liveSignups, tone: 'warn' },
     { id: 'deletion-requests', label: 'Deletion', icon: Trash2, count: deletionRequests.length, tone: 'danger' },
     { id: 'restore-requests', label: 'Restore', icon: RotateCcw, count: restoreRequests.length, tone: 'warn' },
     { id: 'recently-deleted', label: 'Archive', icon: History, count: 0 },
     { id: 'tickets', label: 'Requests', icon: MessageSquare, count: openTickets, tone: 'violet' },
     { id: 'emails', label: t('admin_emails_tab') || 'Emails', icon: Mail, count: 0 },
+    { id: 'audit', label: 'Audit', icon: ScrollText, count: 0 },
     { id: 'limits', label: 'Platform Limits', icon: HardDrive, count: 0 },
-  ], [deletionRequests.length, restoreRequests.length, openTickets, t]);
-
-  const filteredUsers = useMemo(() => {
-    const q = userQuery.trim().toLowerCase();
-    const list = users.filter((u) => {
-      if (userRole && u.role !== userRole) return false;
-      if (userStatus === 'verified' && !u.isVerified) return false;
-      if (userStatus === 'unverified' && u.isVerified) return false;
-      if (!q) return true;
-      return `${u.displayName || ''} ${u.email || ''}`.toLowerCase().includes(q);
-    });
-
-    const byName = (a, b) => (a.displayName || '').localeCompare(b.displayName || '');
-    return [...list].sort((a, b) => {
-      if (userSort === 'name-desc') return byName(b, a);
-      if (userSort === 'newest') return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-      if (userSort === 'oldest') return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
-      if (userSort === 'role') {
-        const delta = (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9);
-        return delta !== 0 ? delta : byName(a, b);
-      }
-      return byName(a, b);
-    });
-  }, [users, userQuery, userRole, userStatus, userSort]);
-
-  const usersTotalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
-  const pagedUsers = filteredUsers.slice((usersPage - 1) * USERS_PER_PAGE, usersPage * USERS_PER_PAGE);
+  ], [liveSignups, deletionRequests.length, restoreRequests.length, openTickets, t]);
 
   const visibleTickets = useMemo(
     () => (ticketStatus ? tickets.filter((tk) => tk.status === ticketStatus) : tickets),
     [tickets, ticketStatus],
   );
 
+  // These come from the response's `stats`, which the server computes over the
+  // whole collection — users.length is one page of twelve and would read as a
+  // shrinking membership every time the admin typed in the search box.
   const stats = [
-    { id: 'members', icon: Users, value: users.length, label: 'Members', tone: 'var(--primary)', tab: 'users' },
-    { id: 'verified', icon: ShieldCheck, value: verifiedUsers, label: 'Verified', tone: 'var(--success)', tab: 'users', onPick: () => setUserStatus('verified') },
+    { id: 'members', icon: Users, value: userStats.total, label: 'Members', tone: 'var(--primary)', tab: 'users' },
+    { id: 'verified', icon: ShieldCheck, value: userStats.verified, label: 'Verified', tone: 'var(--success)', tab: 'users', onPick: () => setUserFilter(setUserStatus)('verified') },
     { id: 'approvals', icon: ShieldAlert, value: pendingApprovals, label: 'Pending Approvals', tone: 'var(--warning)', tab: 'deletion-requests' },
-    { id: 'requests', icon: MessageSquare, value: openTickets, label: 'Open Requests', tone: '#8b5cf6', tab: 'tickets' },
+    { id: 'requests', icon: MessageSquare, value: openTickets, label: 'Open Requests', tone: 'var(--tone-violet)', tab: 'tickets' },
     { id: 'emails', icon: Mail, value: emailsLoggedAll, label: 'Emails Logged', tone: 'var(--info)', tab: 'emails' },
   ];
 
   /* ── Users CSV export ───────────────────────────────────────────────── */
 
-  const exportUsersCsv = () => {
-    // A leading =, +, - or @ makes a spreadsheet treat the cell as a formula.
-    const safe = (value) => {
-      const str = String(value ?? '');
-      const escaped = /^[=+\-@]/.test(str) ? `'${str}` : str;
-      return `"${escaped.replace(/"/g, '""')}"`;
-    };
-    const header = ['Name', 'Email', 'Role', 'Verified', 'Dues reminders', 'Rename requested', 'Joined'];
-    const rows = filteredUsers.map((u) => [
-      u.displayName, u.email, u.role,
-      u.isVerified ? 'Yes' : 'No',
-      u.subscribedToDuesReminders ? 'Yes' : 'No',
-      u.nameChangeRequested ? 'Yes' : 'No',
-      u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '',
-    ]);
-    const csv = [header, ...rows].map((r) => r.map(safe).join(',')).join('\r\n');
-    // BOM so Excel opens the UTF-8 names correctly.
-    const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `dfcci-members-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  // "Export CSV" has to mean everything matching the current filters, not the
+  // twelve rows on screen, so it walks the same endpoint page by page first.
+  const exportUsersCsv = async () => {
+    setExporting(true);
+    try {
+      const all = [];
+      let page = 1;
+      let totalPages = 1;
+      while (page <= totalPages && page <= CSV_MAX_PAGES) {
+        const res = await api.get('/users', {
+          params: {
+            page, limit: CSV_PAGE_SIZE, search: userQuery,
+            role: userRole, status: userStatus, sort: userSort,
+          },
+        });
+        all.push(...(res.data.users || []));
+        totalPages = res.data.totalPages || 1;
+        page += 1;
+      }
+
+      // A leading =, +, - or @ makes a spreadsheet treat the cell as a formula.
+      const safe = (value) => {
+        const str = String(value ?? '');
+        const escaped = /^[=+\-@]/.test(str) ? `'${str}` : str;
+        return `"${escaped.replace(/"/g, '""')}"`;
+      };
+      const header = ['Name', 'Email', 'Role', 'Verified', 'Dues reminders', 'Rename requested', 'Joined'];
+      const rows = all.map((u) => [
+        u.displayName, u.email, u.role,
+        u.isVerified ? 'Yes' : 'No',
+        u.subscribedToDuesReminders ? 'Yes' : 'No',
+        u.nameChangeRequested ? 'Yes' : 'No',
+        u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '',
+      ]);
+      const csv = [header, ...rows].map((r) => r.map(safe).join(',')).join('\r\n');
+      // BOM so Excel opens the UTF-8 names correctly.
+      const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `dfcci-members-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showAlert('Error', err.response?.data?.message || 'Could not export the member list.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   /* ── Drawer behaviour ───────────────────────────────────────────────── */
@@ -589,45 +985,87 @@ const AdminPanel = () => {
   );
 
   const permissionsOf = (u, compact) => {
-    if (!u.isVerified) return <span className="adm-self">Awaiting verification</span>;
+    const isSelf = u._id === user._id;
     const powerHours = hoursUntil(u.customDatePowerExpires);
+    // The server 400s a resend for a verified member with no pending email change,
+    // so the button only exists where a code is actually outstanding.
+    const canResend = !u.isVerified || !!u.pendingEmail;
+    const verifying = verifyingId === u._id;
+    const sendingOtp = otpUserId === u._id;
+
     return (
       <div className="adm-pills">
         <button
           type="button"
           className="adm-pill"
-          data-tone="ok"
-          aria-pressed={!!u.subscribedToDuesReminders}
-          onClick={() => handleToggleReminders(u._id)}
-          title={u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled')}
+          data-tone={u.isVerified ? 'danger' : 'ok'}
+          disabled={isSelf || verifying}
+          onClick={() => handleToggleVerify(u)}
+          title={isSelf
+            ? 'You cannot change your own verification'
+            : (u.isVerified ? `Remove verification from ${u.displayName}` : `Verify ${u.displayName}`)}
         >
-          {u.subscribedToDuesReminders ? <Bell size={12} /> : <BellOff size={12} />}
-          {compact ? 'Dues' : (u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled'))}
+          {verifying
+            ? <RefreshCw size={12} className="adm-spin" />
+            : (u.isVerified ? <ShieldAlert size={12} /> : <ShieldCheck size={12} />)}
+          {u.isVerified ? 'Unverify' : 'Verify'}
         </button>
 
-        <button
-          type="button"
-          className="adm-pill"
-          data-tone="warn"
-          aria-pressed={!!u.nameChangeRequested}
-          onClick={() => handleRequestNameChange(u._id)}
-          title={u.nameChangeRequested ? 'A rename is already pending' : 'Ask this member to update their name'}
-        >
-          <UserCog size={12} />
-          {u.nameChangeRequested ? 'Rename pending' : 'Rename'}
-        </button>
+        {canResend && (
+          <button
+            type="button"
+            className="adm-pill"
+            data-tone="info"
+            disabled={sendingOtp}
+            onClick={() => handleResendOtp(u)}
+            title={`Email a fresh verification code to ${u.pendingEmail || u.email}`}
+          >
+            {sendingOtp ? <RefreshCw size={12} className="adm-spin" /> : <KeyRound size={12} />}
+            {sendingOtp ? 'Sending' : 'Resend OTP'}
+          </button>
+        )}
 
-        <button
-          type="button"
-          className="adm-pill"
-          data-tone="violet"
-          aria-pressed={powerHours > 0}
-          onClick={() => handleDatePower(u)}
-          title="Let this member backdate entries for a limited window"
-        >
-          <Zap size={12} />
-          {powerHours > 0 ? `Date power ${powerHours}h` : 'Date power'}
-        </button>
+        {!u.isVerified && <span className="adm-self">Awaiting verification</span>}
+
+        {u.isVerified && (
+          <>
+            <button
+              type="button"
+              className="adm-pill"
+              data-tone="ok"
+              aria-pressed={!!u.subscribedToDuesReminders}
+              onClick={() => handleToggleReminders(u._id)}
+              title={u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled')}
+            >
+              {u.subscribedToDuesReminders ? <Bell size={12} /> : <BellOff size={12} />}
+              {compact ? 'Dues' : (u.subscribedToDuesReminders ? t('reminders_enabled') : t('reminders_disabled'))}
+            </button>
+
+            <button
+              type="button"
+              className="adm-pill"
+              data-tone="warn"
+              aria-pressed={!!u.nameChangeRequested}
+              onClick={() => handleRequestNameChange(u._id)}
+              title={u.nameChangeRequested ? 'A rename is already pending' : 'Ask this member to update their name'}
+            >
+              <UserCog size={12} />
+              {u.nameChangeRequested ? 'Rename pending' : 'Rename'}
+            </button>
+
+            <button
+              type="button"
+              className="adm-pill"
+              data-tone="violet"
+              aria-pressed={powerHours > 0}
+              onClick={() => handleDatePower(u)}
+              title="Let this member backdate entries for a limited window"
+            >
+              <Zap size={12} />
+              {powerHours > 0 ? `Date power ${powerHours}h` : 'Date power'}
+            </button>
+          </>
+        )}
       </div>
     );
   };
@@ -648,157 +1086,327 @@ const AdminPanel = () => {
 
   /* ── Tab: members ───────────────────────────────────────────────────── */
 
-  const renderUsers = () => (
-    <>
-      <div className="adm-toolbar">
-        <div className="adm-search">
-          <Search size={15} className="adm-search__icon" aria-hidden="true" />
-          <input
-            className="adm-field"
-            type="search"
-            value={userQuery}
-            onChange={(e) => setUserFilter(setUserQuery)(e.target.value)}
-            placeholder="Search name or email…"
-            aria-label="Search members"
-          />
-          {userQuery && (
-            <button type="button" className="adm-search__clear" onClick={() => setUserFilter(setUserQuery)('')} aria-label="Clear search">
-              <X size={14} />
-            </button>
+  const renderUsers = () => {
+    const selected = selectedIds.size;
+    const bulkOff = bulkBusy || selected === 0;
+
+    // No checkbox on the current admin's row: the server refuses to bulk-target the
+    // caller, so offering one would be a lie. The spacer holds the column open.
+    const checkboxOf = (u) => (u._id === user._id
+      ? <span className="adm-check-gap" aria-hidden="true" />
+      : (
+        <input
+          type="checkbox"
+          className="adm-check"
+          checked={selectedIds.has(u._id)}
+          onChange={() => toggleOne(u._id)}
+          aria-label={`Select ${u.displayName}`}
+        />
+      ));
+
+    return (
+      <>
+        <div className="adm-toolbar">
+          <div className="adm-search">
+            <Search size={15} className="adm-search__icon" aria-hidden="true" />
+            <input
+              className="adm-field"
+              type="search"
+              value={userQuery}
+              onChange={(e) => setUserFilter(setUserQuery)(e.target.value)}
+              placeholder="Search name or email…"
+              aria-label="Search members"
+            />
+            {userQuery && (
+              <button type="button" className="adm-search__clear" onClick={() => setUserFilter(setUserQuery)('')} aria-label="Clear search">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+
+          <select className="adm-field adm-field--auto" value={userRole} onChange={(e) => setUserFilter(setUserRole)(e.target.value)} aria-label="Filter by role">
+            <option value="">All roles</option>
+            <option value="ADMIN">{t('role_admin')}</option>
+            <option value="COUNSELOR">{t('role_counselor')}</option>
+            <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
+            <option value="MEMBER">{t('role_member')}</option>
+          </select>
+
+          <select className="adm-field adm-field--auto" value={userStatus} onChange={(e) => setUserFilter(setUserStatus)(e.target.value)} aria-label="Filter by verification">
+            <option value="">Any status</option>
+            <option value="verified">Verified</option>
+            <option value="unverified">Unverified</option>
+          </select>
+
+          <select className="adm-field adm-field--auto" value={userSort} onChange={(e) => setUserFilter(setUserSort)(e.target.value)} aria-label="Sort members">
+            <option value="name">Name A–Z</option>
+            <option value="name-desc">Name Z–A</option>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="role">By role</option>
+          </select>
+
+          {/* With rows ticked the meta area gives way to the bulk bar: the count and
+              the CSV button describe the filter, which is not what is being acted on. */}
+          {selected > 0 ? (
+            <div className="adm-bulk" role="group" aria-label="Actions for the selected members">
+              <span className="adm-bulk__count">
+                {bulkBusy && <RefreshCw size={12} className="adm-spin" aria-hidden="true" />}
+                {selected} selected
+              </span>
+
+              <select
+                className="adm-field adm-field--auto"
+                value=""
+                disabled={bulkOff}
+                onChange={(e) => { if (e.target.value) handleBulkRole(e.target.value); }}
+                aria-label="Set the role of every selected member"
+              >
+                <option value="">Set role…</option>
+                {BULK_ROLES.map((role) => (
+                  <option key={role} value={role}>{t(`role_${role.toLowerCase()}`)}</option>
+                ))}
+              </select>
+
+              <button type="button" className="adm-ghost-btn" disabled={bulkOff} onClick={() => handleBulkReminders(true)}>
+                <Bell size={13} /> Reminders on
+              </button>
+              <button type="button" className="adm-ghost-btn" disabled={bulkOff} onClick={() => handleBulkReminders(false)}>
+                <BellOff size={13} /> Reminders off
+              </button>
+              <button type="button" className="adm-ghost-btn" disabled={bulkOff} onClick={() => handleBulkVerify(true)}>
+                <ShieldCheck size={13} /> Verify
+              </button>
+              <button type="button" className="adm-ghost-btn" disabled={bulkOff} onClick={() => handleBulkVerify(false)}>
+                <ShieldAlert size={13} /> Unverify
+              </button>
+              <button type="button" className="adm-ghost-btn adm-ghost-btn--danger" disabled={bulkOff} onClick={handleBulkDelete}>
+                <Trash2 size={13} /> Delete
+              </button>
+
+              <span className="adm-toolbar__spacer" />
+
+              <button type="button" className="adm-ghost-btn" disabled={bulkBusy} onClick={clearSelection}>
+                <X size={13} /> Clear
+              </button>
+            </div>
+          ) : (
+            <>
+              <span className="adm-toolbar__meta">
+                {usersLoading
+                  ? 'Loading…'
+                  : usersTotalCount === userStats.total
+                    ? memberCount(userStats.total)
+                    : `${usersTotalCount} of ${userStats.total}`}
+              </span>
+
+              <button type="button" className="adm-ghost-btn" onClick={exportUsersCsv} disabled={exporting || !usersTotalCount}>
+                {exporting
+                  ? <RefreshCw size={13} className="adm-spin" aria-hidden="true" />
+                  : <Download size={13} aria-hidden="true" />}
+                {exporting ? 'Exporting' : 'CSV'}
+              </button>
+            </>
           )}
         </div>
 
-        <select className="adm-field adm-field--auto" value={userRole} onChange={(e) => setUserFilter(setUserRole)(e.target.value)} aria-label="Filter by role">
-          <option value="">All roles</option>
-          <option value="ADMIN">{t('role_admin')}</option>
-          <option value="COUNSELOR">{t('role_counselor')}</option>
-          <option value="YOUTH_TREASURER">{t('role_youth_treasurer')}</option>
-          <option value="MEMBER">{t('role_member')}</option>
-        </select>
-
-        <select className="adm-field adm-field--auto" value={userStatus} onChange={(e) => setUserFilter(setUserStatus)(e.target.value)} aria-label="Filter by verification">
-          <option value="">Any status</option>
-          <option value="verified">Verified</option>
-          <option value="unverified">Unverified</option>
-        </select>
-
-        <select className="adm-field adm-field--auto" value={userSort} onChange={(e) => setUserFilter(setUserSort)(e.target.value)} aria-label="Sort members">
-          <option value="name">Name A–Z</option>
-          <option value="name-desc">Name Z–A</option>
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="role">By role</option>
-        </select>
-
-        <span className="adm-toolbar__meta">
-          {filteredUsers.length === users.length
-            ? `${users.length} members`
-            : `${filteredUsers.length} of ${users.length}`}
-        </span>
-
-        <button type="button" className="adm-ghost-btn" onClick={exportUsersCsv} disabled={!filteredUsers.length}>
-          <Download size={13} /> CSV
-        </button>
-      </div>
-
-      {filteredUsers.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="No members match"
-          text="Nothing matches the current search and filters. Clear them to see the full roster."
-        />
-      ) : (
-        <>
-          {/* Desktop table */}
-          <div className="adm-table-wrap adm-desk">
-            <div className="adm-table-scroll">
-              <table className="adm-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Member</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">Role</th>
-                    <th scope="col">Permissions</th>
-                    <th scope="col">Joined</th>
-                    <th scope="col" className="adm-td-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedUsers.map((u) => (
-                    <tr key={u._id}>
-                      <td>{identityOf(u, 38)}</td>
-                      <td>{verifyChipOf(u)}</td>
-                      <td>{roleChipOf(u)}</td>
-                      <td>{permissionsOf(u)}</td>
-                      <td className="adm-td-dim">{shortDate(u.createdAt)}</td>
-                      <td className="adm-td-right">
-                        {u._id === user._id ? (
-                          <span className="adm-self">Current session</span>
-                        ) : (
-                          <div className="adm-actions">
-                            {roleSelectOf(u)}
-                            <button
-                              type="button"
-                              className="adm-icon-btn"
-                              data-tone="danger"
-                              onClick={() => handleDeleteUser(u)}
-                              aria-label={`Delete ${u.displayName}`}
-                              title={`Delete ${u.displayName}`}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        )}
-                      </td>
+        {users.length === 0 ? (
+          usersLoading ? <Skeletons count={6} /> : (
+            <EmptyState
+              icon={Users}
+              title="No members match"
+              text="Nothing matches the current search and filters. Clear them to see the full roster."
+            />
+          )
+        ) : (
+          // Rows are held at reduced opacity while the next page loads. Swapping in
+          // skeletons would collapse the table to another height and bounce the page.
+          <div className={usersLoading ? 'adm-stale' : undefined} aria-busy={usersLoading || undefined}>
+            {/* Desktop table */}
+            <div className="adm-table-wrap adm-desk">
+              <div className="adm-table-scroll">
+                <table className="adm-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" className="adm-td-check">
+                        <input
+                          ref={selectAllRef}
+                          type="checkbox"
+                          className="adm-check"
+                          checked={allSelected}
+                          disabled={!selectableIds.length}
+                          onChange={toggleSelectPage}
+                          aria-label="Select every member on this page"
+                        />
+                      </th>
+                      <th scope="col">Member</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Role</th>
+                      <th scope="col">Permissions</th>
+                      <th scope="col">Joined</th>
+                      <th scope="col" className="adm-td-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u._id}>
+                        <td className="adm-td-check">{checkboxOf(u)}</td>
+                        <td>{identityOf(u, 38)}</td>
+                        <td>{verifyChipOf(u)}</td>
+                        <td>{roleChipOf(u)}</td>
+                        <td>{permissionsOf(u)}</td>
+                        <td className="adm-td-dim">{shortDate(u.createdAt)}</td>
+                        <td className="adm-td-right">
+                          {u._id === user._id ? (
+                            <span className="adm-self">Current session</span>
+                          ) : (
+                            <div className="adm-actions">
+                              {roleSelectOf(u)}
+                              <button
+                                type="button"
+                                className="adm-icon-btn"
+                                data-tone="danger"
+                                onClick={() => handleDeleteUser(u)}
+                                aria-label={`Delete ${u.displayName}`}
+                                title={`Delete ${u.displayName}`}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="adm-cards adm-cards--single adm-mob">
+              {users.map((u) => (
+                <div key={u._id} className="adm-card">
+                  <div className="adm-card__head">
+                    {checkboxOf(u)}
+                    {identityOf(u, 34)}
+                    {roleChipOf(u)}
+                  </div>
+                  <div className="adm-rule" />
+                  <div className="adm-card__head">
+                    {verifyChipOf(u)}
+                    <span className="adm-card__stamp">Joined {shortDate(u.createdAt)}</span>
+                  </div>
+                  {permissionsOf(u, true)}
+                  {u._id !== user._id && (
+                    <div className="adm-card__foot">
+                      {roleSelectOf(u)}
+                      <button
+                        type="button"
+                        className="adm-icon-btn"
+                        data-tone="danger"
+                        onClick={() => handleDeleteUser(u)}
+                        aria-label={`Delete ${u.displayName}`}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
+        )}
 
-          {/* Mobile cards */}
-          <div className="adm-cards adm-cards--single adm-mob">
-            {pagedUsers.map((u) => (
-              <div key={u._id} className="adm-card">
+        <Pager
+          page={usersPage}
+          totalPages={usersTotalPages}
+          onChange={goUsersPage}
+          label={{ previous: t('previous'), next: t('next'), of: t('page_of')(usersPage, usersTotalPages) }}
+        />
+      </>
+    );
+  };
+
+  /* ── Tab: pending signups ───────────────────────────────────────────── */
+
+  const renderSignups = () => {
+    if (signupsLoading && !signups.length) return <Skeletons count={3} />;
+
+    if (!signups.length) {
+      return (
+        <EmptyState
+          icon={UserPlus}
+          title="Nobody is mid-signup"
+          text="A row appears here only while someone sits between the registration form and the code emailed to them. Unfinished signups self-destruct 15 minutes after they start, so an empty list is the normal state."
+        />
+      );
+    }
+
+    return (
+      <>
+        <div className="adm-toolbar">
+          <span className="adm-toolbar__meta">
+            {liveSignups} awaiting a code · {signups.length} in the queue
+          </span>
+          <span className="adm-toolbar__spacer" />
+          <button type="button" className="adm-ghost-btn" onClick={fetchSignups} disabled={signupsLoading}>
+            <RefreshCw size={13} className={signupsLoading ? 'adm-spin' : undefined} /> Refresh
+          </button>
+        </div>
+
+        <div className={signupsLoading ? 'adm-cards adm-stale' : 'adm-cards'}>
+          {signups.map((signup) => {
+            const minutes = minutesUntil(signup.otpExpires);
+            const tone = signup.expired ? 'danger' : 'warn';
+            return (
+              <div key={signup._id} className="adm-card" data-tone={tone}>
                 <div className="adm-card__head">
-                  {identityOf(u, 34)}
-                  {roleChipOf(u)}
-                </div>
-                <div className="adm-rule" />
-                <div className="adm-card__head">
-                  {verifyChipOf(u)}
-                  <span className="adm-card__stamp">Joined {shortDate(u.createdAt)}</span>
-                </div>
-                {permissionsOf(u, true)}
-                {u._id !== user._id && (
-                  <div className="adm-card__foot">
-                    {roleSelectOf(u)}
-                    <button
-                      type="button"
-                      className="adm-icon-btn"
-                      data-tone="danger"
-                      onClick={() => handleDeleteUser(u)}
-                      aria-label={`Delete ${u.displayName}`}
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                  <div className="adm-ident__text">
+                    <span className="adm-ident__name">{signup.displayName || 'Unnamed'}</span>
+                    <span className="adm-ident__mail">{signup.email}</span>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
+                  <span className="adm-chip" data-tone={tone}>
+                    {signup.expired ? <AlertTriangle size={11} /> : <Clock size={11} />}
+                    {signup.expired ? 'Code expired' : `${minutes} min left`}
+                  </span>
+                </div>
 
-          <Pager
-            page={usersPage}
-            totalPages={usersTotalPages}
-            onChange={setUsersPage}
-            label={{ previous: t('previous'), next: t('next'), of: t('page_of')(usersPage, usersTotalPages) }}
-          />
-        </>
-      )}
-    </>
-  );
+                <div className="adm-rule" />
+
+                <div className="adm-card__head">
+                  <span className="adm-card__stamp">Started {sinceLabel(signup.createdAt)}</span>
+                  <span className="adm-card__stamp">{stamp(signup.createdAt)}</span>
+                </div>
+
+                <div className="adm-card__foot">
+                  <button
+                    type="button"
+                    className="adm-ghost-btn"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    onClick={() => handleResendSignup(signup)}
+                    disabled={signupBusyId === signup._id}
+                  >
+                    <RefreshCw size={13} className={signupBusyId === signup._id ? 'adm-spin' : undefined} />
+                    {signupBusyId === signup._id ? 'Sending' : 'Resend code'}
+                  </button>
+                  <button
+                    type="button"
+                    className="adm-icon-btn"
+                    data-tone="danger"
+                    onClick={() => handleDeleteSignup(signup)}
+                    aria-label={`Delete the signup for ${signup.email}`}
+                    title={`Delete the signup for ${signup.email}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+  };
 
   /* ── Tab: thread approvals ──────────────────────────────────────────── */
 
@@ -960,7 +1568,6 @@ const AdminPanel = () => {
               <div className="adm-card__foot">
                 <select
                   className="adm-field"
-                  style={{ flex: 1 }}
                   value={ticket.status}
                   onChange={(e) => handleUpdateTicketStatus(ticket._id, e.target.value)}
                   aria-label={`Status for ${ticket.title}`}
@@ -1125,6 +1732,216 @@ const AdminPanel = () => {
     </>
   );
 
+  /* ── Tab: admin audit log ───────────────────────────────────────────── */
+
+  // before/after are arbitrary JSON blobs. They go behind an expander rather than
+  // into the table, which is the difference between a readable feed and a dump.
+  const auditDataOf = (entry) => (
+    <div className="adm-diff">
+      {entry.before && (
+        <div className="adm-diff__side">
+          <span className="adm-diff__label">Before</span>
+          <pre className="adm-pre">{JSON.stringify(entry.before, null, 2)}</pre>
+        </div>
+      )}
+      {entry.after && (
+        <div className="adm-diff__side">
+          <span className="adm-diff__label">After</span>
+          <pre className="adm-pre">{JSON.stringify(entry.after, null, 2)}</pre>
+        </div>
+      )}
+      {entry.ip && <span className="adm-card__stamp">Recorded from {entry.ip}</span>}
+    </div>
+  );
+
+  const auditToggleOf = (entry, idPrefix, openLabel) => {
+    const open = auditOpen === entry._id;
+    return (
+      <button
+        type="button"
+        className="adm-expand"
+        aria-expanded={open}
+        aria-controls={`${idPrefix}${entry._id}`}
+        onClick={() => setAuditOpen(open ? null : entry._id)}
+      >
+        <ChevronDown
+          size={13}
+          className={open ? 'adm-expand__caret adm-expand__caret--open' : 'adm-expand__caret'}
+          aria-hidden="true"
+        />
+        {open ? 'Hide data' : openLabel}
+      </button>
+    );
+  };
+
+  const renderAudit = () => (
+    <>
+      <div className="adm-toolbar">
+        <div className="adm-search">
+          <Search size={15} className="adm-search__icon" aria-hidden="true" />
+          <input
+            className="adm-field"
+            type="search"
+            value={auditSearch}
+            onChange={(e) => { setAuditSearch(e.target.value); setAuditPage(1); }}
+            placeholder="Search summary, actor or target…"
+            aria-label="Search the audit log"
+          />
+          {auditSearch && (
+            <button
+              type="button"
+              className="adm-search__clear"
+              onClick={() => { setAuditSearch(''); setAuditPage(1); }}
+              aria-label="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Built from the response's own `actions`, never a hard-coded list — a
+            filter this page invented could only ever return an empty page. */}
+        <select
+          className="adm-field adm-field--auto"
+          value={auditAction}
+          onChange={(e) => { setAuditAction(e.target.value); setAuditPage(1); }}
+          aria-label="Filter by action"
+        >
+          <option value="">All actions</option>
+          {auditActions.map((action) => (
+            <option key={action} value={action}>{auditLabel(action)}</option>
+          ))}
+        </select>
+
+        <div className="adm-dates">
+          <label className="adm-dates__field">
+            <span className="adm-dates__label">From</span>
+            <input
+              type="date"
+              className="adm-field"
+              value={auditFrom}
+              max={auditTo || undefined}
+              onChange={(e) => { setAuditFrom(e.target.value); setAuditPage(1); }}
+            />
+          </label>
+          <label className="adm-dates__field">
+            <span className="adm-dates__label">To</span>
+            <input
+              type="date"
+              className="adm-field"
+              value={auditTo}
+              min={auditFrom || undefined}
+              onChange={(e) => { setAuditTo(e.target.value); setAuditPage(1); }}
+            />
+          </label>
+        </div>
+
+        <span className="adm-toolbar__meta">
+          {auditLoading ? 'Loading…' : `${auditTotalCount} entries`}
+        </span>
+      </div>
+
+      {auditEntries.length === 0 ? (
+        auditLoading ? <Skeletons count={6} /> : (
+          <EmptyState
+            icon={ScrollText}
+            title="No admin actions recorded yet."
+            text="Every role change, verification, deletion and approval an administrator makes is written here and kept for a year."
+          />
+        )
+      ) : (
+        <div className={auditLoading ? 'adm-stale' : undefined} aria-busy={auditLoading || undefined}>
+          <div className="adm-table-wrap adm-desk">
+            <div className="adm-table-scroll">
+              <table className="adm-table">
+                <thead>
+                  <tr>
+                    <th scope="col">When</th>
+                    <th scope="col">Actor</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">Target</th>
+                    <th scope="col">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {auditEntries.map((entry) => {
+                    const hasData = !!(entry.before || entry.after);
+                    const open = auditOpen === entry._id;
+                    return (
+                      <Fragment key={entry._id}>
+                        <tr>
+                          <td className="adm-td-dim">{stamp(entry.createdAt)}</td>
+                          <td>
+                            <div className="adm-ident__text">
+                              <span className="adm-ident__name">{entry.actorName || 'Unknown'}</span>
+                              <span className="adm-ident__mail">{entry.actorEmail || '—'}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className="adm-chip" data-tone={auditTone(entry.action)}>
+                              {auditLabel(entry.action)}
+                            </span>
+                          </td>
+                          <td className="adm-td-dim">{entry.targetLabel || '—'}</td>
+                          <td>
+                            <div className="adm-audit__cell">
+                              <span className="adm-audit__summary">{entry.summary}</span>
+                              {hasData && auditToggleOf(entry, 'adm-audit-', 'Data')}
+                            </div>
+                          </td>
+                        </tr>
+                        {hasData && open && (
+                          <tr id={`adm-audit-${entry._id}`}>
+                            <td colSpan={5}>{auditDataOf(entry)}</td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="adm-cards adm-cards--single adm-mob">
+            {auditEntries.map((entry) => {
+              const hasData = !!(entry.before || entry.after);
+              const open = auditOpen === entry._id;
+              return (
+                <div key={entry._id} className="adm-card">
+                  <div className="adm-card__head">
+                    <span className="adm-chip" data-tone={auditTone(entry.action)}>
+                      {auditLabel(entry.action)}
+                    </span>
+                    <span className="adm-card__stamp">{stamp(entry.createdAt)}</span>
+                  </div>
+                  <p className="adm-card__body">{entry.summary}</p>
+                  <div className="adm-card__head">
+                    <span className="adm-ident__mail">{entry.actorName || 'Unknown'}</span>
+                    <span className="adm-card__stamp">{entry.targetLabel || '—'}</span>
+                  </div>
+                  {hasData && (
+                    <>
+                      {auditToggleOf(entry, 'adm-audit-m-', 'Show data')}
+                      {open && <div id={`adm-audit-m-${entry._id}`}>{auditDataOf(entry)}</div>}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <Pager
+        page={auditPage}
+        totalPages={auditTotalPages}
+        onChange={setAuditPage}
+        label={{ previous: t('previous'), next: t('next'), of: t('page_of')(auditPage, auditTotalPages) }}
+      />
+    </>
+  );
+
   /* ── Tab: platform limits ───────────────────────────────────────────── */
 
   const renderLimits = () => {
@@ -1194,7 +2011,7 @@ const AdminPanel = () => {
         meta: cloudinary?.credits ? `${(cloudinary.credits.usedPercent || 0).toFixed(1)}% credit usage` : 'Free plan (25 credits)',
       },
       {
-        key: 'mail', icon: Mail, tone: '#8b5cf6', label: 'Daily emails',
+        key: 'mail', icon: Mail, tone: 'var(--tone-violet)', label: 'Daily emails',
         value: `${emailUsage.sentLast24h} / ${emailLimit}`, meta: `${emailPercent.toFixed(1)}% of the 24h cap`,
       },
     ];
@@ -1223,6 +2040,14 @@ const AdminPanel = () => {
             </div>
           ))}
         </div>
+
+        {/* Written by components/UsageTrendChart.jsx against this exact prop set. */}
+        <UsageTrendChart
+          snapshots={history}
+          loading={historyLoading}
+          days={historyDays}
+          onDaysChange={setHistoryDays}
+        />
 
         <div className="adm-limit-grid">
           {/* MongoDB */}
@@ -1383,11 +2208,13 @@ const AdminPanel = () => {
 
   const panels = {
     'users': renderUsers,
+    'signups': renderSignups,
     'deletion-requests': () => renderApprovals(deletionRequests, 'deletion'),
     'restore-requests': () => renderApprovals(restoreRequests, 'restore'),
     'recently-deleted': renderArchive,
     'tickets': renderTickets,
     'emails': renderEmails,
+    'audit': renderAudit,
     'limits': renderLimits,
   };
 

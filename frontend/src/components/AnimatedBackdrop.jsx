@@ -1,31 +1,54 @@
 import React, { useEffect, useRef } from 'react';
 
 /**
- * The animated page backdrop: drifting colour orbs plus a light that trails
- * the cursor. Mounted once, at the top of App — it is fixed to the viewport
- * and sits behind every route.
+ * The animated page backdrop: drifting colour orbs, plus a light that trails
+ * the cursor on desktop. Mounted once at the top of App — it is fixed to the
+ * viewport and sits behind every route.
  *
- * The orbs are pure CSS (styles/backdrop.css). Only the cursor light needs JS,
- * and it does the minimum: no state, no re-renders, one transform written per
- * animation frame straight onto the node.
+ * The orbs are pure CSS (styles/backdrop.css), including the scroll-driven
+ * parallax on mobile. JS only drives the two things a timeline cannot: the
+ * cursor light, and pausing while the page is hidden.
+ *
+ * Touch devices deliberately get NO pointer-driven light. A cursor works as
+ * ambient light because it is always on screen; a finger is not, so the same
+ * effect becomes an artifact that flares under a thumb and lingers as it
+ * fades. Phones get the orbs and the scroll parallax, which are continuous.
  */
 const AnimatedBackdrop = () => {
+  const rootRef = useRef(null);
   const glowRef = useRef(null);
 
   useEffect(() => {
+    const root = rootRef.current;
     const glow = glowRef.current;
-    if (!glow) return undefined;
+    if (!root || !glow) return undefined;
 
-    // A trailing light makes no sense without a pointer, and it is exactly the
-    // kind of ambient motion "reduce motion" is asking us to drop.
-    let wanted = true;
-    try {
-      wanted = window.matchMedia('(pointer: fine)').matches
-        && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    } catch {
-      wanted = false; // No matchMedia — assume the cheaper path
+    const query = (q) => {
+      try {
+        return window.matchMedia(q).matches;
+      } catch {
+        return false;
+      }
+    };
+
+    // A fixed, promoted, infinitely animating layer will happily keep the
+    // compositor awake behind another tab. Park it while hidden. This applies
+    // on every device, so it is wired up before the pointer check bails out.
+    const onVisibility = () => {
+      root.classList.toggle('is-idle', document.visibilityState === 'hidden');
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    const teardownVisibility = () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+
+    // Ambient motion that chases the user is exactly what "reduce motion" is
+    // asking us to drop, and a coarse primary pointer means there is no cursor
+    // to trail in the first place. Either way, no listeners get attached.
+    if (query('(prefers-reduced-motion: reduce)') || query('(pointer: coarse)')) {
+      return teardownVisibility;
     }
-    if (!wanted) return undefined;
 
     let targetX = 0;
     let targetY = 0;
@@ -41,8 +64,8 @@ const AnimatedBackdrop = () => {
       y += (targetY - y) * 0.08;
       glow.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
 
-      // Stop scheduling once it has effectively caught up; the next pointer
-      // move restarts the loop. Idle tabs cost nothing.
+      // Stop scheduling once it has caught up; the next move restarts the
+      // loop. An idle page costs nothing.
       if (Math.abs(targetX - x) > 0.4 || Math.abs(targetY - y) > 0.4) {
         frame = requestAnimationFrame(tick);
       } else {
@@ -50,7 +73,7 @@ const AnimatedBackdrop = () => {
       }
     };
 
-    const onMove = (event) => {
+    const onPointerMove = (event) => {
       targetX = event.clientX;
       targetY = event.clientY;
 
@@ -67,16 +90,17 @@ const AnimatedBackdrop = () => {
       if (!frame) frame = requestAnimationFrame(tick);
     };
 
-    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
 
     return () => {
-      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointermove', onPointerMove);
+      teardownVisibility();
       if (frame) cancelAnimationFrame(frame);
     };
   }, []);
 
   return (
-    <div className="bg-fx" aria-hidden="true">
+    <div className="bg-fx" aria-hidden="true" ref={rootRef}>
       <span className="bg-fx-orb bg-fx-orb-1" />
       <span className="bg-fx-orb bg-fx-orb-2" />
       <span className="bg-fx-orb bg-fx-orb-3" />

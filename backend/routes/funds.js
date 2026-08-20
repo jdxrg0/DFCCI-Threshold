@@ -6,11 +6,16 @@ const DuesPayment = require('../models/DuesPayment');
 const DesignatedFund = require('../models/DesignatedFund');
 const User = require('../models/User');
 const sendEmail = require('../utils/sendEmail');
-const { sendDuesReminders } = require('../utils/reminderScheduler');
+const { sendDuesReminders, resolveRosterMember } = require('../utils/reminderScheduler');
 const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
+const { uploadReceipt } = require('../utils/receiptUpload');
+const { cloudinary } = require('../utils/cloudinary');
+const AuditLog = require('../models/AuditLog');
+const { recordFundAudit, diffTransaction, describe } = require('../utils/fundAudit');
 
 const adminOrTreasurerAuth = [requireAuth, requireVerified, requireRole(['ADMIN', 'YOUTH_TREASURER'])];
 
+const DUES_CATEGORY = 'Weekly Dues';
 const DUES_START_DATE = new Date('2026-05-01');
 const DUES_WEEKLY_AMOUNT = 10;
 const DUES_TIMEZONE = 'Asia/Manila';
@@ -214,6 +219,51 @@ router.get('/analytics', requireAuth, requireVerified, async (req, res) => {
   }
 });
 
+// Audit feed. Readable by every verified member — the community's stated
+// position is full transparency about the money, and that has to include who
+// moved it.
+//
+// Only manual transaction edits are recorded. Weekly-dues cell entries are
+// deliberately excluded: they already render as individual amounts in the
+// ledger grid, and one audit row per member per Sunday would bury the manual
+// edits this feed exists to surface.
+router.get('/audit', requireAuth, requireVerified, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, entityId, entity } = req.query;
+    const pageNum = Math.max(1, Number(page));
+    const limitNum = Math.min(100, Math.max(1, Number(limit)));
+
+    const query = {};
+    if (entityId) {
+      // `entity` leads the compound index, so filtering on entityId alone would
+      // not use it. Default to TRANSACTION rather than leaving the prefix off.
+      query.entity = entity || 'TRANSACTION';
+      query.entityId = entityId;
+    } else if (entity) {
+      query.entity = entity;
+    }
+
+    const [entries, total] = await Promise.all([
+      AuditLog.find(query)
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      AuditLog.countDocuments(query),
+    ]);
+
+    res.json({
+      entries,
+      total,
+      page: pageNum,
+      totalPages: Math.ceil(total / limitNum) || 1,
+    });
+  } catch (error) {
+    console.error('Error fetching audit log:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Full (unpaginated) result set for the current filters, used by the export
 // button. Capped so a runaway export cannot exhaust memory.
 router.get('/export', requireAuth, requireVerified, async (req, res) => {
@@ -283,10 +333,35 @@ router.patch('/categories/rename', adminOrTreasurerAuth, async (req, res) => {
       return res.status(400).json({ message: 'oldName and newName are required.' });
     }
     const trimmed = newName.trim();
+
+    // Renaming anything TO "Weekly Dues" would stamp the ledger-owned category
+    // onto rows with no DuesPayment. Renaming it AWAY breaks the dues filter and
+    // the ledger's own lookups. Both directions are refused.
+    if (oldName === DUES_CATEGORY || trimmed === DUES_CATEGORY) {
+      return res.status(400).json({
+        message: `"${DUES_CATEGORY}" is managed by the weekly dues grid and cannot be renamed.`,
+      });
+    }
+
     const result = await Transaction.updateMany(
       { category: oldName },
       { $set: { category: trimmed } }
     );
+
+    // `category` is an audited field, so a bulk rewrite of it cannot be the one
+    // path that leaves no trace. One summary row, not one per transaction.
+    if (result.modifiedCount > 0) {
+      await recordFundAudit({
+        req,
+        action: 'UPDATE',
+        entity: 'TRANSACTION',
+        entityId: req.user._id,
+        label: `Category "${oldName}" → "${trimmed}"`,
+        changes: [{ field: 'category', from: oldName, to: trimmed }],
+        note: `Bulk rename across ${result.modifiedCount} transaction(s).`,
+      });
+    }
+
     res.json({ message: `Renamed "${oldName}" to "${trimmed}" (${result.modifiedCount} transaction(s) updated).` });
   } catch (error) {
     console.error('Error renaming category:', error);
@@ -295,8 +370,10 @@ router.patch('/categories/rename', adminOrTreasurerAuth, async (req, res) => {
 });
 
 // Create a new transaction
-router.post('/', adminOrTreasurerAuth, async (req, res) => {
+router.post('/', adminOrTreasurerAuth, uploadReceipt.single('receipt'), async (req, res) => {
   try {
+    // Multipart turns every field into a string; the coercions below already
+    // handle that, so JSON and FormData clients both work.
     const { amount, type, category, description, date, designatedFund } = req.body;
 
     if (!amount || !type || !category) {
@@ -307,6 +384,15 @@ router.post('/', adminOrTreasurerAuth, async (req, res) => {
       return res.status(400).json({ message: 'Invalid transaction type' });
     }
 
+    // "Weekly Dues" is owned by the dues ledger. A hand-made row under that
+    // category has no DuesPayment behind it, which the boot-time orphan sweep
+    // reads as garbage and deletes.
+    if (String(category).trim() === DUES_CATEGORY) {
+      return res.status(400).json({
+        message: `"${DUES_CATEGORY}" is reserved for the weekly dues grid. Record it there, or use a different category name.`,
+      });
+    }
+
     const transaction = new Transaction({
       amount: Number(amount),
       type,
@@ -314,11 +400,21 @@ router.post('/', adminOrTreasurerAuth, async (req, res) => {
       description,
       date: date || Date.now(),
       designatedFund: designatedFund || null,
+      receiptUrl: req.file ? req.file.path : '',
+      receiptCloudinaryId: req.file ? req.file.filename : '',
       createdBy: req.user._id
     });
 
     await transaction.save();
-    
+
+    await recordFundAudit({
+      req,
+      action: 'CREATE',
+      entityId: transaction._id,
+      label: describe(transaction),
+      amount: transaction.amount,
+    });
+
     // Populate createdBy before sending response
     await transaction.populate('createdBy', 'displayName');
 
@@ -330,9 +426,9 @@ router.post('/', adminOrTreasurerAuth, async (req, res) => {
 });
 
 // Update a transaction
-router.put('/:id', adminOrTreasurerAuth, async (req, res) => {
+router.put('/:id', adminOrTreasurerAuth, uploadReceipt.single('receipt'), async (req, res) => {
   try {
-    const { amount, type, category, description, date, designatedFund } = req.body;
+    const { amount, type, category, description, date, designatedFund, removeReceipt } = req.body;
 
     const transaction = await Transaction.findById(req.params.id);
 
@@ -340,18 +436,72 @@ router.put('/:id', adminOrTreasurerAuth, async (req, res) => {
       return res.status(404).json({ message: 'Transaction not found' });
     }
 
-    if (amount) transaction.amount = Number(amount);
+    // Snapshot BEFORE any assignment below. The handler mutates the loaded
+    // document in place, so a diff taken after save() compares the document to
+    // itself and is always empty.
+    const before = transaction.toObject();
+
+    // Guarded on '' rather than falsiness: over multipart an amount of 0
+    // arrives as the string "0", and silently dropping that edit would be a
+    // behaviour change from the JSON-only version of this route.
+    if (amount !== undefined && amount !== '') transaction.amount = Number(amount);
     if (type) transaction.type = type;
-    if (category) transaction.category = category;
+    if (category) {
+      if (String(category).trim() === DUES_CATEGORY && transaction.source !== 'DUES_LEDGER') {
+        return res.status(400).json({
+          message: `"${DUES_CATEGORY}" is reserved for the weekly dues grid.`,
+        });
+      }
+      transaction.category = category;
+    }
     if (description !== undefined) transaction.description = description;
     if (date) transaction.date = date;
     
-    // Allow explicitly setting to null or empty string to unset
+    // Allow explicitly setting to null or empty string to unset.
+    // Note: over multipart this key is always present, so the guard is always
+    // true — `'' || null` still unsets correctly. Do not "simplify" it away.
     if (designatedFund !== undefined) {
       transaction.designatedFund = designatedFund || null;
     }
 
+    // Replace, or clear, the receipt. Old asset goes first so a swap cannot
+    // strand the previous upload.
+    if (req.file) {
+      if (transaction.receiptCloudinaryId) {
+        try {
+          await cloudinary.uploader.destroy(transaction.receiptCloudinaryId);
+        } catch (err) {
+          console.error('Failed to remove replaced receipt:', err.message);
+        }
+      }
+      transaction.receiptUrl = req.file.path;
+      transaction.receiptCloudinaryId = req.file.filename;
+    } else if (removeReceipt === 'true' || removeReceipt === true) {
+      if (transaction.receiptCloudinaryId) {
+        try {
+          await cloudinary.uploader.destroy(transaction.receiptCloudinaryId);
+        } catch (err) {
+          console.error('Failed to remove receipt:', err.message);
+        }
+      }
+      transaction.receiptUrl = '';
+      transaction.receiptCloudinaryId = '';
+    }
+
     await transaction.save();
+
+    const changes = diffTransaction(before, transaction.toObject());
+    if (changes.length) {
+      await recordFundAudit({
+        req,
+        action: 'UPDATE',
+        entityId: transaction._id,
+        label: describe(transaction),
+        amount: transaction.amount,
+        changes,
+      });
+    }
+
     await transaction.populate('createdBy', 'displayName');
 
     res.json(transaction);
@@ -371,9 +521,20 @@ router.delete('/:id', adminOrTreasurerAuth, async (req, res) => {
     }
 
     // Cascade delete any linked DuesPayment BEFORE deleting the transaction
-    await DuesPayment.deleteMany({ transactionId: req.params.id });
+    const cascade = await DuesPayment.deleteMany({ transactionId: req.params.id });
 
     await transaction.deleteOne();
+
+    await recordFundAudit({
+      req,
+      action: 'DELETE',
+      entityId: transaction._id,
+      label: describe(transaction),
+      amount: transaction.amount,
+      note: cascade.deletedCount
+        ? `Also cleared ${cascade.deletedCount} linked weekly-dues entr${cascade.deletedCount === 1 ? 'y' : 'ies'}.`
+        : '',
+    });
 
     res.json({ message: 'Transaction removed' });
   } catch (error) {
@@ -506,6 +667,7 @@ router.post('/dues/ledger', adminOrTreasurerAuth, async (req, res) => {
       description: `Weekly dues — ${member.name} (${dDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})`,
       date: new Date(),
       designatedFund: autoFund ? autoFund._id : null,
+      source: 'DUES_LEDGER',
       createdBy: req.user._id,
     });
     await transaction.save();
@@ -617,10 +779,65 @@ router.post('/dues/members/:id/send-dues-email', adminOrTreasurerAuth, async (re
       </table>
     `;
 
-    await sendEmail(user.email, 'Your DFCCI Threshold Weekly Dues Statement', html);
-    res.json({ message: `Dues statement sent to ${user.email}` });
+    const outcome = await sendEmail(user.email, 'Your DFCCI Threshold Weekly Dues Statement', html);
+
+    if (outcome && outcome.ok === false) {
+      return res.status(502).json({
+        message: `Could not send the statement to ${user.email}. ${outcome.error || ''}`.trim(),
+      });
+    }
+
+    res.json({
+      message: outcome?.dev
+        ? `Statement prepared for ${user.email}, but email delivery is not configured on this server so nothing was actually sent.`
+        : `Dues statement sent to ${user.email}`,
+    });
   } catch (err) {
     console.error('Error sending dues email:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Who would actually receive a batch reminder right now, and why the list may
+// be empty. Without this the treasurer fires blind: subscription defaults to
+// false, so an untouched community produces zero recipients and the feature
+// looks broken rather than unsubscribed.
+router.get('/dues/reminder-preview', adminOrTreasurerAuth, async (req, res) => {
+  try {
+    const [recipients, verifiedCount] = await Promise.all([
+      User.find({ isVerified: true, subscribedToDuesReminders: true })
+        .select('displayName email')
+        .sort({ displayName: 1 })
+        .lean(),
+      User.countDocuments({ isVerified: true }),
+    ]);
+
+    // Resolve each recipient through the SAME function the mailer uses. Matching
+    // on linkedUser alone made the preview show "no roster" for people the email
+    // then greeted with a real balance, because the mailer also falls back to an
+    // exact name match.
+    const withArrears = await Promise.all(
+      recipients.map(async (u) => {
+        const member = await resolveRosterMember(u);
+        const arrears = member ? await calcMemberArrears(member._id) : null;
+        return {
+          ...u,
+          rosterName: member?.name || null,
+          matchedBy: member ? (String(member.linkedUser || '') === String(u._id) ? 'link' : 'name') : null,
+          arrears,
+        };
+      })
+    );
+
+    res.json({
+      recipients: withArrears,
+      total: withArrears.length,
+      verifiedCount,
+      unsubscribedCount: verifiedCount - withArrears.length,
+      expectedToDate: duesSundaysToDate() * DUES_WEEKLY_AMOUNT,
+    });
+  } catch (err) {
+    console.error('Error building reminder preview:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -629,8 +846,26 @@ router.post('/dues/members/:id/send-dues-email', adminOrTreasurerAuth, async (re
 router.post('/dues/send-batch-reminders', adminOrTreasurerAuth, async (req, res) => {
   try {
     const { timing = 'Manual' } = req.body;
-    await sendDuesReminders(timing);
-    res.json({ message: `Batch dues reminders triggered successfully (${timing} template).` });
+    const result = await sendDuesReminders(timing);
+
+    if (!result || result.attempted === 0) {
+      return res.json({
+        message: 'Nobody is subscribed to dues reminders, so nothing was sent.',
+        result: result || { attempted: 0, sent: 0, failed: 0 },
+      });
+    }
+
+    let message = result.failed
+      ? `Sent ${result.sent} of ${result.attempted} reminders. ${result.failed} failed.`
+      : `Sent ${result.sent} reminder${result.sent === 1 ? '' : 's'}.`;
+
+    // Without APPS_SCRIPT_URL the mailer logs a "sent" row and delivers nothing.
+    // Saying so beats a green message that quietly lied.
+    if (result.dev) {
+      message += ' NOTE: email delivery is not configured on this server, so nothing actually left the building.';
+    }
+
+    res.json({ message, result });
   } catch (err) {
     console.error('Error triggering batch reminders:', err);
     res.status(500).json({ message: 'Server error' });
@@ -745,12 +980,54 @@ router.delete('/designated/:id', adminOrTreasurerAuth, async (req, res) => {
       return res.status(404).json({ message: 'Designated fund not found' });
     }
 
+    // Transactions keep a dangling reference otherwise: they vanish from the
+    // fund's balance but never reappear in `unallocated`, so the Funds tab stops
+    // adding up to the headline balance.
+    const cleared = await Transaction.updateMany(
+      { designatedFund: fund._id },
+      { $set: { designatedFund: null } }
+    );
+
     await fund.deleteOne();
-    res.json({ message: 'Designated fund removed' });
+
+    await recordFundAudit({
+      req,
+      action: 'DELETE',
+      entity: 'DESIGNATED_FUND',
+      entityId: fund._id,
+      label: fund.name,
+      note: cleared.modifiedCount
+        ? `Returned ${cleared.modifiedCount} transaction(s) to the unallocated pot.`
+        : '',
+    });
+
+    res.json({
+      message: cleared.modifiedCount
+        ? `Fund removed. ${cleared.modifiedCount} transaction(s) are now unallocated.`
+        : 'Designated fund removed',
+    });
   } catch (error) {
     console.error('Error deleting designated fund:', error);
     res.status(500).json({ message: 'Server error' });
   }
+});
+
+// Multer rejects oversized or wrong-format uploads by throwing, which would
+// otherwise surface as an HTML 500 the frontend cannot parse. Scoped to this
+// router on purpose: an app-wide handler would change the error shape for
+// every other route in the API.
+router.use((err, req, res, next) => {
+  if (!err) return next();
+
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ message: 'That receipt is larger than 5MB. Please choose a smaller photo.' });
+  }
+  if (err.message && /file format|allowed_formats|Invalid image/i.test(err.message)) {
+    return res.status(415).json({ message: 'Receipts must be a JPG, PNG or WebP image.' });
+  }
+
+  console.error('Funds route error:', err);
+  return res.status(500).json({ message: 'Server error' });
 });
 
 module.exports = router;
