@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Calendar, Plus, Trash2, X, MessageSquare, Clock, Link as LinkIcon, Edit2, List,
   Timer, BookOpen, Key, Copy, Play, Eye, Search, Users, RotateCcw, CheckCircle2,
-  AlertTriangle, XCircle, Info, Send, Target, Zap, RefreshCw, Pause
+  AlertTriangle, XCircle, Info, Send, Target, Zap, RefreshCw, Pause, ExternalLink
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../api';
@@ -838,10 +838,29 @@ export default function AutomationDashboard() {
           const res = await api.post(`/automation/schedule/${schedule._id}/run`, { actionType: 'MAIN' });
           const { result, schedule: updated } = res.data.data;
           if (updated) setSchedules(prev => prev.map(s => (s._id === schedule._id ? updated : s)));
-          toast(
-            result.ok ? `Dispatched — ${result.detail}` : `Nothing sent: ${result.detail}`,
-            result.ok ? 'success' : 'warning'
-          );
+          
+          if (result.ok && schedule.githubFileName) {
+            const workflowUrl = `https://github.com/d0ul0s/Residential-Proxy-Method/actions/workflows/${schedule.githubFileName}`;
+            toast(
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span>Dispatched — {result.detail}</span>
+                <a 
+                  href={workflowUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  style={{ color: 'inherit', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: '4px' }}
+                >
+                  <ExternalLink size={14} /> Watch live on GitHub Actions
+                </a>
+              </div>,
+              'success'
+            );
+          } else {
+            toast(
+              result.ok ? `Dispatched — ${result.detail}` : `Nothing sent: ${result.detail}`,
+              result.ok ? 'success' : 'warning'
+            );
+          }
         } catch (error) {
           toast(error.response?.data?.msg || 'The run failed.', 'error');
         } finally {
@@ -918,6 +937,20 @@ export default function AutomationDashboard() {
       // The already-loaded runHistory stays on screen.
     }
   };
+
+  useEffect(() => {
+    if (!runsFor || !runsData[runsFor]) return;
+    const needsPolling = runsData[runsFor].runs.some(
+      run => run.ghLookupState === 'pending' || run.ghRunStatus === 'in_progress' || run.ghRunStatus === 'queued'
+    );
+    if (!needsPolling) return;
+    const interval = setInterval(() => {
+      api.get(`/automation/schedule/${runsFor}/runs`).then(res => {
+        setRunsData(prev => ({ ...prev, [runsFor]: res.data }));
+      }).catch(() => {});
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [runsFor, runsData]);
 
   const saveQueueItem = async (item) => {
     try {
@@ -1944,6 +1977,16 @@ export default function AutomationDashboard() {
                       <span className="ah-chip ah-chip--muted">{run.trigger === 'manual' ? 'Manual' : 'Cron'}</span>
                       {run.recipients > 0 && (
                         <span className="ah-chip ah-chip--muted">{run.recipients} message{run.recipients === 1 ? '' : 's'}</span>
+                      )}
+                      {!run.ghRunConclusion && run.ghLookupState === 'pending' && (
+                        <span className="ah-chip ah-chip--warning">
+                          <Clock size={11} /> Awaiting GitHub...
+                        </span>
+                      )}
+                      {!run.ghRunConclusion && (run.ghRunStatus === 'in_progress' || run.ghRunStatus === 'queued') && (
+                        <span className="ah-chip ah-chip--info">
+                          <RefreshCw size={11} className="ah-spin" /> {run.ghRunStatus === 'queued' ? 'Queued' : 'In progress'}
+                        </span>
                       )}
                       {run.ghRunConclusion && (
                         <span className={`ah-chip ${run.ghRunConclusion === 'success' ? 'ah-chip--success' : 'ah-chip--danger'}`}>
