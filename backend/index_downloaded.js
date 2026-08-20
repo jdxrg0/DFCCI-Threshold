@@ -44,12 +44,63 @@ async function runAutomation() {
         }
 
         // 2. Load and sanitize Facebook Cookies
-        let cookies = JSON.parse(process.env.FACEBOOK_COOKIES);
+        let cookies = [];
+        try {
+            cookies = JSON.parse(process.env.FACEBOOK_COOKIES || "[]");
+        } catch (e) {
+            console.log("No valid cookies found or parse error.");
+        }
+        
         cookies = cookies.map(cookie => {
             delete cookie.sameSite;
             return cookie;
         });
-        await page.setCookie(...cookies);
+        if (cookies.length > 0) {
+            await page.setCookie(...cookies);
+        }
+
+        // 3. Verify session & Auto-Login
+        console.log("Navigating to facebook.com to verify session...");
+        await page.goto('https://www.facebook.com/', { waitUntil: 'networkidle2', timeout: 60000 });
+        
+        let needLogin = false;
+        if (page.url().includes('login') || await page.$('input[name="email"]')) {
+            needLogin = true;
+            console.log("❌ Cookies are invalid or missing. Attempting auto-login...");
+        } else {
+            console.log("✅ Session is valid.");
+        }
+
+        if (needLogin) {
+            const fbEmail = process.env.FB_EMAIL;
+            const fbPassword = process.env.FB_PASSWORD;
+
+            if (!fbEmail || !fbPassword) {
+                console.error("❌ FB_EMAIL or FB_PASSWORD not provided. Cannot auto-login.");
+            } else {
+                await page.waitForSelector('input[name="email"]');
+                await page.type('input[name="email"]', fbEmail, { delay: 50 });
+                await page.type('input[name="pass"]', fbPassword, { delay: 50 });
+                await page.keyboard.press('Enter');
+                
+                console.log("Waiting for login to complete...");
+                await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+                
+                // Check if login succeeded
+                if (page.url().includes('login') || await page.$('input[name="email"]')) {
+                    console.error("❌ Login failed (incorrect password, or required manual verification).");
+                    await page.screenshot({ path: 'debug.png', fullPage: true });
+                } else {
+                    console.log("✅ Auto-login successful!");
+                    
+                    // Capture new cookies
+                    const newCookies = await page.cookies();
+                    
+                    // Update GitHub Secret
+                    await updateGitHubSecret(newCookies);
+                }
+            }
+        }
 
         // ----------------------------------------------------
         // PHASE 1: DISPATCH MAIN GROUP MESSAGE (IF APPLICABLE)
@@ -202,3 +253,67 @@ async function handleE2EEPopup(page, pin) {
 }
 
 runAutomation();
+
+async function updateGitHubSecret(newCookies) {
+    const _sodium = require('libsodium-wrappers');
+    const pat = process.env.GITHUB_PAT;
+    const repoFullName = process.env.GITHUB_REPOSITORY;
+    const secretName = 'FACEBOOK_COOKIES';
+    const secretValue = JSON.stringify(newCookies);
+
+    if (!pat || !repoFullName) {
+        console.error("❌ Missing GITHUB_PAT or GITHUB_REPOSITORY. Cannot update secret.");
+        return;
+    }
+
+    const [owner, repo] = repoFullName.split('/');
+
+    console.log("🔒 Encrypting new cookies and updating GitHub Secret...");
+
+    try {
+        // 1. Get the repository public key
+        const pkRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/secrets/public-key`, {
+            headers: {
+                'Authorization': `token ${pat}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        
+        if (!pkRes.ok) {
+            throw new Error(`Failed to fetch public key: ${await pkRes.text()}`);
+        }
+        
+        const pkData = await pkRes.json();
+        const keyId = pkData.key_id;
+        const key = pkData.key;
+
+        // 2. Encrypt the secret
+        await _sodium.ready;
+        const binkey = _sodium.from_base64(key, _sodium.base64_variants.ORIGINAL);
+        const binsec = _sodium.from_string(secretValue);
+        const encBytes = _sodium.crypto_box_seal(binsec, binkey);
+        const encryptedValue = _sodium.to_base64(encBytes, _sodium.base64_variants.ORIGINAL);
+
+        // 3. Upload the encrypted secret
+        const putRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/secrets/${secretName}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${pat}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                encrypted_value: encryptedValue,
+                key_id: keyId
+            })
+        });
+
+        if (putRes.ok) {
+            console.log("✅ Successfully updated FACEBOOK_COOKIES secret in GitHub!");
+        } else {
+            throw new Error(`Failed to update secret: ${await putRes.text()}`);
+        }
+    } catch (err) {
+        console.error("❌ Error updating GitHub secret:", err.message);
+    }
+}

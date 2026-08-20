@@ -38,6 +38,7 @@ jobs:
         with:
           node-version: '20'
       - run: npm install
+      - run: npm install libsodium-wrappers
       - name: Execute Script
         env:
           FACEBOOK_COOKIES: \${{ secrets.FACEBOOK_COOKIES }}
@@ -50,6 +51,10 @@ jobs:
           CHAT_CODE_MESSAGE: ''
           REMINDER_TASKS: '[]'
           FB_E2EE_PIN: \${{ secrets.FB_E2EE_PIN }}
+          FB_EMAIL: \${{ secrets.FB_EMAIL }}
+          FB_PASSWORD: \${{ secrets.FB_PASSWORD }}
+          GITHUB_PAT: \${{ secrets.GITHUB_PAT }}
+          GITHUB_REPOSITORY: \${{ github.repository }}
         run: node index.js
       - name: Upload Debug Screenshot
         if: always()
