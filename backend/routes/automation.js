@@ -4,7 +4,7 @@ const Schedule = require('../models/Schedule');
 const Submission = require('../models/Submission');
 const AppSetting = require('../models/AppSetting');
 const automationScheduler = require('../services/automationScheduler');
-const { floorSec, listRunsSince } = require('../services/githubRuns');
+const { enrichRunLinks } = require('../services/runLinks');
 const github = require('../services/github');
 const { WEEKLY_CODE_WORKFLOW } = require('../services/weeklyCodeWorkflow');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
@@ -324,127 +324,6 @@ router.post('/schedule/:id/duplicate', async (req, res) => {
   }
 });
 
-// A run that has not surfaced within a day never will, so stop asking for it.
-const GH_PENDING_TTL_MS = 24 * 60 * 60 * 1000;
-const GH_RUNS_CACHE_MS = 15 * 1000;
-const ghRunsCache = new Map();
-
-/* Opening the history modal twice in a row must not cost two GitHub calls. */
-const cachedRunsSince = async (workflowFile, since) => {
-  const key = `${workflowFile}|${since.toISOString()}`;
-  const hit = ghRunsCache.get(key);
-  if (hit && Date.now() - hit.at < GH_RUNS_CACHE_MS) return hit.result;
-
-  const result = await listRunsSince(workflowFile, since);
-  for (const [cached, entry] of ghRunsCache) {
-    if (Date.now() - entry.at >= GH_RUNS_CACHE_MS) ghRunsCache.delete(cached);
-  }
-  ghRunsCache.set(key, { at: Date.now(), result });
-  return result;
-};
-
-/**
- * Attach GitHub Actions run links to a schedule's history, lazily.
- *
- * A dispatch only records that it fired and when — the run it produced is not
- * visible for seconds to tens of seconds afterwards — so the matching happens
- * here, on the admin's first look, and costs at most one GitHub request.
- * Mutates the loaded document so the response carries whatever was resolved.
- */
-const enrichRunLinks = async (schedule) => {
-  const history = schedule.runHistory || [];
-  if (!schedule.githubFileName || history.length === 0) return;
-
-  const writes = [];
-  const stage = (row, fields) => {
-    Object.assign(row, fields);
-    writes.push({ row, fields });
-  };
-
-  const pending = [];
-  const refreshing = [];
-  const now = Date.now();
-
-  for (const row of history) {
-    if (row.ghRunId && row.ghRunStatus !== 'completed') { refreshing.push(row); continue; }
-    if (row.ghLookupState !== 'pending' || !row.ghDispatchedAt) continue;
-    if (now - new Date(row.ghDispatchedAt).getTime() > GH_PENDING_TTL_MS) {
-      stage(row, { ghLookupState: 'not_found' });
-      continue;
-    }
-    pending.push(row);
-  }
-
-  const needed = [...pending, ...refreshing];
-  if (needed.length > 0) {
-    const since = new Date(Math.min(...needed.map(r => new Date(r.ghDispatchedAt || r.at).getTime())));
-    const { state, runs } = await cachedRunsSince(schedule.githubFileName, since);
-
-    if (state === 'unavailable') {
-      // The token cannot read Actions. A dispatch that worked must not start
-      // looking like a failure because its link could not be fetched.
-      pending.forEach(row => stage(row, { ghLookupState: 'unavailable' }));
-    } else if (state === 'ok') {
-      const byRunId = new Map(runs.map(r => [r.id, r]));
-      for (const row of refreshing) {
-        const run = byRunId.get(row.ghRunId);
-        if (!run) continue;
-        stage(row, { ghRunStatus: run.status, ghRunConclusion: run.conclusion || '' });
-      }
-
-      // Run ids increase monotonically per repository, so demanding an id above
-      // every one already claimed makes it impossible to hand a row last week's
-      // run — every schedule reuses one workflow file for years.
-      let minRunId = history.reduce((max, r) => (r.ghRunId > max ? r.ghRunId : max), 0);
-      const oldestFirst = [...pending].sort((a, b) => new Date(a.at) - new Date(b.at));
-
-      for (const row of oldestFirst) {
-        const floor = floorSec(row.ghDispatchedAt);
-        const match = runs
-          .filter(r => new Date(r.created_at) >= floor && r.id > minRunId)
-          .sort((a, b) => a.id - b.id)[0];
-        // No match means "not visible yet", never a guess: it stays pending and
-        // resolves the next time the history is opened.
-        if (!match) continue;
-        minRunId = match.id;
-        stage(row, {
-          ghRunId: match.id,
-          ghRunUrl: match.html_url,
-          ghRunStatus: match.status,
-          ghRunConclusion: match.conclusion || '',
-          ghLookupState: 'resolved'
-        });
-      }
-    }
-  }
-
-  const addressable = writes.filter(write => write.row._id);
-  if (addressable.length === 0) return;
-
-  // Positional filters rather than a whole-array write, so a dispatch landing
-  // mid-enrichment is not clobbered.
-  const $set = {};
-  const arrayFilters = [];
-  addressable.forEach((write, i) => {
-    const alias = `r${i}`;
-    arrayFilters.push({ [`${alias}._id`]: write.row._id });
-    Object.entries(write.fields).forEach(([field, value]) => {
-      $set[`runHistory.$[${alias}].${field}`] = value;
-    });
-  });
-
-  const newest = history.reduce((a, b) => (new Date(b.at) > new Date(a.at) ? b : a));
-  const newestWrite = addressable.find(write => write.row === newest);
-  if (newestWrite) {
-    Object.entries(newestWrite.fields).forEach(([field, value]) => {
-      $set[`lastRun.${field}`] = value;
-      schedule.set(`lastRun.${field}`, value);
-    });
-  }
-
-  await Schedule.updateOne({ _id: schedule._id }, { $set }, { arrayFilters });
-};
-
 // GET /api/automation/schedule/:id/runs — newest first
 router.get('/schedule/:id/runs', async (req, res) => {
   try {
@@ -616,7 +495,14 @@ router.get('/health', async (req, res) => {
     const gh = await github.probe();
     const schedules = await Schedule.find().select('scheduleName cronTime isActive githubFileName lastRun').lean();
     const registered = automationScheduler.registeredJobIds();
+
+    // Two lists, because they demand different things of the reader. A problem
+    // means messages are not going out and someone must act now; a warning
+    // means something is misconfigured or untidy but delivery is unaffected.
+    // Reporting both as "stopping this from working" trains people to ignore
+    // the banner, which costs exactly the outage it exists to prevent.
     const problems = [...gh.problems];
+    const warnings = [];
 
     const scheduleRows = schedules.map(s => {
       const active = s.isActive !== false;
@@ -650,10 +536,11 @@ router.get('/health', async (req, res) => {
       // Enabled with no target reads as configured everywhere in the UI, but
       // the cron is never even registered — the dispatcher returns early.
       if (!weeklyCode.dispatchUrl) {
-        problems.push('Weekly code auto-dispatch is switched on but has no target chat URL, so it never runs. Set one in the weekly-code panel, or switch it off.');
-      }
-      if (gh.workflowFiles && !gh.workflowFiles.includes(WEEKLY_CODE_WORKFLOW)) {
-        problems.push(`Weekly code auto-dispatch is on, but ${WEEKLY_CODE_WORKFLOW} is not on the repo yet. It is created automatically on the next dispatch.`);
+        warnings.push('Weekly code auto-dispatch is switched on but has no target chat URL, so it never runs. Set one in the weekly-code panel, or switch it off.');
+      } else if (gh.workflowFiles && !gh.workflowFiles.includes(WEEKLY_CODE_WORKFLOW)) {
+        // Only worth saying once dispatch could actually happen. Without a URL
+        // the missing file is a consequence of the line above, not news.
+        warnings.push(`Weekly code auto-dispatch is on, but ${WEEKLY_CODE_WORKFLOW} is not on the repo yet. It is created automatically on the first dispatch.`);
       }
     }
 
@@ -664,7 +551,7 @@ router.get('/health', async (req, res) => {
     const orphanWorkflows = (gh.workflowFiles || [])
       .filter(f => /^schedule-\d+\.yml$/.test(f) && !claimed.has(f));
     if (orphanWorkflows.length > 0) {
-      problems.push(`${orphanWorkflows.length} workflow file(s) on the repo belong to no schedule: ${orphanWorkflows.join(', ')}. Safe to delete on GitHub.`);
+      warnings.push(`${orphanWorkflows.length} workflow file(s) on the repo belong to no schedule: ${orphanWorkflows.join(', ')}. Safe to delete on GitHub.`);
     }
 
     res.set('Cache-Control', 'no-store');
@@ -687,7 +574,8 @@ router.get('/health', async (req, res) => {
         : null,
       schedules: scheduleRows,
       orphanWorkflows,
-      problems
+      problems,
+      warnings
     });
   } catch (error) {
     console.error('Automation Health Error:', error.message);

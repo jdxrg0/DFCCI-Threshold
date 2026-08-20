@@ -159,7 +159,7 @@ const AffirmationDashboard = () => {
   ];
 
   return (
-    <div className="container mirror-dashboard-container" style={{ maxWidth: '800px' }}>
+    <div className="container module-shell">
       
       {/* ── BREATHTAKING MESH gradient HERO BANNER ── */}
       <div className="affirmation-hero-banner">

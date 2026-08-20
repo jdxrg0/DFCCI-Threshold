@@ -42,10 +42,32 @@ const ModuleTabs = ({
   const panelRef = useRef(null);
   const moreRef = useRef(null);
 
+  // A persisted tab id can outlive the tab itself. Devotional builds its Leader
+  // View only for ADMIN/COUNSELOR, so a member who loses that role comes back to
+  // `devo_activeTab === 'leader'`: no tab matches, nothing highlights, and the
+  // caller's own `activeTab === 'leader'` panel guard is false too, leaving an
+  // empty page. Recover to the first section and tell the caller, so its state
+  // and its localStorage stop pointing at a section that is gone. Solving it
+  // here rather than per page is the point of sharing the component.
+  const known = tabs.some((t) => t.id === activeId);
+  const firstId = tabs.length ? tabs[0].id : null;
+  const activeResolved = known ? activeId : firstId;
+
+  useEffect(() => {
+    if (!known && firstId) onChange(firstId);
+  }, [known, firstId, onChange]);
+
   const overflows = tabs.length > BOTTOM_SLOTS;
   const primary = overflows ? tabs.slice(0, BOTTOM_SLOTS - 1) : tabs;
   const overflow = overflows ? tabs.slice(BOTTOM_SLOTS - 1) : [];
-  const activeOverflowTab = overflow.find((t) => t.id === activeId) || null;
+
+  // A roving tabindex gives exactly one button the tab stop. When the active
+  // section lives in the sheet no column is selected, and every column would
+  // fall to -1 — the whole tablist would drop out of the tab order. Park the
+  // stop on the first column instead.
+  const primaryIndex = primary.findIndex((t) => t.id === activeResolved);
+  const rovingIndex = primaryIndex >= 0 ? primaryIndex : 0;
+  const activeOverflowTab = overflow.find((t) => t.id === activeResolved) || null;
 
   // A count behind the sheet is a count nobody sees: on a phone an admin would
   // never learn that deletion requests are waiting. Roll the hidden totals onto
@@ -59,12 +81,16 @@ const ModuleTabs = ({
     if (!sheetOpen) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') setSheetOpen(false); };
     const trigger = moreRef.current;
+    // Restore whatever was there rather than clearing: the global mobile menu
+    // owns this same property, and blanking it would free the page to scroll
+    // behind a menu that is still open.
+    const prevOverflow = document.body.style.overflow;
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     panelRef.current?.focus();
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      document.body.style.overflow = prevOverflow;
       // Send focus back where it came from, or it lands on <body>.
       trigger?.focus();
     };
@@ -84,10 +110,11 @@ const ModuleTabs = ({
     tabRefs.current[next]?.focus();
   };
 
-  // Same roving movement as the desktop row, but scoped to the columns the
-  // bottom bar actually shows — the overflow ones live behind the sheet.
+  // Same roving movement as the desktop row, and the same key set — a reader
+  // who learns ArrowDown on a laptop should not find it dead on a phone.
+  // Scoped to the columns the bar actually shows; the rest live in the sheet.
   const onBottomKeyDown = (e, index) => {
-    const step = { ArrowRight: 1, ArrowLeft: -1 }[e.key];
+    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: 1, ArrowUp: -1 }[e.key];
     let next = null;
     if (step) next = (index + step + primary.length) % primary.length;
     else if (e.key === 'Home') next = 0;
@@ -104,13 +131,20 @@ const ModuleTabs = ({
 
   const countOf = (tab) => (tab.count > 0 ? tab.count : null);
 
+  // Naming the active section rather than "More" keeps the button honest about
+  // where the reader currently is. The accessible name is built from this same
+  // string so the two never disagree.
+  const moreVisibleLabel = activeOverflowTab
+    ? (activeOverflowTab.short || activeOverflowTab.label)
+    : moreLabel;
+
   return (
     <>
       {desktop && (
         <div className="mod-tabs">
           <div className="mod-tabs__track" role="tablist" aria-label={ariaLabel}>
             {tabs.map((tab, i) => {
-              const selected = tab.id === activeId;
+              const selected = tab.id === activeResolved;
               return (
                 <button
                   key={tab.id}
@@ -148,14 +182,14 @@ const ModuleTabs = ({
               style={{ '--slots': primary.length }}
             >
               {primary.map((tab, i) => {
-                const selected = tab.id === activeId;
+                const selected = tab.id === activeResolved;
                 return (
                   <button
                     key={tab.id}
                     type="button"
                     role="tab"
                     aria-selected={selected}
-                    tabIndex={selected ? 0 : -1}
+                    tabIndex={i === rovingIndex ? 0 : -1}
                     ref={(el) => { bottomRefs.current[i] = el; }}
                     className={`mod-bottomnav__btn ${selected ? 'is-active' : ''}`}
                     onClick={() => onChange(tab.id)}
@@ -183,7 +217,7 @@ const ModuleTabs = ({
                 aria-haspopup="dialog"
                 aria-expanded={sheetOpen}
                 aria-label={overflowCount > 0
-                  ? `${moreLabel} — ${overflowCount} awaiting attention`
+                  ? `${moreVisibleLabel} — ${overflowCount} awaiting attention`
                   : undefined}
               >
                 <span className="mod-bottomnav__icon">
@@ -194,11 +228,7 @@ const ModuleTabs = ({
                     </span>
                   )}
                 </span>
-                {/* Naming the active section rather than "More" keeps the bar
-                    honest about where the reader currently is. */}
-                <span className="mod-bottomnav__label">
-                  {activeOverflowTab ? (activeOverflowTab.short || activeOverflowTab.label) : moreLabel}
-                </span>
+                <span className="mod-bottomnav__label">{moreVisibleLabel}</span>
               </button>
             )}
           </nav>
@@ -230,7 +260,7 @@ const ModuleTabs = ({
                     <button
                       key={tab.id}
                       type="button"
-                      className={`mod-sheet__item ${tab.id === activeId ? 'is-active' : ''}`}
+                      className={`mod-sheet__item ${tab.id === activeResolved ? 'is-active' : ''}`}
                       onClick={() => { onChange(tab.id); setSheetOpen(false); }}
                     >
                       <tab.Icon size={18} aria-hidden="true" />

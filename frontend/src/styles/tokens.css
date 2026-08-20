@@ -53,6 +53,11 @@
 
   /* Layout */
   --shell-width: 1240px;
+  /* Module dashboards share one width. The hub pages (.portal-shell,
+     .resource-center-container) stay on --shell-width; every module
+     page keys off this, so the six cannot drift to six widths again
+     the way they had (1180 / 1120 / 800 x4). */
+  --module-width: 1120px;
   --shell-narrow: 780px;
   --nav-height: 4.5rem;
 }

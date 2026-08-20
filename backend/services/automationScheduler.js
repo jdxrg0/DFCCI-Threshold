@@ -4,6 +4,8 @@ const Schedule = require('../models/Schedule');
 const AppSetting = require('../models/AppSetting');
 const github = require('../services/github');
 const { WEEKLY_CODE_WORKFLOW, ensureWeeklyCodeWorkflow } = require('../services/weeklyCodeWorkflow');
+const { enrichRunLinks, markAlerted } = require('../services/runLinks');
+const alerts = require('../services/automationAlerts');
 
 /* A queue item's `parsedRoles` is a Mongoose Map when it comes off a document
    and a plain object when it comes off a lean query or a request body. These
@@ -42,6 +44,55 @@ const manilaDateKey = () =>
 const formatServiceDate = (dateObj) => dateObj
   .toLocaleDateString('en-US', { timeZone: 'UTC', month: 'long', day: '2-digit', year: 'numeric' })
   .toUpperCase();
+
+/* How far back a missed run is still worth mentioning. Beyond this the message
+   is so stale that sending it late would confuse more than it helps. */
+const MISSED_LOOKBACK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/* The most recent moment this cron should have fired, at or before `from`.
+ *
+ * node-cron can say when a task runs next but not when it last should have,
+ * and that is the only question that reveals a run lost while the process was
+ * down. Candidate times come from the parsed hour/minute fields — a handful
+ * per day — and the real matcher decides which of them the pattern accepts, so
+ * day-of-week and day-of-month semantics stay node-cron's problem, not ours.
+ * All timers here are registered in UTC, so the arithmetic is UTC throughout. */
+const previousFireTime = (pattern, from = new Date()) => {
+  if (!cron.validate(pattern)) return null;
+
+  let fields;
+  try {
+    fields = cron.parse(pattern);
+  } catch (e) {
+    return null;
+  }
+
+  const hours = fields.hour || [];
+  const minutes = fields.minute || [];
+  if (hours.length === 0 || minutes.length === 0) return null;
+
+  const probe = cron.createTask(pattern, () => {}, { timezone: 'UTC' });
+  try {
+    for (let back = 0; back <= 8; back++) {
+      const day = new Date(Date.UTC(
+        from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate() - back));
+      let best = null;
+      for (const hour of hours) {
+        for (const minute of minutes) {
+          const when = new Date(Date.UTC(
+            day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), hour, minute, 0, 0));
+          if (when > from) continue;
+          if (!probe.match(when)) continue;
+          if (!best || when > best) best = when;
+        }
+      }
+      if (best) return best;
+    }
+  } finally {
+    if (typeof probe.destroy === 'function') probe.destroy();
+  }
+  return null;
+};
 
 class AutomationScheduler {
   constructor() {
@@ -103,10 +154,116 @@ class AutomationScheduler {
         console.log('[Scheduler] Weekly Code Generator cron initialized (every Sunday 12:00 PM PHT).');
       }
 
+      // Watch what GitHub actually did with each dispatch.
+      //
+      // A dispatch records itself a success the moment GitHub accepts it, but
+      // the run that sends the message finishes minutes later and can fail —
+      // expired Facebook cookies being the usual reason. Resolving outcomes
+      // only when an admin opened the history meant that failure was never
+      // noticed unless somebody went looking.
+      if (!this.runWatcherCron) {
+        this.runWatcherCron = cron.schedule('*/15 * * * *', async () => {
+          await this.checkRunOutcomes();
+        }, { scheduled: true, timezone: "UTC" });
+        console.log('[Scheduler] Run outcome watcher initialized (every 15 minutes).');
+      }
+
+      // Cron timers only fire in a live process and nothing catches up, so a
+      // run due while the server was asleep or deploying is simply lost. This
+      // is the only place that will ever mention it.
+      await this.reportMissedRuns(schedules);
+
       // Initialize Weekly Code Dispatch Cron Job
       await this.reloadWeeklyCodeDispatch();
     } catch (error) {
       console.error('[Scheduler] Failed to initialize schedules:', error);
+    }
+  }
+
+  /**
+   * Runs that were due while this process was not running.
+   *
+   * Only the most recent missed occurrence per schedule is reported: after a
+   * long outage the list would otherwise be pages of history nobody can act
+   * on, and the actionable question is only ever "did today's go out?".
+   */
+  async reportMissedRuns(schedules) {
+    const now = new Date();
+    const missed = [];
+
+    for (const schedule of schedules) {
+      if (schedule.isActive === false) continue;
+
+      const expected = previousFireTime(schedule.cronTime, now);
+      if (!expected) continue;
+
+      // A schedule cannot have missed a time that predates it.
+      const createdAt = schedule.createdAt ? new Date(schedule.createdAt) : new Date(0);
+      if (expected <= createdAt) continue;
+      if (now - expected > MISSED_LOOKBACK_MS) continue;
+
+      // recordRun lands a second or two after the timer fires, so allow a
+      // minute of slack before calling a run absent.
+      const grace = new Date(expected.getTime() - 60000);
+      const ran = (schedule.runHistory || []).some(
+        entry => entry.actionType === 'MAIN' && new Date(entry.at) >= grace);
+      if (ran) continue;
+
+      missed.push({
+        scheduleId: String(schedule._id),
+        scheduleName: schedule.scheduleName,
+        expectedAt: expected
+      });
+    }
+
+    if (missed.length === 0) return;
+
+    missed.forEach(m => console.warn(
+      `[Scheduler] MISSED RUN: "${m.scheduleName}" was due at ${m.expectedAt.toISOString()} and never ran.`));
+
+    try {
+      await alerts.alertMissedRuns(missed);
+    } catch (e) {
+      console.error('[Scheduler] Could not send the missed-run alert:', e.message);
+    }
+  }
+
+  /**
+   * Resolve the GitHub run behind each recent dispatch and alert on the ones
+   * that finished badly. Each failure is emailed at most once.
+   */
+  async checkRunOutcomes() {
+    try {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const schedules = await Schedule.find({
+        runHistory: { $elemMatch: { at: { $gte: since }, status: 'success' } }
+      });
+
+      for (const schedule of schedules) {
+        let failed = [];
+        try {
+          failed = await enrichRunLinks(schedule);
+        } catch (e) {
+          // A lookup that cannot reach GitHub is not a delivery failure; the
+          // rows stay pending and the next pass tries again.
+          console.warn(`[Scheduler] Run lookup failed for "${schedule.scheduleName}": ${e.message}`);
+          continue;
+        }
+
+        for (const row of failed) {
+          console.error(
+            `[Scheduler] RUN FAILED: "${schedule.scheduleName}" ${row.actionType} finished ${row.ghRunConclusion}.`);
+          try {
+            await alerts.alertRunFailure(schedule, row);
+          } finally {
+            // Marked even if the email could not be sent, so a broken mailer
+            // cannot turn one failed run into an alert every 15 minutes.
+            await markAlerted(schedule._id, row._id);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Scheduler] Run outcome watcher failed:', error.message);
     }
   }
 
@@ -557,7 +714,10 @@ class AutomationScheduler {
 
       if (!response.ok) {
         this.log(`[Scheduler] Failed to trigger ${schedule.githubFileName}. ${response.detail}`);
-        await this.recordRun(id, { status: 'error', actionType, trigger, detail: response.detail });
+        const record = await this.recordRun(id, { status: 'error', actionType, trigger, detail: response.detail });
+        // Nothing was sent and nothing retries on its own — say so out loud.
+        alerts.alertDispatchFailure(schedule, record)
+          .catch(e => console.error('[Scheduler] Alert failed:', e.message));
         return { ok: false, status: 'error', detail: response.detail, resolved };
       }
 
@@ -581,7 +741,16 @@ class AutomationScheduler {
     } catch (error) {
       this.log(`[Scheduler] Error triggering workflow: ${error.message}`);
       console.error(error);
-      await this.recordRun(id, { status: 'error', actionType, trigger, detail: error.message });
+      const record = await this.recordRun(id, { status: 'error', actionType, trigger, detail: error.message });
+      try {
+        const schedule = await Schedule.findById(id).select('scheduleName').lean();
+        if (schedule) {
+          alerts.alertDispatchFailure(schedule, record)
+            .catch(e => console.error('[Scheduler] Alert failed:', e.message));
+        }
+      } catch (e) {
+        console.error('[Scheduler] Could not alert on the dispatch error:', e.message);
+      }
       return { ok: false, status: 'error', detail: error.message };
     }
   }

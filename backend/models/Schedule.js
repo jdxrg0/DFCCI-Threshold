@@ -91,7 +91,8 @@ const scheduleSchema = new mongoose.Schema({
     // No default here: a default on a nested path makes Mongoose materialise the
     // parent, so every schedule that had never run came back with a truthy
     // lastRun and the dashboard rendered "Last run" with a blank date.
-    ghLookupState: String
+    ghLookupState: String,
+    alerted: Boolean
   },
   // Capped at the 25 most recent entries by the $slice in recordRun().
   // A dispatch only records that it fired and when, on GitHub's clock; the run
@@ -110,7 +111,10 @@ const scheduleSchema = new mongoose.Schema({
     ghRunUrl: String,
     ghRunStatus: String,
     ghRunConclusion: String,
-    ghLookupState: { type: String, default: 'none' }  // none | pending | resolved | not_found | unavailable
+    ghLookupState: { type: String, default: 'none' },  // none | pending | resolved | not_found | unavailable
+    // Set once an alert has gone out for this row, so a watcher pass that
+    // re-reads the same failed run does not email about it again.
+    alerted: Boolean
   }],
   createdAt: {
     type: Date,

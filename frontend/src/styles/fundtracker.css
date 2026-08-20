@@ -12,7 +12,7 @@
 /* ── Shell ──────────────────────────────────────────────────────────────── */
 .ft-page {
   width: 100%;
-  max-width: 1120px;
+  max-width: var(--module-width);
   margin: 0 auto;
   padding: var(--sp-4) var(--sp-4) var(--sp-7);
 }

@@ -112,7 +112,11 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 900; /* above page content, below every modal layer */
+  /* Sits above page content (.adm-nav rail 20, .navbar-brand 50) but UNDER the
+     app chrome: .mobile-nav-menu is 100 and .glass-nav is 110, and a bar that
+     outranked them would paint over the open hamburger menu and keep taking
+     taps through it. */
+  z-index: 90;
   align-items: stretch;
   padding: var(--sp-1) var(--sp-1) calc(var(--sp-1) + env(safe-area-inset-bottom, 0px));
   background: color-mix(in srgb, var(--bg-color) 88%, transparent);
@@ -190,7 +194,10 @@
   display: none;
   position: fixed;
   inset: 0;
-  z-index: 1000; /* over the bar it belongs to, under the page's own modals */
+  /* Over the bar it belongs to and over the header (110) and theme panel (201),
+     so it reads as modal — but under .adm-drawer-backdrop (1000),
+     .ft-backdrop (1100) and .ft-lightbox (1200), which are the page's own. */
+  z-index: 300;
   align-items: flex-end;
   background: color-mix(in srgb, #000 55%, transparent);
   backdrop-filter: blur(4px);

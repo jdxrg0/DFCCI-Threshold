@@ -47,6 +47,15 @@
 
 
 
+/* ── Module page shell ───────────────────────────────────────── */
+/* Sits on the same element as .container and overrides its
+   --shell-width, which is the hub width. Declared after base.css in
+   redesign.css, so equal specificity resolves this way round. */
+.module-shell {
+  max-width: var(--module-width);
+  margin-inline: auto;
+}
+
 /* ── List cards ─────────────────────────────────────────────────────────── */
 .ticket-card-glass,
 .thread-card-glass,
@@ -70,6 +79,26 @@
 .thread-card-glass:hover,
 .affirmation-card-glass:hover,
 .games-card-glass:hover {
+  transform: translateY(-3px);
+  border-color: var(--ring);
+  box-shadow: var(--shadow-md), var(--shadow-glow);
+}
+
+/* Devotional's cards stack an accent bar over their content instead of sitting
+   in a row, so they take the family's surface without the family's flex layout.
+   Same background, hairline, radius, shadow and hover lift as the others —
+   this module had been hand-rolling a flat card with a heavier border. */
+.devotional-card-glass {
+  overflow: hidden;
+  background: var(--grad-surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease);
+}
+
+.devotional-card-glass:hover {
   transform: translateY(-3px);
   border-color: var(--ring);
   box-shadow: var(--shadow-md), var(--shadow-glow);

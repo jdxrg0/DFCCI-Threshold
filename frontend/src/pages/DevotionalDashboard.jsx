@@ -18,9 +18,9 @@ const StatPill = ({ icon, value, label, accent }) => (
   <div style={{
     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
     padding: '0.85rem 0.4rem',
-    backgroundColor: 'var(--card-bg)',
-    border: '1px solid var(--border-color)',
-    borderRadius: '12px',
+    background: 'var(--grad-surface)',
+    border: '1px solid var(--hairline)',
+    borderRadius: 'var(--r-lg)',
     textAlign: 'center',
     gap: '0.2rem',
     minWidth: 0,
@@ -47,7 +47,8 @@ const StatsBar = ({ stats }) => {
   ];
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.6rem', marginBottom: '1.25rem',
+      display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(9rem, 1fr))',
+      gap: '0.6rem', marginBottom: '1.25rem',
     }}>
       {items.map(item => <StatPill key={item.label} {...item} />)}
     </div>
@@ -196,8 +197,8 @@ const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefr
 
   return (
     <div style={{
-      backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)',
-      borderRadius: '12px', padding: '0.85rem', marginBottom: '1.25rem',
+      background: 'var(--grad-surface)', border: '1px solid var(--hairline)',
+      borderRadius: 'var(--r-lg)', padding: '0.85rem', marginBottom: '1.25rem',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
         <button
@@ -302,13 +303,7 @@ const DevotionalCard = ({ entry, showMember = false }) => {
       to={`/devotionals/${entry._id}`}
       style={{ textDecoration: 'none', display: 'block', marginBottom: '0.6rem' }}
     >
-      <div style={{
-        backgroundColor: 'var(--card-bg)',
-        border: '1px solid var(--border-color)',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        transition: 'transform 0.15s ease, box-shadow 0.15s ease',
-      }}>
+      <div className="devotional-card-glass">
         {/* Accent bar at top */}
         <div style={{
           height: '3px',
@@ -332,7 +327,7 @@ const DevotionalCard = ({ entry, showMember = false }) => {
             </div>
             <span style={{
               flexShrink: 0, fontSize: '0.65rem', fontWeight: '700',
-              padding: '0.2rem 0.55rem', borderRadius: '999px',
+              padding: '0.2rem 0.55rem', borderRadius: 'var(--r-full)',
               backgroundColor: isAck 
                 ? 'color-mix(in srgb, var(--primary) 15%, transparent)' 
                 : isMissed 
@@ -403,7 +398,7 @@ const LeaderStats = ({ stats }) => {
     { label: t('devo_leader_acked'), value: stats.acknowledged, accent: '#10B981', icon: <CheckCircle2 size={14} /> },
   ];
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '1.25rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(9rem, 1fr))', gap: '0.5rem', marginBottom: '1.25rem' }}>
       {items.map(item => <StatPill key={item.label} {...item} />)}
     </div>
   );
@@ -422,8 +417,8 @@ const Pagination = ({ page, totalPages, onPrev, onNext, t }) => {
         style={{
           display: 'flex', alignItems: 'center', gap: '0.25rem',
           padding: '0.5rem 0.85rem', fontSize: '0.82rem', fontWeight: '600',
-          borderRadius: '10px', border: '1.5px solid var(--border-color)',
-          backgroundColor: 'var(--card-bg)', color: 'var(--text-main)',
+          borderRadius: 'var(--r-sm)', border: '1.5px solid var(--hairline-strong)',
+          backgroundColor: 'var(--surface-solid)', color: 'var(--text-main)',
           cursor: page === 1 ? 'not-allowed' : 'pointer',
           opacity: page === 1 ? 0.4 : 1, fontFamily: 'inherit',
           transition: 'opacity 0.2s',
@@ -439,8 +434,8 @@ const Pagination = ({ page, totalPages, onPrev, onNext, t }) => {
         style={{
           display: 'flex', alignItems: 'center', gap: '0.25rem',
           padding: '0.5rem 0.85rem', fontSize: '0.82rem', fontWeight: '600',
-          borderRadius: '10px', border: '1.5px solid var(--border-color)',
-          backgroundColor: 'var(--card-bg)', color: 'var(--text-main)',
+          borderRadius: 'var(--r-sm)', border: '1.5px solid var(--hairline-strong)',
+          backgroundColor: 'var(--surface-solid)', color: 'var(--text-main)',
           cursor: page === totalPages ? 'not-allowed' : 'pointer',
           opacity: page === totalPages ? 0.4 : 1, fontFamily: 'inherit',
           transition: 'opacity 0.2s',
@@ -461,11 +456,10 @@ const FolderCard = ({ folder, onClick }) => {
   return (
     <div 
       onClick={onClick}
+      className="devotional-card-glass"
       style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '1rem', backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)',
-        borderRadius: '12px', marginBottom: '0.6rem', cursor: 'pointer',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.02)', transition: 'transform 0.15s ease'
+        padding: '1rem', marginBottom: '0.6rem', cursor: 'pointer',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -474,7 +468,7 @@ const FolderCard = ({ folder, onClick }) => {
           <div style={{ fontSize: '1rem', fontWeight: '800', color: 'var(--text-main)' }}>{folder.displayName}</div>
           <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>
             <span>{folder.total} Total Entries</span>
-            <span style={{ color: 'var(--border-color)' }}>•</span>
+            <span style={{ color: 'var(--hairline-strong)' }}>•</span>
             <span>Latest: {latestDateStr}</span>
           </div>
         </div>
@@ -589,7 +583,7 @@ const DevotionalDashboard = () => {
   ];
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0 0.75rem 1rem' }}>
+    <div className="container module-shell">
       <PageHeader
         icon={BookHeart}
         title={t('devo_dashboard_title')}
@@ -623,8 +617,8 @@ const DevotionalDashboard = () => {
           {/* Promo Banner for "Why read Bible" videos */}
           <div style={{
             background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.08))',
-            border: '1px solid var(--border-color)',
-            borderRadius: '12px',
+            border: '1px solid var(--hairline)',
+            borderRadius: 'var(--r-lg)',
             padding: '0.85rem 1rem',
             marginBottom: '1.25rem',
             display: 'flex',
@@ -808,8 +802,8 @@ const DevotionalDashboard = () => {
                       onChange={(e) => { setLeaderFilter(e.target.value); setLeaderPage(1); }}
                       style={{
                         flex: 1, padding: '0.55rem 0.65rem', fontSize: '0.82rem', fontWeight: '600',
-                        borderRadius: '10px', border: '1.5px solid var(--border-color)',
-                        backgroundColor: 'var(--card-bg)', color: 'var(--text-main)',
+                        borderRadius: 'var(--r-sm)', border: '1.5px solid var(--hairline-strong)',
+                        backgroundColor: 'var(--surface-solid)', color: 'var(--text-main)',
                         fontFamily: 'inherit', outline: 'none', cursor: 'pointer',
                       }}
                     >

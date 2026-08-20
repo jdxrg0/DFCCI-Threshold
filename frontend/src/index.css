@@ -921,10 +921,6 @@ a.btn-primary:hover:not(:disabled) {
     font-size: 1.2rem !important;
   }
 
-  .mirror-dashboard-container {
-    padding-bottom: 5rem !important;
-  }
-
   /* ── Dashboard tab bar ── */
   .dashboard-tabs {
     position: fixed !important;

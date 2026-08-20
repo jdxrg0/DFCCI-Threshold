@@ -44,7 +44,7 @@
 /* ── Shell ──────────────────────────────────────────────────────────────── */
 .adm-page {
   width: 100%;
-  max-width: 1180px;
+  max-width: var(--module-width);
   margin: 0 auto;
   padding: 0 var(--sp-4) var(--sp-7);
 }

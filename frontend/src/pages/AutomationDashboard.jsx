@@ -1013,18 +1013,36 @@ export default function AutomationDashboard() {
         }
       />
 
-      {/* ── Why nothing is sending ── */}
-      {health && !health.ok && health.problems?.length > 0 && (
+      {/* ── Why nothing is sending ──
+           Red is reserved for "messages are not going out". Anything that is
+           merely misconfigured gets amber, so a red banner never becomes
+           background noise the way a single combined list does. */}
+      {health?.problems?.length > 0 && (
         <div className="ah-callout ah-callout--danger" style={{ marginBottom: 'var(--sp-4)' }}>
           <AlertTriangle size={16} />
           <div style={{ minWidth: 0 }}>
             <strong>
               {health.problems.length === 1
-                ? 'One thing is stopping this from working'
-                : `${health.problems.length} things are stopping this from working`}
+                ? 'One thing is stopping messages from going out'
+                : `${health.problems.length} things are stopping messages from going out`}
             </strong>
             <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
               {health.problems.map((problem, i) => <li key={i}>{problem}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {health?.warnings?.length > 0 && (
+        <div className="ah-callout ah-callout--warning" style={{ marginBottom: 'var(--sp-4)' }}>
+          <Info size={16} />
+          <div style={{ minWidth: 0 }}>
+            <strong>
+              {health.warnings.length === 1 ? 'One thing worth fixing' : `${health.warnings.length} things worth fixing`}
+              <span style={{ fontWeight: 400 }}> — your schedules are still sending normally.</span>
+            </strong>
+            <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
+              {health.warnings.map((warning, i) => <li key={i}>{warning}</li>)}
             </ul>
           </div>
         </div>

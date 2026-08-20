@@ -114,10 +114,27 @@ const deleteWorkflow = async (fileName, commitMessage, sha) => {
  *
  * @returns {Promise<{ok: boolean, status: number|null, detail: string, date: Date}>}
  */
-const dispatchWorkflow = async (workflowFile, inputs) => {
+const RETRY_DELAY_MS = 5000;
+
+/* A dropped connection or a GitHub 5xx says nothing about whether the request
+   was valid, and the next scheduled attempt is a day away. A 401 or a 404 is a
+   standing fact about the token or the file, and retrying it just fails twice. */
+const isTransient = (status) => status === null || status === 429 || (status >= 500 && status <= 599);
+
+const dispatchWorkflow = async (workflowFile, inputs, attempt = 1) => {
   if (!hasPat()) {
     return { ok: false, status: null, detail: new MissingPatError().message, date: new Date() };
   }
+
+  const retryOnce = async (outcome) => {
+    if (attempt > 1 || !isTransient(outcome.status)) return outcome;
+    console.warn(`[GitHub] ${workflowFile} dispatch failed (${outcome.detail}). Retrying once in ${RETRY_DELAY_MS / 1000}s...`);
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    const second = await dispatchWorkflow(workflowFile, inputs, 2);
+    if (!second.ok) second.detail = `${second.detail} (retried once)`;
+    else console.log(`[GitHub] ${workflowFile} dispatch succeeded on retry.`);
+    return second;
+  };
 
   try {
     const response = await fetch(`${API_ROOT}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`, {
@@ -142,12 +159,12 @@ const dispatchWorkflow = async (workflowFile, inputs) => {
           `GitHub returned 404 for workflow "${workflowFile}". Either the file is not on ` +
           `${GH_OWNER}/${GH_REPO}@${GH_BRANCH}, or the token lacks the "workflow" scope.`;
       }
-      return { ok: false, status: response.status, detail, date };
+      return retryOnce({ ok: false, status: response.status, detail, date });
     }
 
     return { ok: true, status: response.status, detail: 'Dispatched', date };
   } catch (error) {
-    return { ok: false, status: null, detail: error.message, date: new Date() };
+    return retryOnce({ ok: false, status: null, detail: error.message, date: new Date() });
   }
 };
 

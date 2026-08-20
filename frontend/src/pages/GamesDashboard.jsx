@@ -85,7 +85,7 @@ const GamesDashboard = () => {
   ];
 
   return (
-    <div className="container mirror-dashboard-container" style={{ maxWidth: '800px', padding: 0 }}>
+    <div className="container module-shell" style={{ padding: 0 }}>
       {/* ── BREATHTAKING MESH GRADIENT GAMES BANNER ── */}
       <div className="games-hero-banner">
         <PageHeader

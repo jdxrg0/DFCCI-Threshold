@@ -97,8 +97,10 @@ const BOTTOM_TAB_ORDER = [
   'deletion-requests', 'restore-requests', 'recently-deleted', 'audit', 'limits',
 ];
 
-// Rail labels too long for a thumb-width column.
-const BOTTOM_TAB_SHORT = { limits: 'Limits' };
+// Rail labels too long for a thumb-width column. `emails` matters most: it is
+// the one entry that lands in a primary column, where the rail's full
+// "Outgoing Emails" would clip to an ellipsis.
+const BOTTOM_TAB_SHORT = { emails: 'Emails', limits: 'Limits' };
 
 /* The audit feed stores the raw enum. Printed verbatim the table reads like a
    stack trace, so every action the backend can write gets a label here. */
@@ -268,7 +270,13 @@ const AdminPanel = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState('users');
+  // Every other module restores its section on mount; Admin snapping back to
+  // Members on each reload was the last behavioural odd-one-out. Costlier here
+  // than elsewhere: five of the nine sections sit behind the bottom bar's More
+  // sheet on a phone.
+  const [activeTab, setActiveTab] = useState(
+    () => localStorage.getItem('admin_activeTab') || 'users',
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -518,6 +526,10 @@ const AdminPanel = () => {
   // Re-fetch the tab being opened. Platform limits are excluded: that call
   // hits the Cloudinary API and runs dbStats over every collection, so it
   // loads once and refreshes only on request.
+  useEffect(() => {
+    localStorage.setItem('admin_activeTab', activeTab);
+  }, [activeTab]);
+
   useEffect(() => {
     if (!bootedRef.current || loading) return;
     if (activeTab === 'signups') fetchSignups();

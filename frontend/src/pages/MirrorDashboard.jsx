@@ -94,6 +94,12 @@ const MirrorDashboard = () => {
       setThreads(res.data);
       setDisplayedTab(activeTab); // Update displayed logic only when new data is ready
     } catch (err) {
+      // Without this the pill moves and the list does not: displayedTab stays
+      // on the previous section, so a failed fetch leaves the old section's
+      // threads sitting under the newly highlighted tab, permanently. Show the
+      // section the user actually picked, empty, with the error above it.
+      setThreads([]);
+      setDisplayedTab(activeTab);
       setError('Failed to load threads');
     } finally {
       setLoading(false);
@@ -128,7 +134,7 @@ const MirrorDashboard = () => {
   ];
 
   return (
-    <div className="container mirror-dashboard-container" style={{ maxWidth: '800px' }}>
+    <div className="container module-shell">
       
       {/* ── BREATHTAKING MESH gradient HERO BANNER ── */}
       <div className="mirror-hero-banner">
