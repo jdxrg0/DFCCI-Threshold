@@ -8,6 +8,7 @@ import MyFruits from '../components/MyFruits';
 import EndorseFruit from '../components/EndorseFruit';
 import { useLanguage } from '../context/LanguageContext';
 import PageHeader from '../components/PageHeader';
+import ModuleTabs from '../components/ModuleTabs';
 
 const AffirmationCard = ({ affirmation, type }) => {
   const isSender = type === 'sent';
@@ -150,6 +151,13 @@ const AffirmationDashboard = () => {
   const totalPages = Math.ceil(displayItems.length / itemsPerPage) || 1;
   const paginatedItems = displayItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const TABS = [
+    { id: 'received',  label: t('sl_received'),   Icon: Inbox, short: 'Received' },
+    { id: 'sent',      label: t('sl_sent'),       Icon: Send,  short: 'Sent' },
+    { id: 'my_fruits', label: t('my_fruits_tab'), Icon: User,  short: 'My Fruits' },
+    { id: 'endorse',   label: t('endorse_tab'),   Icon: Tag,   short: 'Endorse' },
+  ];
+
   return (
     <div className="container mirror-dashboard-container" style={{ maxWidth: '800px' }}>
       
@@ -174,30 +182,13 @@ const AffirmationDashboard = () => {
         />
       </div>
 
-      {/* ── premium SLIDING TABS TRACK ── */}
-      <div className="premium-tabs-scroll">
-        <div className="premium-tabs-track">
-          {[
-            { key: 'received', label: t('sl_received'), Icon: Inbox },
-            { key: 'sent',     label: t('sl_sent'),     Icon: Send  },
-            { key: 'my_fruits', label: t('my_fruits_tab'), Icon: User },
-            { key: 'endorse',  label: t('endorse_tab'), Icon: Tag },
-          ].map(({ key, label, Icon }) => {
-            const isActive = activeTab === key;
-            return (
-              <button
-                key={key}
-                className={`premium-tab-pill ${isActive ? 'active-affirmation' : ''}`}
-                onClick={() => setActiveTab(key)}
-                title={label}
-              >
-                <Icon size={16} />
-                <span>{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* ── SECTION TABS ── */}
+      <ModuleTabs
+        tabs={TABS}
+        activeId={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="Shining Light sections"
+      />
 
       {error && <p style={{ color: '#EF4444' }}>{error}</p>}
 

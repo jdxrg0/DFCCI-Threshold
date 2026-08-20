@@ -1285,6 +1285,19 @@ select.adm-field { cursor: pointer; padding-right: 1.75rem; }
   .adm-dates .adm-field { width: 100%; }
 }
 
+/* ── Phone: the rail hands over to the shared bottom bar ─────────────────
+   Admin is the one module that keeps its own desktop navigation: nine
+   sections do not fit a pill row, so the vertical rail stays. Below 768px
+   components/ModuleTabs.jsx renders the shared bottom bar (four sections plus
+   a More sheet), and the rail must get out of its way or the page carries two
+   navigations at once.
+
+   901-768px keeps the sticky horizontal scroller above — a tablet has the
+   width for it, and the bottom bar only earns its place at thumb sizes. */
+@media (max-width: 768px) {
+  .adm-nav { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .adm-skel,
   .spin,

@@ -1,14 +1,12 @@
 import React, { useEffect } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
-import { BookOpen, Globe } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import { moduleDocs } from '../data/moduleDocs';
-import { useLanguage } from '../context/LanguageContext';
 import PageHeader from '../components/PageHeader';
 
 const ModuleDocs = () => {
   const { moduleName } = useParams();
   const location = useLocation();
-  const { lang, setLang, t } = useLanguage();
 
   useEffect(() => {
     if (location.hash === '#templates') {
@@ -34,27 +32,10 @@ const ModuleDocs = () => {
     );
   }
 
-  const currentDocs = docs[lang] || docs['en'];
+  const currentDocs = docs.en;
 
   return (
     <div className="container" style={{ maxWidth: '800px', padding: '1rem' }}>
-
-      {/* Language Selector Row */}
-      <div className="flex justify-end" style={{ marginBottom: '1rem', marginTop: '1rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Globe size={16} style={{ color: 'var(--text-muted)' }} />
-          <select 
-            value={lang} 
-            onChange={(e) => setLang(e.target.value)}
-            className="input-field"
-            style={{ padding: '0.4rem 2rem 0.4rem 0.8rem', minWidth: '120px', cursor: 'pointer' }}
-          >
-            <option value="en">English</option>
-            <option value="fil">Filipino</option>
-            <option value="conyo">Conyo</option>
-          </select>
-        </div>
-      </div>
 
       <PageHeader
         icon={BookOpen}

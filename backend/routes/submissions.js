@@ -2,10 +2,46 @@ const express = require('express');
 const router = express.Router();
 const Submission = require('../models/Submission');
 const Schedule = require('../models/Schedule');
+const github = require('../services/github');
+
+/**
+ * The reader bot posts here from a GitHub Actions runner, so there is no
+ * session to check — it authenticates with a shared secret instead.
+ *
+ * A report that completes a lineup dispatches a workflow, so an open endpoint
+ * meant an anonymous POST could cause a real Messenger post. The guard is
+ * deliberately backward compatible: until BOT_WEBHOOK_SECRET is set on this
+ * server the endpoint still accepts reports, because turning it on before the
+ * bot sends the header would silently drop every confirmation.
+ */
+let warnedOpen = false;
+const requireBotSecret = (req, res, next) => {
+  const expected = process.env.BOT_WEBHOOK_SECRET;
+
+  if (!expected) {
+    if (!warnedOpen) {
+      warnedOpen = true;
+      console.warn(
+        '[Submissions API] BOT_WEBHOOK_SECRET is not set — /report is accepting unauthenticated ' +
+        'reports. Set it here and as a repository secret on the bot, then restart.'
+      );
+    }
+    return next();
+  }
+
+  const header = req.get('x-bot-secret')
+    || (req.get('authorization') || '').replace(/^Bearer\s+/i, '');
+
+  if (header !== expected) {
+    console.warn('[Submissions API] Rejected a report with a missing or wrong bot secret.');
+    return res.status(401).json({ error: 'Invalid bot credentials' });
+  }
+  return next();
+};
 
 // This route receives data from the Puppeteer Reader Bot
 // POST /api/submissions/report
-router.post('/report', async (req, res) => {
+router.post('/report', requireBotSecret, async (req, res) => {
   try {
     // Expected payload: { referenceCode: 'DFCCI-S-LU-071926', content: '...', role: 'Song Leader' }
     const { referenceCode, content, role } = req.body;
@@ -83,30 +119,18 @@ router.post('/report', async (req, res) => {
         finalMessage += `${submission.partsReceived.get('Song Leader')}\n`;
       }
 
-      // Trigger the github action (we can reuse the automationScheduler trigger)
-      const automationScheduler = require('../services/automationScheduler');
-      // For this, we might need a direct way to trigger GitHub Action with a custom payload
-      // But for now, we can just hit the API ourselves or trigger a custom dispatch
-      
-      const owner = 'd0ul0s';
-      const repo = 'Residential-Proxy-Method';
-      
-      await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${targetSchedule.githubFileName}/dispatches`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `token ${process.env.GITHUB_PAT}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ref: 'main',
-          inputs: {
-            dynamic_message: finalMessage,
-            code_message: "",
-            reminder_tasks: "[]"
-          }
-        })
+      // The assembled lineup goes back out through the schedule's own workflow.
+      // A failure here used to be invisible: the reply was banked, the caller
+      // got a 200, and the post that should have followed simply never happened.
+      const dispatch = await github.dispatchWorkflow(targetSchedule.githubFileName, {
+        dynamic_message: finalMessage,
+        code_message: "",
+        reminder_tasks: "[]"
       });
+
+      if (!dispatch.ok) {
+        console.error(`[Submissions API] Final dispatch for ${referenceCode} failed: ${dispatch.detail}`);
+      }
     }
 
     res.status(200).json({ success: true, isComplete: submission.isComplete });

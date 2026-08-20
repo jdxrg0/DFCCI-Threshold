@@ -40,48 +40,12 @@
 }
 
 /* ── Tab track ──────────────────────────────────────────────────────────── */
-.premium-tabs-scroll {
-  margin-bottom: var(--sp-5);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
 
-.premium-tabs-scroll::-webkit-scrollbar { display: none; }
 
-.premium-tabs-track {
-  display: inline-flex;
-  gap: var(--sp-1);
-  padding: var(--sp-1);
-  background: var(--surface-sunken);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-full);
-}
 
-.premium-tab-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: 0.55rem 1.1rem;
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  white-space: nowrap;
-  color: var(--text-muted);
-  background: transparent;
-  border: none;
-  border-radius: var(--r-full);
-  cursor: pointer;
-  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
-}
 
-.premium-tab-pill:hover { color: var(--text-main); }
 
-.premium-tab-pill.active,
-.premium-tab-pill.active-mirror,
-.premium-tab-pill.active-affirm {
-  background: var(--grad-brand);
-  color: var(--on-primary);
-  box-shadow: var(--shadow-sm), var(--shadow-glow);
-}
+
 
 /* ── List cards ─────────────────────────────────────────────────────────── */
 .ticket-card-glass,
@@ -120,10 +84,6 @@
     border-radius: var(--r-lg);
   }
 
-  .premium-tab-pill {
-    padding: 0.5rem 0.85rem;
-    font-size: var(--fs-xs);
-  }
 
   .ticket-card-glass,
   .thread-card-glass,

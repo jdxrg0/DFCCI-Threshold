@@ -6,6 +6,7 @@ import ThreadCard from '../components/ThreadCard';
 import ThreadSkeleton from '../components/ThreadSkeleton';
 import { useLanguage } from '../context/LanguageContext';
 import PageHeader from '../components/PageHeader';
+import ModuleTabs from '../components/ModuleTabs';
 
 // ── Collapsible folder for a single recipient ──────────────────────────────
 const RecipientFolder = ({ name, threads }) => {
@@ -119,6 +120,13 @@ const MirrorDashboard = () => {
   const totalPages = Math.ceil(displayItems.length / itemsPerPage) || 1;
   const currentItems = displayItems.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
+  const TABS = [
+    { id: 'received', label: t('received'), short: 'Received', Icon: Inbox },
+    { id: 'sent',     label: t('sent'),     short: 'Sent',     Icon: Send  },
+    { id: 'archive',  label: t('archive'),  short: 'Archive',  Icon: Archive },
+    { id: 'deleted',  label: t('deleted'),  short: 'Deleted',  Icon: Trash2 },
+  ];
+
   return (
     <div className="container mirror-dashboard-container" style={{ maxWidth: '800px' }}>
       
@@ -143,30 +151,12 @@ const MirrorDashboard = () => {
         />
       </div>
 
-      {/* ── premium SLIDING TABS TRACK ── */}
-      <div className="premium-tabs-scroll">
-        <div className="premium-tabs-track">
-          {[
-            { key: 'received', label: t('received'), Icon: Inbox },
-            { key: 'sent',     label: t('sent'),     Icon: Send  },
-            { key: 'archive',  label: t('archive'),  Icon: Archive },
-            { key: 'deleted',  label: t('deleted'),  Icon: Trash2 },
-          ].map(({ key, label, Icon }) => {
-            const isActive = activeTab === key;
-            return (
-              <button
-                key={key}
-                className={`premium-tab-pill ${isActive ? 'active-mirror' : ''}`}
-                onClick={() => setActiveTab(key)}
-                title={label}
-              >
-                <Icon size={16} />
-                <span>{label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <ModuleTabs
+        tabs={TABS}
+        activeId={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="Gentle Mirror sections"
+      />
 
       {error && <p style={{ color: '#B91C1C' }}>{error}</p>}
 

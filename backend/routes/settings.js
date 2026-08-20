@@ -1,7 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const AppSetting = require('../models/AppSetting');
-const auth = require('../middleware/authMiddleware');
+const { requireAuth, requireRole } = require('../middleware/authMiddleware');
+
+// These settings drive what the automation bot posts and where it posts it,
+// so they are admin-only. The middleware was imported here from the start but
+// never applied, which left the dispatch target open to anyone.
+router.use(requireAuth);
+router.use(requireRole(['ADMIN']));
 
 // Get Weekly Code Config
 router.get('/weekly-code', async (req, res) => {

@@ -2,6 +2,8 @@ const cron = require('node-cron');
 const mongoose = require('mongoose');
 const Schedule = require('../models/Schedule');
 const AppSetting = require('../models/AppSetting');
+const github = require('../services/github');
+const { WEEKLY_CODE_WORKFLOW, ensureWeeklyCodeWorkflow } = require('../services/weeklyCodeWorkflow');
 
 /* A queue item's `parsedRoles` is a Mongoose Map when it comes off a document
    and a plain object when it comes off a lean query or a request body. These
@@ -59,10 +61,20 @@ class AutomationScheduler {
 
   async init() {
     try {
+      // The single most common reason this module goes quiet. Every timer below
+      // still registers — they simply have nothing to dispatch to — so this is
+      // a warning at startup rather than a refusal to start.
+      if (!github.hasPat()) {
+        console.warn(
+          '[Scheduler] GITHUB_PAT is not set. Timers will run, but every dispatch will fail ' +
+          'and no schedule can be created or edited. See GET /api/automation/health.'
+        );
+      }
+
       const schedules = await Schedule.find();
       const activeCount = schedules.filter(s => s.isActive !== false).length;
       console.log(`[Scheduler] Found ${schedules.length} schedules (${activeCount} active). Starting timers...`);
-      
+
       schedules.forEach(schedule => {
         try {
           this.addJob(schedule);
@@ -102,7 +114,7 @@ class AutomationScheduler {
     try {
       const Submission = require('../models/Submission');
       const Member = require('../models/Member');
-      
+
       const pendingSubmissions = await Submission.find({ isComplete: false }).populate('scheduleId');
       if (pendingSubmissions.length === 0) {
         console.log('[Scheduler] No pending submissions found. Skipping Reader Bot.');
@@ -112,8 +124,6 @@ class AutomationScheduler {
       console.log(`[Scheduler] Found ${pendingSubmissions.length} pending submissions. Preparing to dispatch Reader Bot...`);
 
       const allMembers = await Member.find();
-      const owner = 'd0ul0s';
-      const repo = 'Residential-Proxy-Method';
 
       for (const submission of pendingSubmissions) {
         const schedule = submission.scheduleId;
@@ -124,11 +134,11 @@ class AutomationScheduler {
         if (!targetQueueItem) continue;
 
         const chatsToCheck = [];
-        
+
         // The same rule the report endpoint completes against, so the bot never
         // reads a chat whose reply could not count towards completion.
         const requiredRoles = Schedule.requiredRolesFor(targetQueueItem);
-        
+
         for (const role of requiredRoles) {
           const assignedName = roleValue(targetQueueItem.parsedRoles, role);
           const member = allMembers.find(m => m.name.toLowerCase() === String(assignedName).toLowerCase());
@@ -139,22 +149,16 @@ class AutomationScheduler {
 
         if (chatsToCheck.length > 0) {
           console.log(`[Scheduler] Dispatching check-replies.yml for ${submission.referenceCode}...`);
-          
-          await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/check-replies.yml/dispatches`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `token ${process.env.GITHUB_PAT}`,
-              'Accept': 'application/vnd.github.v3+json',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              ref: 'main',
-              inputs: {
-                reference_code: submission.referenceCode,
-                chats_to_check: JSON.stringify(chatsToCheck)
-              }
-            })
+
+          const result = await github.dispatchWorkflow('check-replies.yml', {
+            reference_code: submission.referenceCode,
+            chats_to_check: JSON.stringify(chatsToCheck)
           });
+          // The reader bot has no run history of its own, so a failure that is
+          // not logged here is a confirmation that silently never gets read.
+          if (!result.ok) {
+            console.error(`[Scheduler] Reader bot dispatch failed for ${submission.referenceCode}: ${result.detail}`);
+          }
         }
       }
     } catch (error) {
@@ -169,7 +173,7 @@ class AutomationScheduler {
         setting = new AppSetting({ key: 'weekly_code_config', value: { template: 'DFCCI-S-LU-{DATE}' } });
       }
       const value = { ...setting.value };
-      
+
       // Calculate MMDDYY based on next Sunday's date. This cron fires on Manila
       // time, so the Sunday it means is the one on the Manila calendar.
       const today = parseDateKey(manilaDateKey());
@@ -180,7 +184,7 @@ class AutomationScheduler {
       const dd = String(date.getUTCDate()).padStart(2, '0');
       const yy = String(date.getUTCFullYear()).slice(-2);
       const code = (value.template || 'DFCCI-S-LU-{DATE}').replace(/{DATE}/gi, `${mm}${dd}${yy}`);
-      
+
       value.currentCode = code;
       value.lastGeneratedDate = new Date();
       setting.value = value;
@@ -208,6 +212,13 @@ class AutomationScheduler {
       return;
     }
 
+    // node-cron throws on a malformed pattern. Checking first turns "the whole
+    // schedule silently has no timers" into a message naming the bad field,
+    // and keeps a bad codeCronTime from costing the main job its timer too.
+    if (!cron.validate(schedule.cronTime)) {
+      throw new Error(`cronTime "${schedule.cronTime}" is not a valid cron expression`);
+    }
+
     this.log(`[Scheduler] addJob called for scheduleId: ${id} with cronTime: ${schedule.cronTime}`);
 
     // 1. Main Group Chat Job
@@ -226,13 +237,24 @@ class AutomationScheduler {
     // 3. Confirmation Code Job (if enabled)
     let codeJob = null;
     if (schedule.enableCodeBroadcast && schedule.codeCronTime) {
-      codeJob = cron.schedule(schedule.codeCronTime, () => {
-        this.triggerGitHubAction(id, 'CODE');
-      }, { scheduled: true, timezone: "UTC" });
+      if (cron.validate(schedule.codeCronTime)) {
+        codeJob = cron.schedule(schedule.codeCronTime, () => {
+          this.triggerGitHubAction(id, 'CODE');
+        }, { scheduled: true, timezone: "UTC" });
+      } else {
+        this.log(`[Scheduler] codeCronTime "${schedule.codeCronTime}" on ${id} is invalid — code broadcast not registered.`);
+      }
     }
 
     this.jobs.set(id, { mainJob, reminderJob, codeJob });
     console.log(`[Scheduler] Added jobs for ${id} (Main, Reminder, Code enabled: ${!!codeJob})`);
+  }
+
+  /* Which schedules actually hold timers in this process. An active schedule
+     missing from this list is the signature of a cronTime rejected at startup,
+     and is otherwise invisible until the run that never happens. */
+  registeredJobIds() {
+    return Array.from(this.jobs.keys());
   }
 
   removeJob(id) {
@@ -444,7 +466,7 @@ class AutomationScheduler {
     // sends one message per task, so an undeduped list is a duplicate nudge.
     const seenTasks = new Set();
     const uniqueTasks = reminderTasks.filter(task => {
-      const key = `${task.url} ${task.message}`;
+      const key = `${task.url}\u0000${task.message}`;
       if (seenTasks.has(key)) return false;
       seenTasks.add(key);
       return true;
@@ -525,33 +547,18 @@ class AutomationScheduler {
         return { ok: false, status: 'skipped', detail: resolved.reason, resolved };
       }
 
-      const owner = 'd0ul0s';
-      const repo = 'Residential-Proxy-Method';
       this.log(`[Scheduler] Dispatching to GitHub API: ${schedule.githubFileName} (${resolved.reminderTasks.length} direct message(s))`);
 
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${schedule.githubFileName}/dispatches`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `token ${process.env.GITHUB_PAT}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ref: 'main',
-          inputs: {
-            dynamic_message: resolved.message || "NO_MESSAGE",
-            code_message: resolved.codeMessage || "NO_MESSAGE",
-            reminder_tasks: JSON.stringify(resolved.reminderTasks)
-          }
-        })
+      const response = await github.dispatchWorkflow(schedule.githubFileName, {
+        dynamic_message: resolved.message || "NO_MESSAGE",
+        code_message: resolved.codeMessage || "NO_MESSAGE",
+        reminder_tasks: JSON.stringify(resolved.reminderTasks)
       });
 
       if (!response.ok) {
-        const errorData = await response.text();
-        const detail = `GitHub returned ${response.status}: ${errorData.slice(0, 240)}`;
-        this.log(`[Scheduler] Failed to trigger ${schedule.githubFileName}. ${detail}`);
-        await this.recordRun(id, { status: 'error', actionType, trigger, detail });
-        return { ok: false, status: 'error', detail, resolved };
+        this.log(`[Scheduler] Failed to trigger ${schedule.githubFileName}. ${response.detail}`);
+        await this.recordRun(id, { status: 'error', actionType, trigger, detail: response.detail });
+        return { ok: false, status: 'error', detail: response.detail, resolved };
       }
 
       this.log(`[Scheduler] Successfully triggered GitHub workflow for ${schedule.scheduleName}`);
@@ -562,13 +569,11 @@ class AutomationScheduler {
         ? `Dispatched for ${resolved.items.join(', ')}`
         : 'Dispatched from the raw template';
       // GitHub's own clock, taken off the 204's header, so the run lookup's
-      // created floor needs no allowance for skew. Reading a header cannot fail
-      // and costs no request: the run itself is matched later, on demand.
-      const ghDate = new Date(response.headers.get('date') || Date.now());
+      // created floor needs no allowance for skew.
       await this.recordRun(id, {
         status: 'success', actionType, trigger, detail, recipients,
         ghWorkflowFile: schedule.githubFileName,
-        ghDispatchedAt: Number.isNaN(ghDate.getTime()) ? new Date() : ghDate,
+        ghDispatchedAt: response.date,
         ghLookupState: 'pending'
       });
 
@@ -585,7 +590,7 @@ class AutomationScheduler {
     try {
       const AppSetting = require('../models/AppSetting');
       const setting = await AppSetting.findOne({ key: 'weekly_code_config' });
-      
+
       if (this.weeklyCodeDispatchCronJob) {
         this.weeklyCodeDispatchCronJob.stop();
         this.weeklyCodeDispatchCronJob = null;
@@ -615,32 +620,27 @@ class AutomationScheduler {
       const { currentCode, dispatchUrl, dispatchMessage } = setting.value;
       const codeToUse = currentCode || 'NOT_GENERATED';
       let message = dispatchMessage || 'Here is the code: {WeeklyCode}';
-      
+
       message = message.replace(/{WeeklyCode}/gi, codeToUse);
 
-      const owner = 'd0ul0s';
-      const repo = 'Residential-Proxy-Method';
-      const githubFileName = 'send-weekly-code.yml';
-      
-      const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/actions/workflows/${githubFileName}/dispatches`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `token ${process.env.GITHUB_PAT}`,
-          'Accept': 'application/vnd.github.v3+json',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          ref: 'main',
-          inputs: {
-            target_url: dispatchUrl,
-            message: message
-          }
-        })
+      // This workflow was never part of the bot repository, so the dispatch
+      // below used to 404 every single week. Create it if it is not there.
+      const ensured = await ensureWeeklyCodeWorkflow();
+      if (!ensured.ok) {
+        console.error(`[Scheduler] Cannot dispatch the weekly code: ${ensured.detail}`);
+        return;
+      }
+
+      const response = await github.dispatchWorkflow(WEEKLY_CODE_WORKFLOW, {
+        target_url: dispatchUrl,
+        message
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error(`[Scheduler] Failed to trigger ${githubFileName}:`, errorData);
+        console.error(`[Scheduler] Failed to trigger ${WEEKLY_CODE_WORKFLOW}: ${response.detail}`);
+        if (ensured.created) {
+          console.error('[Scheduler] The workflow was created moments ago; GitHub may need a minute before it accepts a dispatch for it.');
+        }
       } else {
         console.log(`[Scheduler] Successfully dispatched Weekly Code to ${dispatchUrl}`);
       }

@@ -7,6 +7,7 @@ import PopupModal from '../components/PopupModal';
 import PageHeader from '../components/PageHeader';
 import { renderAvatarHelper } from '../utils/avatarHelper';
 import UsageTrendChart from '../components/UsageTrendChart';
+import ModuleTabs from '../components/ModuleTabs';
 import {
   AlertTriangle,
   ArrowRight,
@@ -86,6 +87,18 @@ const EMPTY_USER_STATS = { total: 0, verified: 0, unverified: 0, byRole: {} };
 const BULK_ROLES = ['MEMBER', 'COUNSELOR', 'YOUTH_TREASURER', 'ADMIN'];
 
 const TICKET_TONE = { bug: 'danger', feature: 'info', question: 'violet' };
+
+/* The mobile bottom bar keeps the first four entries it is handed and folds the
+   rest into a "More" sheet, so it is fed its own order: the four sections an
+   admin opens daily lead, the other five follow in their rail order. The rail
+   itself is untouched — it reads `tabs` directly. */
+const BOTTOM_TAB_ORDER = [
+  'users', 'signups', 'tickets', 'emails',
+  'deletion-requests', 'restore-requests', 'recently-deleted', 'audit', 'limits',
+];
+
+// Rail labels too long for a thumb-width column.
+const BOTTOM_TAB_SHORT = { limits: 'Limits' };
 
 /* The audit feed stores the raw enum. Printed verbatim the table reads like a
    stack trace, so every action the backend can write gets a label here. */
@@ -863,6 +876,21 @@ const AdminPanel = () => {
     { id: 'audit', label: 'Audit', icon: ScrollText, count: 0 },
     { id: 'limits', label: 'Platform Limits', icon: HardDrive, count: 0 },
   ], [liveSignups, deletionRequests.length, restoreRequests.length, openTickets, t]);
+
+  // Same sections, reordered for the thumb bar. ModuleTabs expects `Icon`, the
+  // rail reads `tab.icon`, so the field is mapped over here rather than renamed
+  // on `tabs`. An id that is not in `tabs` is dropped and a section added to
+  // `tabs` later still reaches the sheet, so the two lists cannot fall apart.
+  const bottomTabs = useMemo(() => {
+    const byId = new Map(tabs.map((tab) => [tab.id, tab]));
+    const ordered = BOTTOM_TAB_ORDER.map((id) => byId.get(id)).filter(Boolean);
+    const rest = tabs.filter((tab) => !BOTTOM_TAB_ORDER.includes(tab.id));
+    return [...ordered, ...rest].map(({ icon, ...tab }) => ({
+      ...tab,
+      Icon: icon,
+      short: BOTTOM_TAB_SHORT[tab.id] || tab.short,
+    }));
+  }, [tabs]);
 
   const visibleTickets = useMemo(
     () => (ticketStatus ? tickets.filter((tk) => tk.status === ticketStatus) : tickets),
@@ -2309,6 +2337,18 @@ const AdminPanel = () => {
             );
           })}
         </nav>
+
+        {/* Mobile only: the rail above stays the desktop navigation. No
+            panelIdPrefix — the rail already owns the adm-tab-* / adm-panel-*
+            ids and repeating them here would put duplicate ids in the DOM. */}
+        <ModuleTabs
+          tabs={bottomTabs}
+          activeId={activeTab}
+          onChange={setActiveTab}
+          ariaLabel="Admin sections"
+          desktop={false}
+          moreLabel="More"
+        />
 
         <div
           className="adm-panel"

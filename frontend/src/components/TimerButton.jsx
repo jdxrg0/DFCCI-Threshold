@@ -19,7 +19,7 @@ const TimerButton = ({
   customStyle = {},
   module = "mirror",  // "mirror" or "affirmation"
 }) => {
-  const { lang, t } = useLanguage();
+  const { t } = useLanguage();
   const [isCounting, setIsCounting] = useState(false);
   const [timeLeft, setTimeLeft] = useState(duration);
   const [message, setMessage] = useState(null);
@@ -74,10 +74,10 @@ const TimerButton = ({
     e.preventDefault();
     if (disabled || loading) return;
     const pool = module === 'affirmation'
-      ? (AFFIRMATION_MESSAGES[lang] || AFFIRMATION_MESSAGES['en'])
+      ? AFFIRMATION_MESSAGES.en
       : module === 'devotional'
-      ? (DEVOTIONAL_MESSAGES[lang] || DEVOTIONAL_MESSAGES['en'])
-      : (MIRROR_MESSAGES[lang] || MIRROR_MESSAGES['en']);
+      ? DEVOTIONAL_MESSAGES.en
+      : MIRROR_MESSAGES.en;
     const random = pool[Math.floor(Math.random() * pool.length)];
     setMessage(random);
     setTimeLeft(duration);

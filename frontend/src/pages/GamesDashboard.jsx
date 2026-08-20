@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import ThreadSkeleton from '../components/ThreadSkeleton';
 import PageHeader from '../components/PageHeader';
+import ModuleTabs from '../components/ModuleTabs';
 
 const GamesDashboard = () => {
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('games_activeTab') || 'quizzes');
@@ -77,6 +78,12 @@ const GamesDashboard = () => {
     return <span style={{ color: 'var(--text-muted)', fontWeight: '700', fontSize: '0.85rem' }}>#{index + 1}</span>;
   };
 
+  const TABS = [
+    { id: 'quizzes', label: t('games_quizzes'), short: 'Quizzes', Icon: Gamepad2 },
+    { id: 'leaderboard', label: t('games_leaderboard'), short: 'Ranks', Icon: Trophy },
+    { id: 'my_stats', label: t('games_my_stats'), short: 'My Stats', Icon: BarChart3 },
+  ];
+
   return (
     <div className="container mirror-dashboard-container" style={{ maxWidth: '800px', padding: 0 }}>
       {/* ── BREATHTAKING MESH GRADIENT GAMES BANNER ── */}
@@ -97,23 +104,12 @@ const GamesDashboard = () => {
       </div>
 
       {/* Tab Bar */}
-      <div className="games-tabs-glass">
-        {[
-          { key: 'quizzes', label: t('games_quizzes'), Icon: Gamepad2 },
-          { key: 'leaderboard', label: t('games_leaderboard'), Icon: Trophy },
-          { key: 'my_stats', label: t('games_my_stats'), Icon: BarChart3 },
-        ].map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            className={`games-tab-btn-glass ${activeTab === key ? 'active' : ''}`}
-            onClick={() => setActiveTab(key)}
-            title={label}
-          >
-            <Icon size={16} />
-            <span style={{ fontSize: '0.85rem' }}>{label}</span>
-          </button>
-        ))}
-      </div>
+      <ModuleTabs
+        tabs={TABS}
+        activeId={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="Games sections"
+      />
 
       {error && <p style={{ color: '#EF4444', marginBottom: '1rem', fontWeight: '600' }}>{error}</p>}
 

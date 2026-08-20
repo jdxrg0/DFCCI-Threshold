@@ -355,6 +355,9 @@ export default function AutomationDashboard() {
   const [availableRoles, setAvailableRoles] = useState([]);
   const [assignments, setAssignments] = useState({});
   const [weeklyCodeConfig, setWeeklyCodeConfig] = useState(null);
+  /* Why nothing is going out. Null until the probe answers, so a slow check
+     never flashes a scary banner on a hub that is working fine. */
+  const [health, setHealth] = useState(null);
 
   // ── Chrome ──────────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
@@ -431,6 +434,20 @@ export default function AutomationDashboard() {
     }
   }, [toast]);
 
+  /* The dependencies this page cannot see for itself — the GitHub token, the
+     workflow files, whether the timers this schedule needs actually exist in
+     the server process. Without it a missing token looks like a hub that has
+     simply never been used. */
+  const fetchHealth = useCallback(async () => {
+    try {
+      const res = await api.get('/automation/health');
+      setHealth(res.data);
+    } catch {
+      // The probe is diagnostics; the schedules themselves must still render.
+      setHealth(null);
+    }
+  }, []);
+
   const fetchWeeklyCodeConfig = useCallback(async () => {
     try {
       const res = await api.get('/settings/weekly-code');
@@ -459,6 +476,7 @@ export default function AutomationDashboard() {
       await Promise.all([
         fetchSchedules(),
         fetchWeeklyCodeConfig(),
+        fetchHealth(),
         (async () => {
           try {
             const res = await api.get('/calendar');
@@ -482,7 +500,7 @@ export default function AutomationDashboard() {
     load();
 
     return () => { cancelled = true; };
-  }, [fetchSchedules, fetchWeeklyCodeConfig]);
+  }, [fetchSchedules, fetchWeeklyCodeConfig, fetchHealth]);
 
   /* Role schedules rebuild their per-date queue from the serving calendar every
      time the template changes, so it is derived rather than stored. The rebuild
@@ -994,6 +1012,23 @@ export default function AutomationDashboard() {
           </>
         }
       />
+
+      {/* ── Why nothing is sending ── */}
+      {health && !health.ok && health.problems?.length > 0 && (
+        <div className="ah-callout ah-callout--danger" style={{ marginBottom: 'var(--sp-4)' }}>
+          <AlertTriangle size={16} />
+          <div style={{ minWidth: 0 }}>
+            <strong>
+              {health.problems.length === 1
+                ? 'One thing is stopping this from working'
+                : `${health.problems.length} things are stopping this from working`}
+            </strong>
+            <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.1rem' }}>
+              {health.problems.map((problem, i) => <li key={i}>{problem}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* ── Status rail ── */}
       <div className="ah-stats">

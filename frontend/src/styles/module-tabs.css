@@ -1,0 +1,287 @@
+/* ==========================================================================
+   DFCCI Threshold — Module section tabs
+   --------------------------------------------------------------------------
+   Paired with components/ModuleTabs.jsx. Every module's section navigation
+   renders from here, so the five modules can no longer drift into five
+   different tab bars the way they had (.ft-tabs, .premium-tab-pill,
+   .games-tab-btn-glass, and a hand-rolled inline bar in the devotional page).
+
+   Two presentations of one `tabs` array:
+     desktop (>768px)   .mod-tabs      — horizontal pill row
+     mobile  (<=768px)  .mod-bottomnav — fixed bottom bar
+
+   Exactly one is displayed at a time; display:none also drops the other out
+   of the accessibility tree, so a screen reader sees a single tablist.
+
+   Namespace: .mod-*
+   ========================================================================== */
+
+/* ── Desktop pill row ───────────────────────────────────────────────────── */
+.mod-tabs {
+  margin-bottom: var(--sp-5);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.mod-tabs::-webkit-scrollbar { display: none; }
+
+.mod-tabs__track {
+  display: inline-flex;
+  gap: var(--sp-1);
+  padding: var(--sp-1);
+  background: var(--surface-sunken);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-full);
+}
+
+.mod-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.55rem 1.15rem;
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.mod-tab:hover { color: var(--text-main); }
+
+.mod-tab.is-active {
+  background: var(--grad-brand);
+  color: var(--on-primary);
+  box-shadow: var(--shadow-sm), var(--shadow-glow);
+}
+
+.mod-tab__count {
+  --tone: var(--primary);
+  padding: 0.05rem 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--text-main) 10%, transparent);
+}
+
+/* Admin's rail colour-codes its counts by urgency; carry that vocabulary
+   through so a `tone` means the same thing in every module. Defined here
+   rather than borrowed from admin.css: those live on `.adm-page`, and the
+   bottom bar is portalled to <body>, well outside that scope. */
+.mod-tab__count[data-tone],
+.mod-bottomnav__count[data-tone] {
+  --tone-violet: #8b5cf6;
+  --tone-slate: #64748b;
+}
+
+.mod-tab__count[data-tone="ok"],
+.mod-bottomnav__count[data-tone="ok"] { --tone: var(--success); }
+.mod-tab__count[data-tone="warn"],
+.mod-bottomnav__count[data-tone="warn"] { --tone: var(--warning); }
+.mod-tab__count[data-tone="danger"],
+.mod-bottomnav__count[data-tone="danger"] { --tone: var(--danger); }
+.mod-tab__count[data-tone="info"],
+.mod-bottomnav__count[data-tone="info"] { --tone: var(--info); }
+.mod-tab__count[data-tone="brand"],
+.mod-bottomnav__count[data-tone="brand"] { --tone: var(--primary); }
+.mod-tab__count[data-tone="violet"],
+.mod-bottomnav__count[data-tone="violet"] { --tone: var(--tone-violet); }
+.mod-tab__count[data-tone="muted"],
+.mod-bottomnav__count[data-tone="muted"] { --tone: var(--tone-slate); }
+
+/* Mixed against --text-main rather than used raw, the way admin.css does it:
+   one rule then stays legible on light and dark themes alike. */
+.mod-tab__count[data-tone] {
+  color: color-mix(in srgb, var(--tone) 74%, var(--text-main));
+  background: color-mix(in srgb, var(--tone) 18%, transparent);
+}
+
+.mod-tab.is-active .mod-tab__count {
+  color: var(--on-primary);
+  background: color-mix(in srgb, #fff 26%, transparent);
+}
+
+/* ── Mobile bottom bar ──────────────────────────────────────────────────── */
+.mod-bottomnav {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900; /* above page content, below every modal layer */
+  align-items: stretch;
+  padding: var(--sp-1) var(--sp-1) calc(var(--sp-1) + env(safe-area-inset-bottom, 0px));
+  background: color-mix(in srgb, var(--bg-color) 88%, transparent);
+  border-top: 1px solid var(--hairline);
+  backdrop-filter: blur(14px) saturate(1.1);
+  -webkit-backdrop-filter: blur(14px) saturate(1.1);
+}
+
+/* The track holds one flex unit per tab and the "More" button holds one more,
+   so every column ends up the same width whether or not the module overflows. */
+.mod-bottomnav__track {
+  display: flex;
+  flex: var(--slots, 1) 1 0;
+  min-width: 0;
+}
+
+.mod-bottomnav__btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  padding: 0.4rem 0.15rem 0.35rem;
+  font: inherit;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.mod-bottomnav__btn.is-active { color: var(--primary); background: var(--tint-primary); }
+
+.mod-bottomnav__icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Counts ride the icon as a badge — there is no room to sit them beside the
+   label the way the desktop pills do. */
+.mod-bottomnav__count {
+  --tone: var(--primary);
+  position: absolute;
+  top: -0.3rem;
+  left: 60%;
+  min-width: 1rem;
+  padding: 0 0.2rem;
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1rem;
+  text-align: center;
+  color: var(--on-primary);
+  background: var(--tone);
+  border-radius: var(--r-full);
+}
+
+.mod-bottomnav__label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ── Overflow sheet ─────────────────────────────────────────────────────── */
+.mod-sheet {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000; /* over the bar it belongs to, under the page's own modals */
+  align-items: flex-end;
+  background: color-mix(in srgb, #000 55%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.mod-sheet__panel {
+  width: 100%;
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: var(--sp-3) var(--sp-3) calc(var(--sp-3) + env(safe-area-inset-bottom, 0px));
+  background: var(--surface-solid);
+  border-top: 1px solid var(--hairline);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: var(--shadow-lg);
+}
+
+.mod-sheet__panel:focus { outline: none; }
+
+.mod-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--sp-2) var(--sp-2);
+}
+
+.mod-sheet__title {
+  font-size: var(--fs-eyebrow);
+  font-weight: 800;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.mod-sheet__close {
+  display: inline-flex;
+  padding: 0.35rem;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--r-full);
+  cursor: pointer;
+}
+
+.mod-sheet__close:hover { color: var(--text-main); background: var(--tint-primary); }
+
+.mod-sheet__list { display: flex; flex-direction: column; gap: 0.2rem; }
+
+.mod-sheet__item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.75rem 0.8rem;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: left;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+
+.mod-sheet__itemlabel { flex: 1; min-width: 0; }
+
+.mod-sheet__item.is-active {
+  color: var(--primary);
+  font-weight: 800;
+  background: var(--tint-primary);
+  border-color: var(--ring);
+}
+
+/* ── The swap ───────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .mod-tabs { display: none; }
+  .mod-bottomnav { display: flex; }
+  .mod-sheet { display: flex; }
+
+  /* One rule pads every module's page clear of the fixed bar, so no page has
+     to carry its own bottom-padding number. Keyed off the bar's own presence
+     rather than a class ModuleTabs toggles: two bars overlap briefly during a
+     route change, and the outgoing page's cleanup would strip the class out
+     from under the incoming one. :has() cannot get that wrong. */
+  body:has(.mod-bottomnav) .main-content {
+    padding-bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mod-tab,
+  .mod-bottomnav__btn { transition: none; }
+}

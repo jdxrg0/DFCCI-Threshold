@@ -2,15 +2,27 @@ const express = require('express');
 const router = express.Router();
 const Schedule = require('../models/Schedule');
 const Submission = require('../models/Submission');
+const AppSetting = require('../models/AppSetting');
 const automationScheduler = require('../services/automationScheduler');
-const { GH_OWNER, GH_REPO, ghHeaders, floorSec, listRunsSince } = require('../services/githubRuns');
+const { floorSec, listRunsSince } = require('../services/githubRuns');
+const github = require('../services/github');
+const { WEEKLY_CODE_WORKFLOW } = require('../services/weeklyCodeWorkflow');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 
 // Apply auth and admin role check to all automation routes
 router.use(requireAuth);
 router.use(requireRole(['ADMIN']));
 
-const GH_API = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/.github/workflows`;
+/* A missing or rejected token is a server configuration fault, not a bad
+   request, and it is the single most common reason this module stops working.
+   Answering 503 with the reason lets the dashboard show something actionable
+   instead of GitHub's own "Bad credentials". */
+const githubFailure = (res, error, fallbackMsg) => {
+  if (error.isMissingPat) {
+    return res.status(503).json({ msg: error.message, error: 'GITHUB_PAT_MISSING' });
+  }
+  return res.status(500).json({ msg: fallbackMsg, error: error.message });
+};
 
 /**
  * The Puppeteer workflow that actually posts to Messenger. One file per
@@ -68,38 +80,11 @@ jobs:
 `;
 
 /** Create the workflow file on GitHub. Returns the new file's SHA. */
-const pushWorkflow = async (fileName, scheduleName, chatUrl, commitMessage, sha) => {
-  const body = {
-    message: commitMessage,
-    content: Buffer.from(buildWorkflowYaml(scheduleName, chatUrl)).toString('base64'),
-    branch: 'main'
-  };
-  if (sha) body.sha = sha;
-
-  const response = await fetch(`${GH_API}/${fileName}`, {
-    method: 'PUT',
-    headers: ghHeaders(),
-    body: JSON.stringify(body)
-  });
-
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || 'Failed to write schedule to GitHub');
-  return data.content.sha;
-};
+const pushWorkflow = (fileName, scheduleName, chatUrl, commitMessage, sha) =>
+  github.putWorkflow(fileName, buildWorkflowYaml(scheduleName, chatUrl), commitMessage, sha);
 
 /** GitHub rejects a write whose SHA is stale, so always read the live one. */
-const latestSha = async (fileName, fallback) => {
-  try {
-    const res = await fetch(`${GH_API}/${fileName}`, { headers: ghHeaders() });
-    if (res.ok) {
-      const fileData = await res.json();
-      return fileData.sha;
-    }
-  } catch (e) {
-    console.warn('Failed to fetch latest sha, using cached', e.message);
-  }
-  return fallback;
-};
+const latestSha = async (fileName, fallback) => (await github.getWorkflowSha(fileName)) || fallback;
 
 /** Stamp every queue item that is missing a confirmation code with one. */
 const fillConfirmationCodes = (messageQueue, codeTemplate) => {
@@ -160,10 +145,7 @@ router.post('/schedule', async (req, res) => {
 
   } catch (error) {
     console.error('GitHub API Error:', error.message);
-    res.status(500).json({
-      msg: 'Failed to push schedule to GitHub',
-      error: error.message
-    });
+    githubFailure(res, error, 'Failed to push schedule to GitHub');
   }
 });
 
@@ -240,10 +222,7 @@ router.put('/schedule/:id', async (req, res) => {
 
   } catch (error) {
     console.error('Update Schedule Error:', error.message);
-    res.status(500).json({
-      msg: 'Failed to update schedule on GitHub',
-      error: error.message
-    });
+    githubFailure(res, error, 'Failed to update schedule on GitHub');
   }
 });
 
@@ -341,7 +320,7 @@ router.post('/schedule/:id/duplicate', async (req, res) => {
     res.status(201).json({ msg: 'Schedule duplicated (paused)', data: saved });
   } catch (error) {
     console.error('Duplicate Schedule Error:', error.message);
-    res.status(500).json({ msg: 'Failed to duplicate schedule', error: error.message });
+    githubFailure(res, error, 'Failed to duplicate schedule');
   }
 });
 
@@ -570,20 +549,21 @@ router.delete('/schedule/:id', async (req, res) => {
       return res.status(404).json({ msg: 'Schedule not found' });
     }
 
-    // Delete from GitHub Actions
-    const ghResponse = await fetch(`${GH_API}/${schedule.githubFileName}`, {
-      method: 'DELETE',
-      headers: ghHeaders(),
-      body: JSON.stringify({
-        message: `Delete schedule: ${schedule.scheduleName}`,
-        sha: await latestSha(schedule.githubFileName, schedule.githubFileSha),
-        branch: 'main'
-      })
-    });
-
-    if (!ghResponse.ok) {
-      const errorData = await ghResponse.json();
-      console.warn('GitHub deletion warning:', errorData.message);
+    // Delete from GitHub Actions. A workflow file that cannot be removed is
+    // worth a warning, never a failed delete: leaving the row behind because
+    // its file lingers would strand the schedule in the dashboard forever.
+    try {
+      const ghResponse = await github.deleteWorkflow(
+        schedule.githubFileName,
+        `Delete schedule: ${schedule.scheduleName}`,
+        await latestSha(schedule.githubFileName, schedule.githubFileSha)
+      );
+      if (!ghResponse.ok) {
+        const errorData = await ghResponse.json().catch(() => ({}));
+        console.warn('GitHub deletion warning:', errorData.message);
+      }
+    } catch (e) {
+      console.warn('GitHub deletion skipped:', e.message);
     }
 
     // Delete from DB
@@ -622,6 +602,96 @@ router.patch('/schedule/:id/queue', async (req, res) => {
   } catch (error) {
     console.error('Update Queue Error:', error.message);
     res.status(500).json({ msg: 'Server error updating queue' });
+  }
+});
+
+// GET /api/automation/health — why is the hub not sending?
+//
+// Every dependency this module has, probed live and reported as plain facts:
+// the token, the repo, the timers actually registered in this process, and
+// whether each schedule's workflow file still exists on GitHub. It exists so
+// "nothing is going out" can be answered without reading server logs.
+router.get('/health', async (req, res) => {
+  try {
+    const gh = await github.probe();
+    const schedules = await Schedule.find().select('scheduleName cronTime isActive githubFileName lastRun').lean();
+    const registered = automationScheduler.registeredJobIds();
+    const problems = [...gh.problems];
+
+    const scheduleRows = schedules.map(s => {
+      const active = s.isActive !== false;
+      const timersRunning = registered.includes(String(s._id));
+      // null, not false: with no Actions read the file list is unknown, and
+      // reporting "missing" would send an admin chasing a file that is there.
+      const workflowPresent = gh.workflowFiles ? gh.workflowFiles.includes(s.githubFileName) : null;
+
+      if (active && !timersRunning) {
+        problems.push(`"${s.scheduleName}" is active but has no timer in this process — its cronTime ("${s.cronTime}") was most likely rejected at startup.`);
+      }
+      if (workflowPresent === false) {
+        problems.push(`"${s.scheduleName}" points at ${s.githubFileName}, which is not on ${gh.owner}/${gh.repo}. Re-save the schedule to recreate it.`);
+      }
+
+      return {
+        id: String(s._id),
+        scheduleName: s.scheduleName,
+        cronTime: s.cronTime,
+        isActive: active,
+        timersRunning,
+        githubFileName: s.githubFileName,
+        workflowPresent,
+        lastRun: s.lastRun || null
+      };
+    });
+
+    const setting = await AppSetting.findOne({ key: 'weekly_code_config' }).lean();
+    const weeklyCode = setting && setting.value ? setting.value : null;
+    if (weeklyCode && weeklyCode.enableDispatch) {
+      // Enabled with no target reads as configured everywhere in the UI, but
+      // the cron is never even registered — the dispatcher returns early.
+      if (!weeklyCode.dispatchUrl) {
+        problems.push('Weekly code auto-dispatch is switched on but has no target chat URL, so it never runs. Set one in the weekly-code panel, or switch it off.');
+      }
+      if (gh.workflowFiles && !gh.workflowFiles.includes(WEEKLY_CODE_WORKFLOW)) {
+        problems.push(`Weekly code auto-dispatch is on, but ${WEEKLY_CODE_WORKFLOW} is not on the repo yet. It is created automatically on the next dispatch.`);
+      }
+    }
+
+    // A delete that could not reach GitHub — no token, most often — removes the
+    // row and leaves the workflow file. Harmless, but it accumulates and makes
+    // the repo's workflow list impossible to reconcile with the dashboard.
+    const claimed = new Set(schedules.map(s => s.githubFileName));
+    const orphanWorkflows = (gh.workflowFiles || [])
+      .filter(f => /^schedule-\d+\.yml$/.test(f) && !claimed.has(f));
+    if (orphanWorkflows.length > 0) {
+      problems.push(`${orphanWorkflows.length} workflow file(s) on the repo belong to no schedule: ${orphanWorkflows.join(', ')}. Safe to delete on GitHub.`);
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      ok: problems.length === 0,
+      github: gh,
+      scheduler: {
+        registeredJobs: registered.length,
+        schedules: scheduleRows.length,
+        active: scheduleRows.filter(s => s.isActive).length
+      },
+      weeklyCode: weeklyCode
+        ? {
+          currentCode: weeklyCode.currentCode || null,
+          lastGeneratedDate: weeklyCode.lastGeneratedDate || null,
+          enableDispatch: Boolean(weeklyCode.enableDispatch),
+          dispatchCron: weeklyCode.dispatchCron || null,
+          hasDispatchUrl: Boolean(weeklyCode.dispatchUrl)
+        }
+        : null,
+      schedules: scheduleRows,
+      orphanWorkflows,
+      problems
+    });
+  } catch (error) {
+    console.error('Automation Health Error:', error.message);
+    res.status(500).json({ msg: 'Server error probing automation health', error: error.message });
   }
 });
 

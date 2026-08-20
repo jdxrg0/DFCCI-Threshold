@@ -200,56 +200,6 @@
 .ft-spark svg { display: block; width: 100%; height: auto; overflow: visible; }
 
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
-.ft-tabs {
-  margin-bottom: var(--sp-5);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.ft-tabs::-webkit-scrollbar { display: none; }
-
-.ft-tabs__track {
-  display: inline-flex;
-  gap: var(--sp-1);
-  padding: var(--sp-1);
-  background: var(--surface-sunken);
-  border: 1px solid var(--hairline);
-  border-radius: var(--r-full);
-}
-
-.ft-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.55rem 1.15rem;
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  white-space: nowrap;
-  color: var(--text-muted);
-  background: transparent;
-  border: none;
-  border-radius: var(--r-full);
-  cursor: pointer;
-  transition: color var(--dur) var(--ease), background var(--dur) var(--ease);
-}
-
-.ft-tab:hover { color: var(--text-main); }
-
-.ft-tab.is-active {
-  background: var(--grad-brand);
-  color: var(--on-primary);
-  box-shadow: var(--shadow-sm), var(--shadow-glow);
-}
-
-.ft-tab__count {
-  padding: 0.05rem 0.4rem;
-  font-size: 0.68rem;
-  font-weight: 800;
-  border-radius: var(--r-full);
-  background: color-mix(in srgb, var(--text-main) 10%, transparent);
-}
-
-.ft-tab.is-active .ft-tab__count { background: color-mix(in srgb, #fff 26%, transparent); }
 
 /* ── Panels ─────────────────────────────────────────────────────────────── */
 .ft-panel {
@@ -1614,7 +1564,7 @@
 }
 
 @media (max-width: 768px) {
-  .ft-page { padding: var(--sp-3) var(--sp-3) 5.5rem; }
+  .ft-page { padding: var(--sp-3) var(--sp-3) var(--sp-6); }
 
   .ft-hero {
     padding: var(--sp-5) var(--sp-4);
@@ -1623,8 +1573,6 @@
   }
 
   .ft-panel { padding: var(--sp-4); border-radius: var(--r-md); }
-
-  .ft-tab { padding: 0.5rem 0.85rem; font-size: var(--fs-xs); }
 
   /* Table out, cards in */
   .ft-tablewrap { display: none; }

@@ -2154,47 +2154,6 @@ a.btn-primary:hover:not(:disabled) {
 }
 
 /* ============================================================
-   LANGUAGE SWITCHER
-   ============================================================ */
-
-.lang-switcher {
-  display: flex;
-  background-color: var(--surface);
-  border: 1px solid var(--border-color);
-  border-radius: 9999px;
-  padding: 3px;
-  gap: 2px;
-  justify-content: center;
-}
-
-.lang-btn {
-  background: none;
-  border: none;
-  border-radius: 9999px;
-  padding: 0.4rem 0.75rem;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s ease;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.lang-btn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: var(--text-main);
-}
-
-.lang-btn.active {
-  background-color: var(--primary);
-  color: #fff;
-  border-radius: 9999px;
-}
-
-
-/* ============================================================
    MESSAGE BUBBLE SYSTEM
    ============================================================ */
 
@@ -2334,10 +2293,6 @@ a.btn-primary:hover:not(:disabled) {
     display: block;
     font-size: 0.6rem;
   }
-}
-
-.lang-label {
-  letter-spacing: 0.5px;
 }
 
 /* ============================================================
@@ -4220,62 +4175,13 @@ a.btn-primary:hover:not(:disabled) {
 }
 
 /* ── Premium Tab Pill Layout ── */
-.premium-tabs-scroll {
-  width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none; /* Hide standard Firefox scrollbars */
-  -ms-overflow-style: none; /* Hide IE scrollbars */
-  margin-bottom: 2rem;
-  padding: 0.25rem 0;
-}
 
-.premium-tabs-scroll::-webkit-scrollbar {
-  display: none; /* Hide Chrome/Safari scrollbars */
-}
 
-.premium-tabs-track {
-  display: flex;
-  gap: 0.75rem;
-  width: max-content;
-  min-width: 100%;
-}
 
-.premium-tab-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
-  padding: 0.6rem 1.2rem;
-  border-radius: 9999px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  white-space: nowrap;
-}
 
-.premium-tab-pill:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: var(--text-main);
-  transform: translateY(-1px);
-}
 
-.premium-tab-pill.active-mirror {
-  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 50%, #06b6d4));
-  border-color: var(--primary);
-  color: white !important;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 35%, transparent);
-}
 
-.premium-tab-pill.active-affirmation {
-  background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 50%, #06b6d4));
-  border-color: var(--primary);
-  color: white !important;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 35%, transparent);
-}
+
 
 /* ── Premium Glass Input Custom Designs ── */
 
@@ -4600,45 +4506,9 @@ select.mirror-input-glass, select.affirmation-input-glass {
   border-color: color-mix(in srgb, var(--primary) 35%, transparent) !important;
 }
 
-.games-tabs-glass {
-  display: flex;
-  background: rgba(255, 255, 255, 0.02) !important;
-  border: 1px solid var(--surface-border) !important;
-  border-radius: 9999px !important;
-  padding: 0.25rem !important;
-  margin-bottom: 2rem !important;
-  gap: 0.25rem !important;
-  backdrop-filter: blur(8px) !important;
-  list-style: none;
-}
 
-.games-tab-btn-glass {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.65rem 1rem !important;
-  border: none !important;
-  background: transparent !important;
-  color: var(--text-muted) !important;
-  font-size: 0.9rem !important;
-  font-weight: 600 !important;
-  border-radius: 9999px !important;
-  cursor: pointer !important;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-}
 
-.games-tab-btn-glass:hover {
-  color: var(--text-main) !important;
-  background: rgba(255, 255, 255, 0.03) !important;
-}
 
-.games-tab-btn-glass.active {
-  background: var(--primary) !important;
-  color: var(--on-primary, #ffffff) !important;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 35%, transparent) !important;
-}
 
 /* Podium Towers */
 .games-podium-column-glass {
@@ -4747,17 +4617,7 @@ select.mirror-input-glass, select.affirmation-input-glass {
     opacity: 0.8 !important;
   }
 
-  .games-tabs-glass {
-    margin-bottom: 0.85rem !important;
-    padding: 0.2rem !important;
-    border-radius: 0.5rem !important;
-  }
 
-  .games-tab-btn-glass {
-    font-size: 0.75rem !important;
-    padding: 0.45rem 0.65rem !important;
-    border-radius: 0.35rem !important;
-  }
 
   .games-card-glass {
     padding: 1rem !important;

@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import ModuleTabs from '../components/ModuleTabs';
 
 /* ══════════════════════════════════════════════════════════════════════════
    Helpers
@@ -1391,12 +1392,14 @@ ${formattedDesc}
 
   const isCurrentLedgerMonth = ledgerYear === today.getFullYear() && ledgerMonth === today.getMonth();
 
+  // `short` feeds the mobile bottom bar, where each tab gets ~1/5 of the screen
+  // and the full labels ("Weekly Dues") would wrap or clip.
   const TABS = [
-    { id: 'overview', label: t('overview_tab') || 'Overview', icon: <Coins size={15} /> },
-    { id: 'dues', label: t('weekly_dues_tab') || 'Weekly Dues', icon: <Users size={15} />, count: ledgerData.members.length || null },
-    { id: 'budgets', label: 'Funds', icon: <Briefcase size={15} />, count: designatedFunds.length || null },
-    { id: 'insights', label: 'Insights', icon: <ChartColumn size={15} /> },
-    { id: 'activity', label: 'Activity', icon: <History size={15} /> },
+    { id: 'overview', label: t('overview_tab') || 'Overview', short: t('overview_tab_short') || 'Overview', Icon: Coins },
+    { id: 'dues', label: t('weekly_dues_tab') || 'Weekly Dues', short: t('weekly_dues_tab_short') || 'Dues', Icon: Users, count: ledgerData.members.length || null },
+    { id: 'budgets', label: 'Funds', short: 'Funds', Icon: Briefcase, count: designatedFunds.length || null },
+    { id: 'insights', label: 'Insights', short: 'Insights', Icon: ChartColumn },
+    { id: 'activity', label: 'Activity', short: 'Activity', Icon: History },
   ];
 
   /* ══════════════════════════════════════════════════════════════════════
@@ -1482,24 +1485,15 @@ ${formattedDesc}
         </div>
       </section>
 
-      {/* ── Tabs ── */}
-      <div className="ft-tabs">
-        <div className="ft-tabs__track" role="tablist">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              className={`ft-tab ${activeTab === tab.id ? 'is-active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.icon}
-              {tab.label}
-              {tab.count ? <span className="ft-tab__count">{tab.count}</span> : null}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* ── Section tabs ──
+          ModuleTabs renders both presentations itself: the desktop pill row
+          and the portalled mobile bottom bar. */}
+      <ModuleTabs
+        tabs={TABS}
+        activeId={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="Fund Tracker sections"
+      />
 
       {/* ══ OVERVIEW ══ */}
       {activeTab === 'overview' && (

@@ -11,6 +11,7 @@ import BibleVideos from '../components/BibleVideos';
 import PopupModal from '../components/PopupModal';
 import { renderAvatarHelper } from '../utils/avatarHelper';
 import PageHeader from '../components/PageHeader';
+import ModuleTabs from '../components/ModuleTabs';
 
 // ── Stat Pill ────────────────────────────────────────────────────────────────
 const StatPill = ({ icon, value, label, accent }) => (
@@ -581,14 +582,14 @@ const DevotionalDashboard = () => {
   };
 
   const tabs = [
-    { key: 'my', label: t('devo_my_tab') || 'Devotionals', Icon: Inbox },
-    { key: 'bible', label: 'Bible Tracker', Icon: BookOpen },
-    { key: 'videos', label: 'Why Bible?', Icon: Film },
-    ...(isLeader ? [{ key: 'leader', label: t('devo_leader_tab') || 'Leader View', Icon: Users }] : []),
+    { id: 'my', label: t('devo_my_tab') || 'Devotionals', short: 'Devos', Icon: Inbox },
+    { id: 'bible', label: 'Bible Tracker', short: 'Bible', Icon: BookOpen },
+    { id: 'videos', label: 'Why Bible?', short: 'Videos', Icon: Film },
+    ...(isLeader ? [{ id: 'leader', label: t('devo_leader_tab') || 'Leader View', short: 'Leader', Icon: Users }] : []),
   ];
 
   return (
-    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0 0.75rem 5rem' }}>
+    <div style={{ maxWidth: '600px', margin: '0 auto', padding: '0 0.75rem 1rem' }}>
       <PageHeader
         icon={BookHeart}
         title={t('devo_dashboard_title')}
@@ -605,42 +606,12 @@ const DevotionalDashboard = () => {
         }
       />
 
-      {/* ── Bottom Navigation Tabs ── */}
-      <div style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0,
-        backgroundColor: 'color-mix(in srgb, var(--card-bg) 85%, transparent)', 
-        backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-        borderTop: '1px solid var(--border-color)',
-        display: 'flex', justifyContent: 'space-around', alignItems: 'center',
-        padding: '0.35rem 0.5rem', paddingBottom: 'calc(0.35rem + env(safe-area-inset-bottom, 0px))',
-        zIndex: 100, boxShadow: '0 -4px 20px rgba(0,0,0,0.06)'
-      }}>
-        {tabs.map(({ key, label, Icon }) => {
-          const isActive = activeTab === key;
-          return (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              style={{
-                flex: 1, padding: '0.3rem', border: 'none', background: 'transparent',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.15rem',
-                color: isActive ? 'var(--primary)' : 'var(--text-muted)',
-                cursor: 'pointer', fontFamily: 'inherit', transition: 'color 0.2s'
-              }}
-            >
-              <div style={{
-                padding: '0.2rem 1rem', borderRadius: '999px',
-                backgroundColor: isActive ? 'var(--primary)' : 'color-mix(in srgb, var(--text-muted) 15%, transparent)',
-                color: isActive ? '#fff' : 'var(--text-muted)',
-                transition: 'background-color 0.2s, color 0.2s'
-              }}>
-                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-              </div>
-              <span style={{ fontSize: '0.55rem', fontWeight: isActive ? '800' : '600', textTransform: 'uppercase', letterSpacing: '0.3px' }}>{label}</span>
-            </button>
-          );
-        })}
-      </div>
+      <ModuleTabs
+        tabs={tabs}
+        activeId={activeTab}
+        onChange={setActiveTab}
+        ariaLabel="Devotional sections"
+      />
 
       {error && <p style={{ color: '#EF4444', textAlign: 'center', fontSize: '0.85rem' }}>{error}</p>}
 

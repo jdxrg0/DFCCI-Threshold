@@ -1,6 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const CalendarAssignment = require('../models/CalendarAssignment');
+const { requireAuth, requireRole } = require('../middleware/authMiddleware');
+
+// Every role-targeted schedule resolves against this calendar, and /clear
+// empties it outright, so the whole router is admin-only. Both pages that read
+// it — the Automation Hub and the Serving Calendar — are already admin views.
+router.use(requireAuth);
+router.use(requireRole(['ADMIN']));
 
 // Get all calendar assignments (optionally filter by month/year in future)
 router.get('/', async (req, res) => {

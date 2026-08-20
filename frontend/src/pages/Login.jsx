@@ -18,7 +18,7 @@ const Login = () => {
   const [confirmedName, setConfirmedName] = useState('');
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const { login, googleAuth } = useAuth();
-  const { t, lang } = useLanguage();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -142,10 +142,9 @@ const Login = () => {
             <>
               <div className="auth-google-wrapper">
                 <GoogleLogin
-                  key={lang}
                   onSuccess={handleGoogleSuccess}
                   onError={() => setError('Google login failed')}
-                  locale={lang === 'fil' ? 'tl' : 'en_US'}
+                  locale="en_US"
                 />
               </div>
 

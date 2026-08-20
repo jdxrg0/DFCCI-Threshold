@@ -4,9 +4,8 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-import { Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, Sun, Wallet, BookHeart, ChevronRight, Settings, Globe } from 'lucide-react';
+import { Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, Sun, Wallet, BookHeart, ChevronRight, Settings } from 'lucide-react';
 import ThemePanel, { ThemePanelContent } from './ThemePanel';
-import LanguageSwitcher from './LanguageSwitcher';
 import api from '../api';
 import logo from '../assets/logo.svg';
 import { renderAvatarHelper } from '../utils/avatarHelper';
@@ -46,15 +45,6 @@ const MODULE_MAP = [
     Icon: BookHeart,
   },
 ];
-
-// ── Mobile language section ────────────────────────────────────────────────
-const MobileLanguageSection = () => {
-  return (
-    <div style={{ width: '100%', paddingTop: '0.25rem' }}>
-      <LanguageSwitcher />
-    </div>
-  );
-};
 
 // ── Mobile hamburger theme section (expandable) ───────────────────────────
 const MobileThemeSection = ({ onClose }) => {
@@ -223,9 +213,6 @@ const Navbar = () => {
             </>
           )}
 
-          {/* Language switcher — desktop */}
-          <LanguageSwitcher compact />
-
           {/* Theme panel (palette icon — floating) */}
           <ThemePanel />
         </div>
@@ -312,13 +299,6 @@ const Navbar = () => {
 
             {/* Settings Card Footer */}
             <div className="mobile-menu-settings-card">
-              <div>
-                <span className="mobile-menu-section-title">
-                  <Globe size={14} /> {t('language')}
-                </span>
-                <MobileLanguageSection />
-              </div>
-
               <div>
                 <span className="mobile-menu-section-title">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r="0.5"/><circle cx="17.5" cy="10.5" r="0.5"/><circle cx="8.5" cy="7.5" r="0.5"/><circle cx="6.5" cy="12.5" r="0.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>

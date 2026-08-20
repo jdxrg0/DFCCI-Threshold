@@ -1,5 +1,5 @@
 require('dotenv').config({ path: './.env' });
-require('mongoose').connect('mongodb://dfcciUser:ex4BOmxkysQwp5kn@ac-my0qqce-shard-00-00.4plgq96.mongodb.net:27017,ac-my0qqce-shard-00-01.4plgq96.mongodb.net:27017,ac-my0qqce-shard-00-02.4plgq96.mongodb.net:27017/dfcci_threshold?ssl=true&authSource=admin&retryWrites=true&w=majority&appName=dfcciUser').then(async () => {
+require('mongoose').connect(process.env.MONGODB_URI).then(async () => {
     const Schedule = require('./models/Schedule');
     const schedule = await Schedule.findOne({ scheduleName: 'Trial 1' });
     

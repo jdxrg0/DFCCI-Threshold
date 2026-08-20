@@ -1,28 +1,24 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext } from 'react';
 import { translations } from '../data/i18n';
 
 const LanguageContext = createContext();
 
-export const LANGUAGES = [
-  { key: 'en',    label: 'English' },
-  { key: 'fil',   label: 'Filipino' },
-  { key: 'conyo', label: 'Conyo'   },
-];
+// English is the only supported language.
+export const LANG = 'en';
+
+// Earlier builds let users pick Filipino or Conyo and persisted the choice.
+// Clear the stale key so nothing carries a dead language forward.
+try {
+  localStorage.removeItem('app-language');
+} catch {
+  /* storage unavailable — nothing to clean up */
+}
 
 export const LanguageProvider = ({ children }) => {
-  const [lang, setLangState] = useState(
-    () => localStorage.getItem('app-language') || 'en'
-  );
-
-  const setLang = (key) => {
-    setLangState(key);
-    localStorage.setItem('app-language', key);
-  };
-
-  const t = (key) => translations[lang]?.[key] ?? translations['en']?.[key] ?? key;
+  const t = (key) => translations[LANG]?.[key] ?? key;
 
   return (
-    <LanguageContext.Provider value={{ lang, setLang, t, languages: LANGUAGES }}>
+    <LanguageContext.Provider value={{ lang: LANG, t }}>
       {children}
     </LanguageContext.Provider>
   );

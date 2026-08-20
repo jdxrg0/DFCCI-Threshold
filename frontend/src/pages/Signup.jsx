@@ -43,7 +43,7 @@ const Signup = () => {
   const [confirmedName, setConfirmedName] = useState('');
   const [showEmailSignup, setShowEmailSignup] = useState(false);
   const { signup, verifyOtp, googleAuth } = useAuth();
-  const { t, lang } = useLanguage();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   // If returning to step 2 (refresh or Login redirect), restore the pending email
@@ -181,11 +181,10 @@ const Signup = () => {
             <div>
               <div className="auth-google-wrapper">
                 <GoogleLogin
-                  key={lang}
                   text="signup_with"
                   onSuccess={handleGoogleSuccess}
                   onError={() => setError('Google signup failed')}
-                  locale={lang === 'fil' ? 'tl' : 'en_US'}
+                  locale="en_US"
                 />
               </div>
 
