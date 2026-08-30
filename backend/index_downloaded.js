@@ -32,8 +32,9 @@ async function runAutomation() {
       args: puppeteerArgs
     });
 
+    let page;
     try {
-        const page = await browser.newPage();
+        page = await browser.newPage();
 
         // 1. Authenticate the Proxy
         if (process.env.PROXY_USERNAME && process.env.PROXY_PASSWORD) {
@@ -64,7 +65,14 @@ async function runAutomation() {
         await page.goto('https://www.facebook.com/', { waitUntil: 'networkidle2', timeout: 60000 });
         
         let needLogin = false;
-        if (page.url().includes('login') || await page.$('input[name="email"]')) {
+        
+        // If we see the login URL, an email input, OR a "Continue" button from the Recent Logins screen, we need to log in.
+        const isRecentLogins = await page.evaluate(() => {
+            const elements = Array.from(document.querySelectorAll('div[role="button"], button, a[role="button"]'));
+            return elements.some(el => el.innerText && el.innerText.trim() === 'Continue');
+        });
+
+        if (page.url().includes('login') || await page.$('input[name="email"]') || isRecentLogins) {
             needLogin = true;
             console.log("❌ Cookies are invalid or missing. Attempting auto-login...");
         } else {
@@ -78,13 +86,40 @@ async function runAutomation() {
             if (!fbEmail || !fbPassword) {
                 console.error("❌ FB_EMAIL or FB_PASSWORD not provided. Cannot auto-login.");
             } else {
-                await page.waitForSelector('input[name="email"]');
+                console.log("Cookies are expired. Creating a fresh incognito context to force a clean login screen...");
+                const context = await browser.createIncognitoBrowserContext();
+                page = await context.newPage();
+
+                // Authenticate proxy again for the new page
+                if (process.env.PROXY_USERNAME && process.env.PROXY_PASSWORD) {
+                    await page.authenticate({
+                        username: process.env.PROXY_USERNAME,
+                        password: process.env.PROXY_PASSWORD,
+                    });
+                }
+                
+                console.log("Navigating to standard login page...");
+                await page.goto('https://www.facebook.com/login', { waitUntil: 'networkidle2', timeout: 60000 });
+                
+                console.log("Entering credentials...");
+                await page.waitForSelector('input[name="email"]', { timeout: 30000 });
                 await page.type('input[name="email"]', fbEmail, { delay: 50 });
                 await page.type('input[name="pass"]', fbPassword, { delay: 50 });
                 await page.keyboard.press('Enter');
                 
                 console.log("Waiting for login to complete...");
-                await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+                try {
+                    await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
+                } catch (e) {
+                    console.log("Navigation timed out or didn't occur. Checking if password is required...");
+                    const passInput = await page.$('input[name="pass"]');
+                    if (passInput) {
+                        console.log("Password required! Entering password...");
+                        await page.type('input[name="pass"]', fbPassword, { delay: 50 });
+                        await page.keyboard.press('Enter');
+                        await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
+                    }
+                }
                 
                 // Check if login succeeded
                 if (page.url().includes('login') || await page.$('input[name="email"]')) {
@@ -239,6 +274,14 @@ async function runAutomation() {
 
     } catch (error) {
         console.error("Execution Error:", error);
+        if (typeof page !== 'undefined') {
+            try {
+                await page.screenshot({ path: 'debug.png', fullPage: true });
+                console.log("📸 Saved debug screenshot on error.");
+            } catch (e) {
+                console.error("Failed to take error screenshot:", e.message);
+            }
+        }
     } finally {
         await browser.close();
     }
