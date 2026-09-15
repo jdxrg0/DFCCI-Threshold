@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Sun, Inbox, Send, BookOpen, User, ChevronRight, ChevronDown, Folder, FolderOpen, Eye, Tag } from 'lucide-react';
 import { format } from 'date-fns';
-import api from '../api';
+import * as affirmationsApi from '../services/affirmations';
 import ThreadSkeleton from '../components/ThreadSkeleton';
 import MyFruits from '../components/MyFruits';
 import EndorseFruit from '../components/EndorseFruit';
@@ -106,29 +106,30 @@ const AffirmationDashboard = () => {
   const [error, setError] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const { t } = useLanguage();
-  const navigate = useNavigate();
 
   useEffect(() => {
+    let cancelled = false;
+    const fetchAffirmations = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await affirmationsApi.listAffirmations();
+        if (!cancelled) setAffirmations(data);
+      } catch {
+        if (!cancelled) setError('Failed to load affirmations');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
     fetchAffirmations();
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
     localStorage.setItem('sl_activeTab', activeTab);
   }, [activeTab]);
-
-  const fetchAffirmations = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await api.get('/affirmations');
-      setAffirmations(res.data);
-    } catch (err) {
-      setError('Failed to load affirmations');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const currentList = activeTab === 'received' ? affirmations.received : affirmations.sent;
   const isSent = activeTab === 'sent';

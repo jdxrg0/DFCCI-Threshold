@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import api from '../api';
+import { useState, useEffect } from 'react';
+import * as resources from '../services/resources';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { useLanguage } from '../context/LanguageContext';
@@ -68,16 +68,12 @@ const ResourceUploadModal = ({ onClose, onSuccess, resourceToEdit }) => {
 
       let response;
       if (resourceToEdit) {
-        response = await api.put(`/resources/${resourceToEdit._id}`, data, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        response = await resources.updateResource(resourceToEdit._id, data);
       } else {
-        response = await api.post('/resources', data, {
-          headers: { 'Content-Type': 'multipart/form-data' }
-        });
+        response = await resources.createResource(data);
       }
       
-      onSuccess(response.data, !!resourceToEdit);
+      onSuccess(response, !!resourceToEdit);
     } catch (error) {
       console.error('Failed to upload/update resource:', error);
       alert('Failed to save resource. Ensure you are an admin and the data is valid.');

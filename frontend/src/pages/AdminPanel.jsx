@@ -1,5 +1,9 @@
-import React, { Fragment, useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { Fragment, useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import api from '../api';
+import * as threads from '../services/threads';
+import * as users from '../services/users';
+import * as tickets from '../services/tickets';
+import * as emailsApi from '../services/emails';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
@@ -282,11 +286,11 @@ const AdminPanel = () => {
   const [error, setError] = useState('');
   const [lastSync, setLastSync] = useState(null);
 
-  const [users, setUsers] = useState([]);
+  const [usersList, setUsersList] = useState([]);
   const [deletionRequests, setDeletionRequests] = useState([]);
   const [restoreRequests, setRestoreRequests] = useState([]);
   const [recentlyDeleted, setRecentlyDeleted] = useState([]);
-  const [tickets, setTickets] = useState([]);
+  const [ticketsList, setTicketsList] = useState([]);
 
   // Users tab — every control below is a query param, not a client-side filter
   const [userQuery, setUserQuery] = useState('');
@@ -385,22 +389,20 @@ const AdminPanel = () => {
   const fetchUsers = useCallback(async () => {
     setUsersLoading(true);
     try {
-      const res = await api.get('/users', {
-        params: {
-          page: usersPage, limit: USERS_PER_PAGE, search: userQuery,
-          role: userRole, status: userStatus, sort: userSort,
-        },
+      const data = await users.listUsers({
+        page: usersPage, limit: USERS_PER_PAGE, search: userQuery,
+        role: userRole, status: userStatus, sort: userSort,
       });
-      const pages = res.data.totalPages || 1;
-      setUsers(res.data.users || []);
+      const pages = data.totalPages || 1;
+      setUsersList(data.users || []);
       setUsersTotalPages(pages);
-      setUsersTotalCount(res.data.totalCount || 0);
+      setUsersTotalCount(data.totalCount || 0);
       // Deleting the last row of the last page leaves the admin standing on a page
       // that no longer exists; walk back rather than claim nothing matches.
       if (usersPage > pages) setUsersPage(pages);
       // Whole-collection figures. The KPI rail reads these rather than users.length,
       // which is now only ever one page of twelve.
-      setUserStats(res.data.stats || EMPTY_USER_STATS);
+      setUserStats(data.stats || EMPTY_USER_STATS);
       setError('');
     } catch (err) {
       setError(`Could not load members. ${err.response?.data?.message || err.message || ''}`.trim());
@@ -415,13 +417,13 @@ const AdminPanel = () => {
     () => load('/threads/admin/restore-requests', setRestoreRequests, 'restore requests'), [load]);
   const fetchRecentlyDeleted = useCallback(
     () => load('/threads/admin/recently-deleted', setRecentlyDeleted, 'the deletion archive'), [load]);
-  const fetchTickets = useCallback(() => load('/tickets', setTickets, 'system requests'), [load]);
+  const fetchTickets = useCallback(() => load('/tickets', setTicketsList, 'system requests'), [load]);
 
   const fetchSignups = useCallback(async () => {
     setSignupsLoading(true);
     try {
-      const res = await api.get('/users/admin/pending-signups');
-      setSignups(res.data.signups || []);
+      const data = await users.getPendingSignups();
+      setSignups(data.signups || []);
       setError('');
     } catch (err) {
       setError(`Could not load pending signups. ${err.response?.data?.message || err.message || ''}`.trim());
@@ -433,18 +435,16 @@ const AdminPanel = () => {
   const fetchAudit = useCallback(async () => {
     setAuditLoading(true);
     try {
-      const res = await api.get('/users/admin/audit', {
-        params: {
-          page: auditPage, limit: AUDIT_PER_PAGE, search: auditSearch,
-          action: auditAction, from: auditFrom, to: auditTo,
-        },
+      const data = await users.getAuditLog({
+        page: auditPage, limit: AUDIT_PER_PAGE, search: auditSearch,
+        action: auditAction, from: auditFrom, to: auditTo,
       });
-      setAuditEntries(res.data.entries || []);
-      setAuditTotalPages(res.data.totalPages || 1);
-      setAuditTotalCount(res.data.totalCount || 0);
+      setAuditEntries(data.entries || []);
+      setAuditTotalPages(data.totalPages || 1);
+      setAuditTotalCount(data.totalCount || 0);
       // Comes from what is actually stored, so the dropdown can never offer a
       // filter that only ever returns an empty page.
-      setAuditActions(res.data.actions || []);
+      setAuditActions(data.actions || []);
       setError('');
     } catch (err) {
       setError(`Could not load the audit log. ${err.response?.data?.message || err.message || ''}`.trim());
@@ -456,15 +456,13 @@ const AdminPanel = () => {
   const fetchEmails = useCallback(async () => {
     setEmailsLoading(true);
     try {
-      const res = await api.get('/emails', {
-        params: { page: emailsPage, limit: EMAILS_PER_PAGE, search: emailsSearch, status: emailsStatus },
-      });
-      setEmails(res.data.emails || []);
-      setEmailsTotalPages(res.data.totalPages || 1);
-      setEmailsTotalCount(res.data.totalCount || 0);
+      const data = await emailsApi.listEmails({ page: emailsPage, limit: EMAILS_PER_PAGE, search: emailsSearch, status: emailsStatus });
+      setEmails(data.emails || []);
+      setEmailsTotalPages(data.totalPages || 1);
+      setEmailsTotalCount(data.totalCount || 0);
       // Keep an unfiltered total for the KPI rail, so filtering the log does
       // not make the headline number jump around.
-      if (!emailsSearch && !emailsStatus) setEmailsLoggedAll(res.data.totalCount || 0);
+      if (!emailsSearch && !emailsStatus) setEmailsLoggedAll(data.totalCount || 0);
       setError('');
     } catch (err) {
       setError(`Could not load the email log. ${err.response?.data?.message || err.message || ''}`.trim());
@@ -477,8 +475,8 @@ const AdminPanel = () => {
     setLimitsLoading(true);
     setLimitsError('');
     try {
-      const res = await api.get('/users/admin/platform-limits');
-      setLimitsData(res.data);
+      const data = await users.getPlatformLimits();
+      setLimitsData(data);
     } catch (err) {
       setLimitsError(err.response?.data?.message || 'Failed to fetch platform limits data.');
     } finally {
@@ -489,8 +487,8 @@ const AdminPanel = () => {
   const fetchPlatformHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
-      const res = await api.get('/users/admin/platform-history', { params: { days: historyDays } });
-      setHistory(res.data.snapshots || []);
+      const data = await users.getPlatformHistory({ days: historyDays });
+      setHistory(data.snapshots || []);
     } catch (err) {
       // The trend chart is supplementary. A failure here must not take the limit
       // cards down with it, so it is logged rather than raised into the banner.
@@ -532,6 +530,7 @@ const AdminPanel = () => {
 
   useEffect(() => {
     if (!bootedRef.current || loading) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeTab === 'signups') fetchSignups();
     if (activeTab === 'deletion-requests') fetchDeletionRequests();
     if (activeTab === 'restore-requests') fetchRestoreRequests();
@@ -580,8 +579,8 @@ const AdminPanel = () => {
   // The server refuses to bulk-target the caller, so their row is never offered
   // as a checkbox and never lands in the selection.
   const selectableIds = useMemo(
-    () => users.filter((u) => u._id !== user?._id).map((u) => u._id),
-    [users, user],
+    () => usersList.filter((u) => u._id !== user?._id).map((u) => u._id),
+    [usersList, user],
   );
 
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
@@ -659,15 +658,15 @@ const AdminPanel = () => {
     showConfirm(
       'Change role',
       `Change ${target.displayName} from ${t(`role_${target.role.toLowerCase()}`)} to ${t(`role_${newRole.toLowerCase()}`)}?${warning}`,
-      () => mutate(() => api.put(`/users/${target._id}/role`, { role: newRole }), fetchUsers, 'Failed to update role'),
+      () => mutate(() => users.setUserRole(target._id, newRole), fetchUsers, 'Failed to update role'),
     );
   };
 
   const handleToggleReminders = (id) =>
-    mutate(() => api.put(`/users/${id}/toggle-reminders`), fetchUsers, 'Failed to toggle reminders');
+    mutate(() => users.toggleReminders(id), fetchUsers, 'Failed to toggle reminders');
 
   const handleRequestNameChange = (id) =>
-    mutate(() => api.put(`/users/${id}/request-name-change`), fetchUsers, 'Failed to request name change');
+    mutate(() => users.requestNameChange(id), fetchUsers, 'Failed to request name change');
 
   // Unverifying locks the member out until they redeem a fresh code, so only that
   // direction confirms; granting verification is recoverable in one click.
@@ -677,9 +676,9 @@ const AdminPanel = () => {
     const run = async () => {
       setVerifyingId(target._id);
       try {
-        const res = await api.put(`/users/${target._id}/verify`, { isVerified: next });
+        const data = await users.verifyUser(target._id, { isVerified: next });
         await fetchUsers();
-        showAlert('Done', res.data.message);
+        showAlert('Done', data.message);
       } catch (err) {
         showAlert('Error', err.response?.data?.message || 'Failed to update verification');
       } finally {
@@ -701,8 +700,8 @@ const AdminPanel = () => {
   const handleResendOtp = async (target) => {
     setOtpUserId(target._id);
     try {
-      const res = await api.post(`/users/${target._id}/resend-otp`);
-      showAlert('Code sent', res.data.message);
+      const data = await users.resendUserOtp(target._id);
+      showAlert('Code sent', data.message);
     } catch (err) {
       showAlert('Error', err.response?.data?.message || 'Failed to resend the verification code');
     } finally {
@@ -716,15 +715,15 @@ const AdminPanel = () => {
     showConfirm(title, message, async () => {
       setBulkBusy(true);
       try {
-        const res = await request(Array.from(selectedIds));
-        const skipped = res.data.skipped?.length || 0;
+        const data = await request(Array.from(selectedIds));
+        const skipped = data.skipped?.length || 0;
         clearSelection();
         await fetchUsers();
         showAlert(
           'Bulk action complete',
           skipped
-            ? `${res.data.message}. ${res.data.modified} changed, ${skipped} skipped.`
-            : res.data.message,
+            ? `${data.message}. ${data.modified} changed, ${skipped} skipped.`
+            : data.message,
         );
       } catch (err) {
         showAlert('Error', err.response?.data?.message || 'The bulk action failed');
@@ -741,7 +740,7 @@ const AdminPanel = () => {
     runBulk(
       'Set role',
       `Set ${memberCount(selectedIds.size)} to ${t(`role_${role.toLowerCase()}`)}?${warning}`,
-      (ids) => api.patch('/users/bulk/role', { ids, role }),
+      (ids) => users.bulkRoleChange(ids, role),
     );
   };
 
@@ -749,7 +748,7 @@ const AdminPanel = () => {
     runBulk(
       subscribed ? 'Enable dues reminders' : 'Disable dues reminders',
       `${subscribed ? 'Enable' : 'Disable'} dues reminder emails for ${memberCount(selectedIds.size)}?`,
-      (ids) => api.patch('/users/bulk/reminders', { ids, subscribed }),
+      (ids) => users.bulkToggleReminders(ids, subscribed),
     );
 
   const handleBulkVerify = (isVerified) =>
@@ -758,22 +757,22 @@ const AdminPanel = () => {
       isVerified
         ? `Mark ${memberCount(selectedIds.size)} as verified? They will be able to sign in without a code.`
         : `Remove verification from ${memberCount(selectedIds.size)}? They will be locked out until they enter a new code.`,
-      (ids) => api.patch('/users/bulk/verify', { ids, isVerified }),
+      (ids) => users.bulkVerify(ids, isVerified),
     );
 
   const handleBulkDelete = () =>
     runBulk(
       'Delete members',
       `Permanently delete ${memberCount(selectedIds.size)}? Their accounts, profiles and access are removed immediately. This cannot be undone.`,
-      (ids) => api.post('/users/bulk/delete', { ids }),
+      (ids) => users.bulkDelete(ids),
     );
 
   const handleResendSignup = async (signup) => {
     setSignupBusyId(signup._id);
     try {
-      const res = await api.post(`/users/admin/pending-signups/${signup._id}/resend`);
+      const data = await users.resendSignupOtp(signup._id);
       await fetchSignups();
-      showAlert('Code sent', res.data.message);
+      showAlert('Code sent', data.message);
     } catch (err) {
       showAlert('Error', err.response?.data?.message || 'Failed to resend the signup code');
     } finally {
@@ -786,7 +785,7 @@ const AdminPanel = () => {
       'Delete signup',
       `Drop the unfinished signup for ${signup.email}? They would have to start registration again.`,
       () => mutate(
-        () => api.delete(`/users/admin/pending-signups/${signup._id}`),
+        () => users.deletePendingSignup(signup._id),
         fetchSignups,
         'Failed to delete the signup',
       ),
@@ -796,7 +795,7 @@ const AdminPanel = () => {
     showConfirm(
       'Delete member',
       `Permanently delete ${target.displayName} (${target.email})? Their account and access are removed immediately. This cannot be undone.`,
-      () => mutate(() => api.delete(`/users/${target._id}`), fetchUsers, 'Failed to delete user'),
+      () => mutate(() => users.deleteUser(target._id), fetchUsers, 'Failed to delete user'),
     );
   };
 
@@ -816,10 +815,10 @@ const AdminPanel = () => {
           return;
         }
         try {
-          const res = await api.put(`/users/${target._id}/custom-date-power`, {
+          const data = await users.setCustomDatePower(target._id, {
             durationMinutes: Math.round(num * 60),
           });
-          showAlert('Success', res.data.message);
+          showAlert('Success', data.message);
           fetchUsers();
         } catch (err) {
           showAlert('Error', err.response?.data?.message || 'Failed to update custom date power');
@@ -829,27 +828,27 @@ const AdminPanel = () => {
   };
 
   const handleApproveDeletion = (id) =>
-    mutate(() => api.put(`/threads/admin/${id}/approve-deletion`), () =>
+    mutate(() => threads.approveDeletion(id), () =>
       Promise.all([fetchDeletionRequests(), fetchRecentlyDeleted()]), 'Failed to approve deletion');
 
   const handleRejectDeletion = (id) =>
-    mutate(() => api.put(`/threads/admin/${id}/reject-deletion`), fetchDeletionRequests, 'Failed to reject deletion');
+    mutate(() => threads.rejectDeletion(id), fetchDeletionRequests, 'Failed to reject deletion');
 
   const handleApproveRestore = (id) =>
-    mutate(() => api.put(`/threads/admin/${id}/approve-restore`), () =>
+    mutate(() => threads.approveRestore(id), () =>
       Promise.all([fetchRestoreRequests(), fetchRecentlyDeleted()]), 'Failed to approve restore');
 
   const handleRejectRestore = (id) =>
-    mutate(() => api.put(`/threads/admin/${id}/reject-restore`), fetchRestoreRequests, 'Failed to reject restore');
+    mutate(() => threads.rejectRestore(id), fetchRestoreRequests, 'Failed to reject restore');
 
   const handleUpdateTicketStatus = (id, status) =>
-    mutate(() => api.patch(`/tickets/${id}/admin`, { status }), fetchTickets, 'Failed to update ticket');
+    mutate(() => tickets.updateTicketStatus(id, status), fetchTickets, 'Failed to update ticket');
 
   const handleAdminResponse = (ticket) => {
     showPrompt('Admin response', `Reply to "${ticket.title}":`, async (response) => {
       if (!response || !response.trim()) return;
       await mutate(
-        () => api.patch(`/tickets/${ticket._id}/admin`, { adminResponse: response.trim() }),
+        () => tickets.postTicketResponse(ticket._id, response.trim()),
         fetchTickets,
         'Failed to update response',
       );
@@ -859,7 +858,7 @@ const AdminPanel = () => {
   const handleResendEmail = async (id) => {
     setResendingId(id);
     try {
-      await api.post(`/emails/${id}/resend`);
+      await emailsApi.resendEmail(id);
       showAlert('Success', t('email_resend_success'));
       fetchEmails();
     } catch (err) {
@@ -872,7 +871,7 @@ const AdminPanel = () => {
   /* ── Derived data ───────────────────────────────────────────────────── */
 
   const pendingApprovals = deletionRequests.length + restoreRequests.length;
-  const openTickets = tickets.filter((tk) => tk.status === 'open' || tk.status === 'in-progress').length;
+  const openTickets = ticketsList.filter((tk) => tk.status === 'open' || tk.status === 'in-progress').length;
   // Expired rows are already dead weight, so the badge only counts the signups an
   // admin can still rescue with a resend.
   const liveSignups = signups.filter((s) => !s.expired).length;
@@ -905,8 +904,8 @@ const AdminPanel = () => {
   }, [tabs]);
 
   const visibleTickets = useMemo(
-    () => (ticketStatus ? tickets.filter((tk) => tk.status === ticketStatus) : tickets),
-    [tickets, ticketStatus],
+    () => (ticketStatus ? ticketsList.filter((tk) => tk.status === ticketStatus) : ticketsList),
+    [ticketsList, ticketStatus],
   );
 
   // These come from the response's `stats`, which the server computes over the
@@ -931,14 +930,12 @@ const AdminPanel = () => {
       let page = 1;
       let totalPages = 1;
       while (page <= totalPages && page <= CSV_MAX_PAGES) {
-        const res = await api.get('/users', {
-          params: {
-            page, limit: CSV_PAGE_SIZE, search: userQuery,
-            role: userRole, status: userStatus, sort: userSort,
-          },
+        const data = await users.listUsers({
+          page, limit: CSV_PAGE_SIZE, search: userQuery,
+          role: userRole, status: userStatus, sort: userSort,
         });
-        all.push(...(res.data.users || []));
-        totalPages = res.data.totalPages || 1;
+        all.push(...(data.users || []));
+        totalPages = data.totalPages || 1;
         page += 1;
       }
 
@@ -1250,7 +1247,7 @@ const AdminPanel = () => {
           )}
         </div>
 
-        {users.length === 0 ? (
+        {usersList.length === 0 ? (
           usersLoading ? <Skeletons count={6} /> : (
             <EmptyState
               icon={Users}
@@ -1288,7 +1285,7 @@ const AdminPanel = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {users.map((u) => (
+                    {usersList.map((u) => (
                       <tr key={u._id}>
                         <td className="adm-td-check">{checkboxOf(u)}</td>
                         <td>{identityOf(u, 38)}</td>
@@ -1324,7 +1321,7 @@ const AdminPanel = () => {
 
             {/* Mobile cards */}
             <div className="adm-cards adm-cards--single adm-mob">
-              {users.map((u) => (
+              {usersList.map((u) => (
                 <div key={u._id} className="adm-card">
                   <div className="adm-card__head">
                     {checkboxOf(u)}
@@ -1574,7 +1571,7 @@ const AdminPanel = () => {
         </select>
         <span className="adm-toolbar__spacer" />
         <span className="adm-toolbar__meta">
-          {openTickets} open · {tickets.length} total
+          {openTickets} open · {ticketsList.length} total
         </span>
       </div>
 

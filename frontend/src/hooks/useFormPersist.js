@@ -36,7 +36,7 @@ const useFormPersist = (storageKey, initialValues, excludeFields = []) => {
     } catch {
       // Ignore storage errors (e.g. private browsing quota)
     }
-  }, [storageKey, values, excludeStr]);
+  }, [storageKey, values, excludeFields, excludeStr]);
 
   /** Call this after a successful submission to wipe the saved draft */
   const clearSaved = useCallback(() => {

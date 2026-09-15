@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import api from '../api';
+import * as usersApi from '../services/users';
+import * as fruits from '../services/fruits';
 import { useLanguage } from '../context/LanguageContext';
 import { Send } from 'lucide-react';
 
@@ -30,8 +31,8 @@ const EndorseFruit = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await api.get('/users/members');
-        setUsers(res.data);
+        const data = await usersApi.getVerifiedMembers();
+        setUsers(data);
       } catch (err) {
         console.error('Error fetching members', err);
       }
@@ -41,6 +42,7 @@ const EndorseFruit = () => {
 
   useEffect(() => {
     if (!selectedUser) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedFruits([]);
       setInitialFruits([]);
       setError('');
@@ -53,8 +55,7 @@ const EndorseFruit = () => {
       setFetching(true);
       setError('');
       try {
-        const res = await api.get(`/fruits/given/${selectedUser}?t=${Date.now()}`);
-        const data = res.data || [];
+        const data = await fruits.getGivenFruits(selectedUser);
         setSelectedFruits(data);
         setInitialFruits(data);
       } catch (err) {
@@ -85,7 +86,7 @@ const EndorseFruit = () => {
     setError('');
 
     try {
-      await api.post('/fruits/endorse', {
+      await fruits.endorseFruits({
         endorseeId: selectedUser,
         fruits: selectedFruits
       });

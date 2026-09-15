@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../api';
-import { ArrowLeft, Download, BookOpen } from 'lucide-react';
+import * as resources from '../services/resources';
+import { Download, BookOpen } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 const getDownloadUrl = (url) => {
@@ -29,7 +29,7 @@ const ResourceDetail = () => {
   useEffect(() => {
     const fetchResource = async () => {
       try {
-        const { data } = await api.get(`/resources/${id}`);
+        const data = await resources.getResource(id);
         setResource(data);
       } catch (err) {
         console.error('Failed to fetch resource:', err);

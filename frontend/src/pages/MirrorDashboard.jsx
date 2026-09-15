@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Send, Inbox, Archive, FolderOpen, Folder, ChevronDown, ChevronRight, User, Trash2, BookOpen, ScanLine } from 'lucide-react';
-import api from '../api';
+import * as threadsApi from '../services/threads';
 import ThreadCard from '../components/ThreadCard';
 import ThreadSkeleton from '../components/ThreadSkeleton';
 import { useLanguage } from '../context/LanguageContext';
@@ -74,37 +74,39 @@ const MirrorDashboard = () => {
   const { t } = useLanguage();
 
   useEffect(() => {
+    let cancelled = false;
+    const fetchThreads = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        let data;
+        if (activeTab === 'archive') {
+          data = await threadsApi.listArchivedThreads();
+        } else if (activeTab === 'deleted') {
+          data = await threadsApi.listRecentlyDeletedThreads();
+        } else {
+          data = await threadsApi.listThreads(activeTab);
+        }
+        if (!cancelled) {
+          setThreads(data);
+          setDisplayedTab(activeTab);
+        }
+      } catch {
+        if (!cancelled) {
+          setThreads([]);
+          setDisplayedTab(activeTab);
+          setError('Failed to load threads');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
     fetchThreads();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentPage(1);
     localStorage.setItem('gm_activeTab', activeTab);
+    return () => { cancelled = true; };
   }, [activeTab]);
-
-  const fetchThreads = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      let res;
-      if (activeTab === 'archive') {
-        res = await api.get('/threads/archive');
-      } else if (activeTab === 'deleted') {
-        res = await api.get('/threads/recently-deleted');
-      } else {
-        res = await api.get(`/threads?type=${activeTab}`);
-      }
-      setThreads(res.data);
-      setDisplayedTab(activeTab); // Update displayed logic only when new data is ready
-    } catch (err) {
-      // Without this the pill moves and the list does not: displayedTab stays
-      // on the previous section, so a failed fetch leaves the old section's
-      // threads sitting under the newly highlighted tab, permanently. Show the
-      // section the user actually picked, empty, with the error above it.
-      setThreads([]);
-      setDisplayedTab(activeTab);
-      setError('Failed to load threads');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // Group sent threads by receiver's displayName
   const groupedSent = React.useMemo(() => {

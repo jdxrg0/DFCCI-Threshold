@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { Send, Heart, Sun, User, Calendar, Quote, BookOpen } from 'lucide-react';
+import { Send, Heart, Sun, User, Calendar, Quote } from 'lucide-react';
 import { format } from 'date-fns';
-import api from '../api';
+import * as affirmations from '../services/affirmations';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import PopupModal from '../components/PopupModal';
@@ -24,7 +24,19 @@ const AffirmationView = () => {
   const bottomRef = useRef(null);
 
   useEffect(() => {
+    let cancelled = false;
+    const fetchAffirmation = async () => {
+      try {
+        const data = await affirmations.getAffirmation(id);
+        if (!cancelled) setAffirmation(data);
+      } catch (err) {
+        if (!cancelled) setError(err.response?.data?.message || 'Failed to load affirmation');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
     fetchAffirmation();
+    return () => { cancelled = true; };
   }, [id]);
 
   useEffect(() => {
@@ -32,17 +44,6 @@ const AffirmationView = () => {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [affirmation]);
-
-  const fetchAffirmation = async () => {
-    try {
-      const res = await api.get(`/affirmations/${id}`);
-      setAffirmation(res.data);
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load affirmation');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const showAlert = (title, message) => setPopupState({ isOpen: true, title, message, isAlert: true, onConfirm: null });
   const showConfirm = (title, message, onConfirm) => setPopupState({ isOpen: true, title, message, isAlert: false, onConfirm });
@@ -53,8 +54,8 @@ const AffirmationView = () => {
 
     setSendingReply(true);
     try {
-      const res = await api.post(`/affirmations/${id}/reply`, { text: replyText });
-      setAffirmation(res.data.affirmation || res.data);
+      const data = await affirmations.replyToAffirmation(id, { text: replyText });
+      setAffirmation(data.affirmation || data);
       setReplyText('');
     } catch (err) {
       showAlert('Error', err.response?.data?.message || 'Failed to send reply');
@@ -66,8 +67,8 @@ const AffirmationView = () => {
   const handleMarkReceived = async () => {
     setMarkingReceived(true);
     try {
-      const res = await api.put(`/affirmations/${id}/receive`);
-      setAffirmation(res.data.affirmation || res.data);
+      const data = await affirmations.markAffirmationReceived(id);
+      setAffirmation(data.affirmation || data);
     } catch (err) {
       showAlert('Error', err.response?.data?.message || 'Failed to mark as received');
     } finally {

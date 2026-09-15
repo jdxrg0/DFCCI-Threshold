@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useLanguage } from '../context/LanguageContext';
 import { UserCog } from 'lucide-react';
 
 const NameChangePrompt = () => {
   const { user, updateDisplayName } = useAuth();
-  const { t } = useLanguage();
   const [newName, setNewName] = useState(user?.displayName || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -14,6 +12,7 @@ const NameChangePrompt = () => {
 
   useEffect(() => {
     if (shouldShow && user?.displayName) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNewName(user.displayName);
     }
   }, [shouldShow, user?.displayName]);

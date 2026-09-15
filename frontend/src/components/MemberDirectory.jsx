@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Plus, Trash2, Edit2, Search, User, MessageCircle } from 'lucide-react';
-import api from '../api';
+import * as users from '../services/users';
 
 export default function MemberDirectory({ showAlert, showConfirm, onSelectMember }) {
   const [members, setMembers] = useState([]);
@@ -13,14 +13,33 @@ export default function MemberDirectory({ showAlert, showConfirm, onSelectMember
     facebookChatUrl: ''
   });
 
+  const showAlertRef = useRef(showAlert);
+
   useEffect(() => {
-    fetchMembers();
+    showAlertRef.current = showAlert;
+  }, [showAlert]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadMembers = async () => {
+      try {
+        const data = await users.listMembers();
+        if (!cancelled) setMembers(data);
+      } catch (error) {
+        console.error('Failed to load members', error);
+        if (showAlertRef.current) showAlertRef.current('Error', 'Failed to load member directory.');
+      }
+    };
+    loadMembers();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const fetchMembers = async () => {
     try {
-      const response = await api.get('/members');
-      setMembers(response.data);
+      const data = await users.listMembers();
+      setMembers(data);
     } catch (error) {
       console.error('Failed to load members', error);
       if (showAlert) showAlert('Error', 'Failed to load member directory.');
@@ -31,10 +50,10 @@ export default function MemberDirectory({ showAlert, showConfirm, onSelectMember
     e.preventDefault();
     try {
       if (editingId) {
-        await api.put(`/members/${editingId}`, formData);
+        await users.updateMember(editingId, formData);
         if (showAlert) showAlert('Success', 'Member updated.');
       } else {
-        await api.post('/members', formData);
+        await users.createMember(formData);
         if (showAlert) showAlert('Success', 'Member added.');
       }
       setIsModalOpen(false);
@@ -51,9 +70,9 @@ export default function MemberDirectory({ showAlert, showConfirm, onSelectMember
     if (showConfirm) {
       showConfirm('Delete Member', 'Are you sure you want to remove this member?', async () => {
         try {
-          await api.delete(`/members/${id}`);
+          await users.deleteMember(id);
           fetchMembers();
-        } catch (error) {
+        } catch {
           if (showAlert) showAlert('Error', 'Failed to delete member.');
         }
       });

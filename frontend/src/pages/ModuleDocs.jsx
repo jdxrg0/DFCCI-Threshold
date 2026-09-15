@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useParams, useLocation } from 'react-router-dom';
 import { BookOpen } from 'lucide-react';
 import { moduleDocs } from '../data/moduleDocs';
 import PageHeader from '../components/PageHeader';

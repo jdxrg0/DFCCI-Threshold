@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Plus, Trash2, ChevronUp, ChevronDown, Save, Eye, EyeOff, GripVertical, Gamepad2 } from 'lucide-react';
-import api from '../api';
+import { Plus, Trash2, ChevronUp, ChevronDown, Save, Eye, EyeOff, Gamepad2 } from 'lucide-react';
+import * as games from '../services/games';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import PopupModal from '../components/PopupModal';
@@ -51,8 +51,7 @@ const QuizCreate = () => {
     const fetchQuiz = async () => {
       setLoading(true);
       try {
-        const res = await api.get(`/games/quizzes/${id}?admin=true`);
-        const quiz = res.data;
+        const quiz = await games.getQuiz(id, true);
         setTitle(quiz.title);
         setDescription(quiz.description || '');
         setCategory(quiz.category || 'General');
@@ -74,7 +73,7 @@ const QuizCreate = () => {
             timeLimit: q.timeLimit || 15,
           };
         }));
-      } catch (err) {
+      } catch {
         setError('Failed to load quiz');
       } finally {
         setLoading(false);
@@ -209,9 +208,9 @@ const QuizCreate = () => {
     try {
       const payload = { title, description, category, isPublished, questions };
       if (isEdit) {
-        await api.put(`/games/quizzes/${id}`, payload);
+        await games.updateQuiz(id, payload);
       } else {
-        await api.post('/games/quizzes', payload);
+        await games.createQuiz(payload);
       }
       navigate('/games');
     } catch (err) {
@@ -225,7 +224,7 @@ const QuizCreate = () => {
   const handleDelete = () => {
     showConfirm('Delete Quiz', 'Are you sure you want to delete this quiz? All attempt data will also be deleted. This cannot be undone.', async () => {
       try {
-        await api.delete(`/games/quizzes/${id}`);
+        await games.deleteQuiz(id);
         navigate('/games');
       } catch (err) {
         showAlert('Error', err.response?.data?.message || 'Failed to delete quiz.');

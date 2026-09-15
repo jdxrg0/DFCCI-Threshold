@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sun } from 'lucide-react';
-import api from '../api';
+import * as usersApi from '../services/users';
+import * as affirmations from '../services/affirmations';
 import TimerButton from '../components/TimerButton';
 import useFormPersist from '../hooks/useFormPersist';
 import { useLanguage } from '../context/LanguageContext';
@@ -27,8 +28,8 @@ const SendAffirmation = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await api.get('/users/members');
-        setUsers(res.data);
+        const data = await usersApi.getVerifiedMembers();
+        setUsers(data);
       } catch (err) {
         console.error('Error fetching members', err);
       }
@@ -60,7 +61,7 @@ const SendAffirmation = () => {
 
     setLoading(true);
     try {
-      await api.post('/affirmations', {
+      await affirmations.sendAffirmation({
         receiverId: selectedUser,
         topic: topic.trim(),
         content: { appreciation, impact, encouragement, bibleVerse }

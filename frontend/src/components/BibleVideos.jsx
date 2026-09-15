@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Heart, Trash, Play, Pause, Volume2, VolumeX, Plus, X, UploadCloud, Film } from 'lucide-react';
-import api from '../api';
+import * as bibleVideos from '../services/bibleVideos';
 import { useAuth } from '../context/AuthContext';
 
 const BibleVideos = () => {
@@ -23,16 +23,12 @@ const BibleVideos = () => {
 
   const containerRef = useRef(null);
 
-  useEffect(() => {
-    fetchVideos();
-  }, []);
-
   const fetchVideos = async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get('/bible-videos');
-      setVideos(res.data);
+      const data = await bibleVideos.listVideos();
+      setVideos(data);
     } catch (err) {
       console.error(err);
       setError('Failed to load reels. Please try again.');
@@ -40,6 +36,11 @@ const BibleVideos = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const timer = setTimeout(() => fetchVideos());
+    return () => clearTimeout(timer);
+  }, []);
 
   // Intersection Observer to autoplay active video card
   useEffect(() => {
@@ -78,11 +79,11 @@ const BibleVideos = () => {
 
   const handleLike = async (id) => {
     try {
-      const res = await api.post(`/bible-videos/${id}/like`);
+      const data = await bibleVideos.likeVideo(id);
       setVideos((prev) =>
         prev.map((video) =>
           video._id === id
-            ? { ...video, likes: res.data.likes }
+            ? { ...video, likes: data.likes }
             : video
         )
       );
@@ -94,7 +95,7 @@ const BibleVideos = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this reel?')) return;
     try {
-      await api.delete(`/bible-videos/${id}`);
+      await bibleVideos.deleteVideo(id);
       setVideos((prev) => prev.filter((v) => v._id !== id));
     } catch (err) {
       console.error('Failed to delete video', err);
@@ -120,10 +121,8 @@ const BibleVideos = () => {
     formData.append('video', videoFile);
 
     try {
-      const res = await api.post('/bible-videos', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setVideos((prev) => [res.data, ...prev]);
+      const data = await bibleVideos.uploadVideo(formData);
+      setVideos((prev) => [data, ...prev]);
       setShowUploadModal(false);
       setTitle('');
       setCaption('');

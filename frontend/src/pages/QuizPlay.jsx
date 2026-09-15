@@ -1,21 +1,21 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ChevronLeft, Play, Clock, Target, RotateCcw, Trophy, CheckCircle2, XCircle, ArrowRight, Gamepad2 } from 'lucide-react';
-import api from '../api';
+import { ChevronLeft, Play, Clock, Target, RotateCcw, CheckCircle2, XCircle, Gamepad2 } from 'lucide-react';
+import * as games from '../services/games';
 import { useLanguage } from '../context/LanguageContext';
 import ThreadSkeleton from '../components/ThreadSkeleton';
 
 // ── Confetti particle component (pure CSS, no library) ──────────────────────
 const Confetti = () => {
   const colors = ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE'];
-  const particles = Array.from({ length: 40 }, (_, i) => ({
+  const [particles] = useState(() => Array.from({ length: 40 }, (_, i) => ({
     id: i,
     color: colors[i % colors.length],
     left: `${Math.random() * 100}%`,
     delay: `${Math.random() * 0.5}s`,
     size: `${Math.random() * 6 + 4}px`,
     duration: `${Math.random() * 1.5 + 1.5}s`,
-  }));
+  })));
 
   return (
     <div className="quiz-confetti-container" aria-hidden="true">
@@ -95,16 +95,75 @@ const QuizPlay = () => {
   useEffect(() => {
     const fetchQuiz = async () => {
       try {
-        const res = await api.get(`/games/quizzes/${id}`);
-        setQuiz(res.data);
+        const data = await games.getQuiz(id);
+        setQuiz(data);
         setPhase('preview');
-      } catch (err) {
+      } catch {
         setError('Quiz not found');
         setPhase('error');
       }
     };
     fetchQuiz();
   }, [id]);
+
+  const submitQuiz = useCallback(async (lastIndex, lastSelectedIndex, lastElapsed) => {
+    setPhase('submitting');
+    try {
+      const finalAnswers = answers.map((a, i) => {
+        if (i === lastIndex) {
+          return { ...a, selectedIndex: lastSelectedIndex, timeTakenMs: lastElapsed };
+        }
+        return a;
+      });
+
+      const totalTime = Date.now() - quizStartTime;
+
+      const data = await games.submitQuiz(id, {
+        answers: finalAnswers,
+        timeTakenMs: totalTime,
+      });
+
+      setResults(data);
+      setAnimatedScore(0);
+      setPhase('results');
+    } catch {
+      setError('Failed to submit quiz. Please try again.');
+      setPhase('error');
+    }
+  }, [answers, id, quizStartTime]);
+
+  const handleAnswer = useCallback((optionIndex) => {
+    if (phase !== 'playing') return;
+    clearTimeout(timerRef.current);
+
+    const elapsed = Date.now() - questionStartTime;
+
+    setAnswers(prev => {
+      const updated = [...prev];
+      updated[currentIndex] = {
+        questionIndex: currentIndex,
+        selectedIndex: optionIndex,
+        timeTakenMs: elapsed,
+      };
+      return updated;
+    });
+
+    setSelectedIndex(optionIndex);
+
+    // Brief flash before advancing
+    setTimeout(() => {
+      if (currentIndex < quiz.questions.length - 1) {
+        const nextIndex = currentIndex + 1;
+        setCurrentIndex(nextIndex);
+        setSelectedIndex(null);
+        setTimeLeft(quiz.questions[nextIndex].timeLimit || 15);
+        setQuestionStartTime(Date.now());
+      } else {
+        // Quiz complete — submit
+        submitQuiz(currentIndex, optionIndex, elapsed);
+      }
+    }, 400);
+  }, [phase, currentIndex, questionStartTime, quiz, submitQuiz]);
 
   // Timer countdown
   useEffect(() => {
@@ -122,7 +181,7 @@ const QuizPlay = () => {
     }, 1000);
 
     return () => clearTimeout(timerRef.current);
-  }, [phase, timeLeft]);
+  }, [phase, timeLeft, handleAnswer]);
 
   // Score count-up animation
   useEffect(() => {
@@ -157,65 +216,6 @@ const QuizPlay = () => {
     setQuestionStartTime(Date.now());
     setQuizStartTime(Date.now());
     setPhase('playing');
-  };
-
-  const handleAnswer = useCallback((optionIndex) => {
-    if (phase !== 'playing') return;
-    clearTimeout(timerRef.current);
-
-    const elapsed = Date.now() - questionStartTime;
-
-    setAnswers(prev => {
-      const updated = [...prev];
-      updated[currentIndex] = {
-        questionIndex: currentIndex,
-        selectedIndex: optionIndex,
-        timeTakenMs: elapsed,
-      };
-      return updated;
-    });
-
-    setSelectedIndex(optionIndex);
-
-    // Brief flash before advancing
-    setTimeout(() => {
-      if (currentIndex < quiz.questions.length - 1) {
-        const nextIndex = currentIndex + 1;
-        setCurrentIndex(nextIndex);
-        setSelectedIndex(null);
-        setTimeLeft(quiz.questions[nextIndex].timeLimit || 15);
-        setQuestionStartTime(Date.now());
-      } else {
-        // Quiz complete — submit
-        submitQuiz(currentIndex, optionIndex, elapsed);
-      }
-    }, 400);
-  }, [phase, currentIndex, questionStartTime, quiz]);
-
-  const submitQuiz = async (lastIndex, lastSelectedIndex, lastElapsed) => {
-    setPhase('submitting');
-    try {
-      const finalAnswers = answers.map((a, i) => {
-        if (i === lastIndex) {
-          return { ...a, selectedIndex: lastSelectedIndex, timeTakenMs: lastElapsed };
-        }
-        return a;
-      });
-
-      const totalTime = Date.now() - quizStartTime;
-
-      const res = await api.post(`/games/quizzes/${id}/submit`, {
-        answers: finalAnswers,
-        timeTakenMs: totalTime,
-      });
-
-      setResults(res.data);
-      setAnimatedScore(0);
-      setPhase('results');
-    } catch (err) {
-      setError('Failed to submit quiz. Please try again.');
-      setPhase('error');
-    }
   };
 
   const formatTime = (ms) => {

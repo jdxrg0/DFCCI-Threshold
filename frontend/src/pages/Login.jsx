@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import useFormPersist from '../hooks/useFormPersist';
-import api from '../api';
+import * as auth from '../services/auth';
 import logo from '../assets/logo.svg';
 
 const Login = () => {
@@ -37,7 +37,7 @@ const Login = () => {
         localStorage.setItem('dfcci_signup_pending_email', email);
         localStorage.setItem('dfcci_signup_expiry', expiry);
         // Silently request a fresh OTP so the code in their inbox is valid
-        try { await api.post('/auth/resend-otp', { email }); } catch (_) {}
+        await auth.resendOtp(email).catch(() => {});
         navigate('/signup');
         return;
       }

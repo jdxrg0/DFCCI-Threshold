@@ -28,6 +28,7 @@ const TimerButton = ({
   // Sync timeLeft if duration prop changes while not counting
   useEffect(() => {
     if (!isCounting) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTimeLeft(duration);
     }
   }, [duration, isCounting]);
@@ -37,6 +38,7 @@ const TimerButton = ({
   useEffect(() => {
     if (!isCounting) return;
     if (timeLeft <= 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsCounting(false);
       if (onConfirm) onConfirm();
       return;

@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, Clock, MessageSquare, Briefcase, Calendar } from 'lucide-react';
-import api from '../api';
+import * as automation from '../services/automation';
 
 export default function RoleReminders({ schedules, setSchedules, showAlert, showConfirm }) {
   const [selectedScheduleId, setSelectedScheduleId] = useState('');
@@ -18,6 +18,7 @@ export default function RoleReminders({ schedules, setSchedules, showAlert, show
     if (selectedScheduleId) {
       const schedule = schedules.find(s => s._id === selectedScheduleId);
       if (schedule) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setReminders(schedule.roleReminders || []);
       }
     } else {
@@ -57,9 +58,9 @@ export default function RoleReminders({ schedules, setSchedules, showAlert, show
         roleReminders: newReminders
       };
 
-      const response = await api.put(`/automation/schedule/${selectedScheduleId}`, payload);
+      const response = await automation.updateSchedule(selectedScheduleId, payload);
       
-      setSchedules(prev => prev.map(s => s._id === selectedScheduleId ? response.data.data : s));
+      setSchedules(prev => prev.map(s => s._id === selectedScheduleId ? response.data : s));
       setIsModalOpen(false);
       setEditingIndex(null);
       setFormData({ role: '', daysPrior: '', messageTemplate: '' });
@@ -89,8 +90,8 @@ export default function RoleReminders({ schedules, setSchedules, showAlert, show
           roleReminders: newReminders
         };
 
-        const response = await api.put(`/automation/schedule/${selectedScheduleId}`, payload);
-        setSchedules(prev => prev.map(s => s._id === selectedScheduleId ? response.data.data : s));
+        const response = await automation.updateSchedule(selectedScheduleId, payload);
+        setSchedules(prev => prev.map(s => s._id === selectedScheduleId ? response.data : s));
 
       } catch (err) {
         console.error(err);

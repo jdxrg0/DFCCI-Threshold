@@ -1,31 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { PlusCircle, FileText, AlertCircle, Wrench, RefreshCw, CheckCircle, Clock } from 'lucide-react';
-import api from '../api';
+import * as ticketsApi from '../services/tickets';
 import PageHeader from '../components/PageHeader';
 
 const TicketsDashboard = () => {
-  const { user } = useAuth();
   const { t } = useLanguage();
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    const fetchTickets = async () => {
+      try {
+        const data = await ticketsApi.listMyTickets();
+        if (!cancelled) setTickets(data);
+      } catch (err) {
+        console.error('Failed to fetch tickets:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
     fetchTickets();
+    return () => { cancelled = true; };
   }, []);
-
-  const fetchTickets = async () => {
-    try {
-      const res = await api.get('/tickets/my-tickets');
-      setTickets(res.data);
-    } catch (err) {
-      console.error('Failed to fetch tickets:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const getStatusIcon = (status) => {
     switch (status) {

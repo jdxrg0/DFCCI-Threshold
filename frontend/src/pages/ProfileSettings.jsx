@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import {
   Camera,
   User,
   Mail,
-  ArrowLeft,
   Trash2,
   Check,
   Eye,
@@ -59,6 +57,7 @@ const ProfileSettings = () => {
   // Synchronize pending verification state on load/update
   useEffect(() => {
     if (user?.pendingEmail) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPendingEmail(user.pendingEmail);
       setShowEmailVerifyModal(true);
     }

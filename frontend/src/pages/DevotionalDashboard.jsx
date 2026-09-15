@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { BookHeart, Send, BookOpen, Inbox, Users, Flame, Eye, Calendar, CheckCircle2, Clock, ChevronLeft, ChevronRight, BarChart3, User, Film, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { BookHeart, Send, BookOpen, Inbox, Users, Flame, Calendar, CheckCircle2, Clock, ChevronLeft, ChevronRight, BarChart3, User, Film, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
-import api from '../api';
+import * as devotionalsApi from '../services/devotionals';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import ThreadSkeleton from '../components/ThreadSkeleton';
@@ -55,12 +55,6 @@ const StatsBar = ({ stats }) => {
   );
 };
 
-const getUTC8TodayString = () => {
-  const now = new Date();
-  const utc8Time = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  return utc8Time.toISOString().slice(0, 10);
-};
-
 // ── Mini Calendar Heatmap ────────────────────────────────────────────────────
 const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefresh }) => {
   const [year, setYear] = useState(initialYear);
@@ -79,6 +73,7 @@ const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefr
   });
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setYear(initialYear);
     setMonth(initialMonth);
   }, [initialYear, initialMonth]);
@@ -88,8 +83,8 @@ const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefr
       try {
         const params = { year, month };
         if (memberId) params.memberId = memberId;
-        const res = await api.get('/devotionals/calendar', { params });
-        setDays(res.data);
+        const data = await devotionalsApi.getDevotionalCalendar(params);
+        setDays(data);
       } catch { /* silent */ }
     };
     fetchCalendar();
@@ -154,12 +149,12 @@ const MiniCalendar = ({ year: initialYear, month: initialMonth, memberId, onRefr
 
   const performMarkMissed = async (dateStr) => {
     try {
-      await api.post('/devotionals/missed', { date: dateStr });
+      await devotionalsApi.markMissed({ date: dateStr });
       // Refresh calendar data
       const params = { year, month };
       if (memberId) params.memberId = memberId;
-      const res = await api.get('/devotionals/calendar', { params });
-      setDays(res.data);
+      const data = await devotionalsApi.getDevotionalCalendar(params);
+      setDays(data);
       if (onRefresh) onRefresh();
     } catch (err) {
       setModalConfig({
@@ -490,7 +485,6 @@ const FolderCard = ({ folder, onClick }) => {
 const DevotionalDashboard = () => {
   const { user } = useAuth();
   const { t } = useLanguage();
-  const navigate = useNavigate();
   const isLeader = ['ADMIN', 'COUNSELOR'].includes(user?.role);
 
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('devo_activeTab') || 'my');
@@ -519,60 +513,101 @@ const DevotionalDashboard = () => {
 
   useEffect(() => {
     localStorage.setItem('devo_activeTab', activeTab);
+  }, [activeTab]);
+
+  const handleTabChange = (id) => {
+    setActiveTab(id);
     setPage(1);
     setLeaderPage(1);
+  };
+
+  useEffect(() => {
+    if (activeTab !== 'my') return;
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await devotionalsApi.listDevotionals({ page: 1, limit: 8 });
+        setDevotionals(data.devotionals);
+        setTotalPages(data.pages || 1);
+      } catch {
+        setError('Failed to load devotionals');
+      } finally {
+        setLoading(false);
+      }
+      const statsData = await devotionalsApi.getDevotionalStats().catch(() => null);
+      if (statsData) setStats(statsData);
+    };
+    load();
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'my') { fetchMyDevotionals(1); fetchStats(); }
-  }, [activeTab]);
+    if (activeTab !== 'my' || page <= 1) return;
+    const load = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const data = await devotionalsApi.listDevotionals({ page, limit: 8 });
+        setDevotionals(data.devotionals);
+        setTotalPages(data.pages || 1);
+      } catch {
+        setError('Failed to load devotionals');
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [activeTab, page]);
 
   useEffect(() => {
-    if (activeTab === 'my' && page > 1) fetchMyDevotionals(page);
-  }, [page]);
+    if (activeTab !== 'leader' || !isLeader) return;
+    const load = async () => {
+      setFoldersLoading(true);
+      const foldersData = await devotionalsApi.getLeaderFolders().catch(() => null);
+      const statsData = await devotionalsApi.getLeaderStats().catch(() => null);
+      if (foldersData) setLeaderFolders(foldersData);
+      if (statsData) setLeaderStats(statsData);
+      setFoldersLoading(false);
+    };
+    load();
+  }, [activeTab, isLeader]);
 
   useEffect(() => {
-    if (activeTab === 'leader' && isLeader) { fetchLeaderFolders(); fetchLeaderStats(); }
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'leader' && isLeader && selectedFolder) {
-      fetchLeaderDevotionals(leaderPage);
-    }
-  }, [leaderPage, leaderFilter, selectedFolder]);
+    if (activeTab !== 'leader' || !isLeader || !selectedFolder) return;
+    const load = async () => {
+      setLeaderLoading(true);
+      const params = { page: leaderPage, limit: 10, memberId: selectedFolder._id };
+      if (leaderFilter !== 'all') params.status = leaderFilter;
+      const data = await devotionalsApi.getLeaderDevotionals(params).catch(() => null);
+      if (data) {
+        setLeaderDevos(data.devotionals);
+        setLeaderTotalPages(data.pages || 1);
+      }
+      setLeaderLoading(false);
+    };
+    load();
+  }, [activeTab, isLeader, leaderPage, leaderFilter, selectedFolder]);
 
   const fetchMyDevotionals = async (p) => {
     setLoading(true); setError('');
     try {
-      const res = await api.get('/devotionals', { params: { page: p, limit: 8 } });
-      setDevotionals(res.data.devotionals);
-      setTotalPages(res.data.pages || 1);
+      const data = await devotionalsApi.listDevotionals({ page: p, limit: 8 });
+      setDevotionals(data.devotionals);
+      setTotalPages(data.pages || 1);
     } catch { setError('Failed to load devotionals'); } finally { setLoading(false); }
   };
 
   const fetchStats = async () => {
-    try { const res = await api.get('/devotionals/stats'); setStats(res.data); } catch { /* silent */ }
-  };
-
-  const fetchLeaderDevotionals = async (p) => {
-    if (!selectedFolder) return;
-    setLeaderLoading(true);
-    try {
-      const params = { page: p, limit: 10, memberId: selectedFolder._id };
-      if (leaderFilter !== 'all') params.status = leaderFilter;
-      const res = await api.get('/devotionals/leader/all', { params });
-      setLeaderDevos(res.data.devotionals);
-      setLeaderTotalPages(res.data.pages || 1);
-    } catch { /* silent */ } finally { setLeaderLoading(false); }
+    try { const data = await devotionalsApi.getDevotionalStats(); setStats(data); } catch { /* silent */ }
   };
 
   const fetchLeaderStats = async () => {
-    try { const res = await api.get('/devotionals/leader/stats'); setLeaderStats(res.data); } catch { /* silent */ }
+    try { const data = await devotionalsApi.getLeaderStats(); setLeaderStats(data); } catch { /* silent */ }
   };
 
   const fetchLeaderFolders = async () => {
     setFoldersLoading(true);
-    try { const res = await api.get('/devotionals/leader/folders'); setLeaderFolders(res.data); } catch { /* silent */ } finally { setFoldersLoading(false); }
+    try { const data = await devotionalsApi.getLeaderFolders(); setLeaderFolders(data); } catch { /* silent */ } finally { setFoldersLoading(false); }
   };
 
   const tabs = [
@@ -603,7 +638,7 @@ const DevotionalDashboard = () => {
       <ModuleTabs
         tabs={tabs}
         activeId={activeTab}
-        onChange={setActiveTab}
+        onChange={handleTabChange}
         ariaLabel="Devotional sections"
       />
 

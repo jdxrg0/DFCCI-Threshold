@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ChevronLeft, BookHeart, CheckCircle2, BookOpen, Flame, Target, MessageSquare, Calendar, Pencil, Trash2, X, Save, User, Clock, Heart, AlertTriangle, Info } from 'lucide-react';
 import { format } from 'date-fns';
-import api from '../api';
+import * as devotionals from '../services/devotionals';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -170,8 +170,8 @@ const DevotionalView = () => {
   useEffect(() => {
     const fetchDevotional = async () => {
       try {
-        const res = await api.get(`/devotionals/${id}`);
-        setDevotional(res.data);
+        const data = await devotionals.getDevotional(id);
+        setDevotional(data);
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to load devotional');
       } finally {
@@ -186,8 +186,8 @@ const DevotionalView = () => {
     setAckLoading(true);
     setAckError('');
     try {
-      const res = await api.put(`/devotionals/${id}/acknowledge`, { note: ackNote });
-      setDevotional(res.data.devotional);
+      const data = await devotionals.acknowledgeDevotional(id, { note: ackNote });
+      setDevotional(data.devotional);
       setAckNote('');
     } catch (err) {
       setAckError(err.response?.data?.message || 'Failed to acknowledge');
@@ -197,7 +197,7 @@ const DevotionalView = () => {
   };
 
   const startEditing = () => {
-    let defaultPassageStr = '';
+    let defaultPassageStr;
     if (devotional.book && devotional.passage) {
        if (devotional.passage.startsWith(devotional.book)) {
            defaultPassageStr = devotional.passage.slice(devotional.book.length).trim();
@@ -228,8 +228,8 @@ const DevotionalView = () => {
     setEditLoading(true);
     setEditError('');
     try {
-      const res = await api.put(`/devotionals/${id}`, editForm);
-      setDevotional(res.data.devotional);
+      const data = await devotionals.editDevotional(id, editForm);
+      setDevotional(data.devotional);
       setEditing(false);
     } catch (err) {
       setEditError(err.response?.data?.message || 'Failed to save changes');
@@ -242,7 +242,7 @@ const DevotionalView = () => {
     if (deleteLoading) return;
     setDeleteLoading(true);
     try {
-      await api.delete(`/devotionals/${id}`);
+      await devotionals.deleteDevotional(id);
       navigate('/devotionals');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to delete');

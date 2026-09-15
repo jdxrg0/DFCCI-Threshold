@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { MessageCircle, Compass, BookOpen, Wrench, Sun, Wallet, Library, Gamepad2, BookHeart, Flame, Clock, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import api from '../api';
+import * as users from '../services/users';
 import { renderAvatarHelper } from '../utils/avatarHelper';
 
 
@@ -65,8 +65,8 @@ const PortalDashboard = () => {
 
 
   useEffect(() => {
-    api.get('/users/me/dashboard-stats')
-      .then(res => setStats(res.data))
+    users.getDashboardStats()
+      .then(setStats)
       .catch(err => console.error('Failed to load dashboard stats:', err));
   }, []);
 

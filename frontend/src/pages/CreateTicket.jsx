@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
-import { Send, ArrowLeft, Wrench } from 'lucide-react';
-import api from '../api';
+import { Send, Wrench } from 'lucide-react';
+import * as tickets from '../services/tickets';
 import PageHeader from '../components/PageHeader';
 
 const CreateTicket = () => {
@@ -35,7 +35,7 @@ const CreateTicket = () => {
     setError('');
 
     try {
-      await api.post('/tickets', formData);
+      await tickets.createTicket(formData);
       navigate('/tickets/dashboard');
     } catch (err) {
       console.error('Failed to create request:', err);

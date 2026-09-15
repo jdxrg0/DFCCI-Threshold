@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import api from '../api';
+import { useState, useEffect } from 'react';
+import * as fruits from '../services/fruits';
 import { useLanguage } from '../context/LanguageContext';
 
 const fruitsList = [
@@ -25,9 +25,9 @@ const MyFruits = () => {
 
     const fetchMyFruits = async (isBackground = false) => {
       try {
-        const res = await api.get(`/fruits/me?t=${Date.now()}`);
-        if (isMounted) setFruitCounts(res.data);
-      } catch (err) {
+        const data = await fruits.getMyFruits();
+        if (isMounted) setFruitCounts(data);
+      } catch {
         if (!isBackground && isMounted) setError('Failed to fetch fruits');
       } finally {
         if (!isBackground && isMounted) setLoading(false);

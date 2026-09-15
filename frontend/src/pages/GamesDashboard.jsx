@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Gamepad2, Trophy, BarChart3, Plus, Play, Users, Flame, Clock, ChevronLeft, Star, Target, Zap } from 'lucide-react';
+import { Gamepad2, Trophy, BarChart3, Plus, Play, Users, Flame, Clock, Star, Target } from 'lucide-react';
 import { format } from 'date-fns';
-import api from '../api';
+import * as games from '../services/games';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import ThreadSkeleton from '../components/ThreadSkeleton';
@@ -21,20 +21,11 @@ const GamesDashboard = () => {
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN';
 
-  useEffect(() => {
-    setLoading(true);
-    setError('');
-    if (activeTab === 'quizzes') fetchQuizzes();
-    else if (activeTab === 'leaderboard') fetchLeaderboard();
-    else if (activeTab === 'my_stats') fetchMyStats();
-    localStorage.setItem('games_activeTab', activeTab);
-  }, [activeTab]);
-
   const fetchQuizzes = async () => {
     try {
-      const res = await api.get('/games/quizzes');
-      setQuizzes(res.data);
-    } catch (err) {
+      const data = await games.listQuizzes();
+      setQuizzes(data);
+    } catch {
       setError('Failed to load quizzes');
     } finally {
       setLoading(false);
@@ -43,9 +34,9 @@ const GamesDashboard = () => {
 
   const fetchLeaderboard = async () => {
     try {
-      const res = await api.get('/games/leaderboard');
-      setLeaderboard(res.data);
-    } catch (err) {
+      const data = await games.getLeaderboard();
+      setLeaderboard(data);
+    } catch {
       setError('Failed to load leaderboard');
     } finally {
       setLoading(false);
@@ -54,14 +45,24 @@ const GamesDashboard = () => {
 
   const fetchMyStats = async () => {
     try {
-      const res = await api.get('/games/my-stats');
-      setMyStats(res.data);
-    } catch (err) {
+      const data = await games.getMyGameStats();
+      setMyStats(data);
+    } catch {
       setError('Failed to load stats');
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    setError('');
+    if (activeTab === 'quizzes') fetchQuizzes();
+    else if (activeTab === 'leaderboard') fetchLeaderboard();
+    else if (activeTab === 'my_stats') fetchMyStats();
+    localStorage.setItem('games_activeTab', activeTab);
+  }, [activeTab]);
 
   const formatTime = (ms) => {
     if (!ms) return '—';

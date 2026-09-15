@@ -1,7 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookHeart, Send, BookOpen, Flame, Target, Calendar, Heart, Info, Zap, AlertTriangle } from 'lucide-react';
-import api from '../api';
+import * as devotionals from '../services/devotionals';
 import useFormPersist from '../hooks/useFormPersist';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
@@ -223,7 +223,7 @@ const SubmitDevotional = () => {
   const proceedSubmit = async (markGapsAsMissed) => {
     setLoading(true);
     try {
-      await api.post('/devotionals', {
+      await devotionals.submitDevotional({
         date,
         book,
         passageStr,
@@ -255,12 +255,12 @@ const SubmitDevotional = () => {
 
     setLoading(true);
     try {
-      const checkRes = await api.get(`/devotionals/check-gap?date=${date}`);
-      if (checkRes.data.hasGap) {
+      const gapData = await devotionals.checkDevotionalGap(date);
+      if (gapData.hasGap) {
         setGapConfig({
           isOpen: true,
-          gapDates: checkRes.data.gapDates,
-          lastEntryDate: checkRes.data.lastEntryDate
+          gapDates: gapData.gapDates,
+          lastEntryDate: gapData.lastEntryDate
         });
         setLoading(false);
         return;

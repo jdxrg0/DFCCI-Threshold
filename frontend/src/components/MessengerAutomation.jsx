@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, Plus, Trash2, X, MessageSquare, Clock, Link as LinkIcon, Edit2, Upload, List, Timer, ChevronRight, Key, Copy } from 'lucide-react';
-import api from '../api';
+import { Calendar, Plus, Trash2, X, MessageSquare, Clock, Link as LinkIcon, Edit2, Upload, List, Timer, Key, Copy } from 'lucide-react';
+import * as automation from '../services/automation';
+import * as settings from '../services/settings';
 import { parseExcelSchedule, generateQueueFromAssignments } from '../utils/excelParser';
 import './MessengerAutomation.css';
 
@@ -40,8 +41,8 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
   useEffect(() => {
     const fetchSchedules = async () => {
       try {
-        const response = await api.get('/automation/schedules');
-        setSchedules(response.data);
+        const data = await automation.listSchedules();
+        setSchedules(data);
       } catch (error) {
         console.error('Failed to load schedules', error);
       }
@@ -54,12 +55,14 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
       try {
         const parsed = JSON.parse(savedDraft);
         if (parsed.isModalOpen) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setFormData(parsed.formData);
           setEditingId(parsed.editingId);
           setMessageQueue(parsed.messageQueue || []);
           setIsModalOpen(true);
         }
-      } catch(e) {}
+        // eslint-disable-next-line no-empty
+      } catch {}
     }
   }, []);
 
@@ -83,17 +86,17 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
 
   const fetchWeeklyCodeConfig = async () => {
     try {
-      const res = await api.get('/settings/weekly-code');
-      setWeeklyCodeConfig(res.data);
-      if (res.data) {
-        setEnableDispatch(res.data.enableDispatch || false);
-        setDispatchUrl(res.data.dispatchUrl || '');
-        const cronParts = (res.data.dispatchCron || '0 13 * * 0').split(' ');
+      const config = await settings.getWeeklyCode();
+      setWeeklyCodeConfig(config);
+      if (config) {
+        setEnableDispatch(config.enableDispatch || false);
+        setDispatchUrl(config.dispatchUrl || '');
+        const cronParts = (config.dispatchCron || '0 13 * * 0').split(' ');
         if (cronParts.length >= 5) {
           setDispatchTime(`${cronParts[1].padStart(2, '0')}:${cronParts[0].padStart(2, '0')}`);
           setDispatchDay(cronParts[4]);
         }
-        setDispatchMessage(res.data.dispatchMessage || 'Here is the weekly code: {WeeklyCode}');
+        setDispatchMessage(config.dispatchMessage || 'Here is the weekly code: {WeeklyCode}');
       }
     } catch (err) {
       console.error('Failed to fetch weekly code config:', err);
@@ -106,13 +109,13 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
       const [hr, min] = dispatchTime.split(':');
       const formattedCron = `${parseInt(min)} ${parseInt(hr)} * * ${dispatchDay}`;
       
-      const res = await api.put('/settings/weekly-code', {
+      const res = await settings.saveWeeklyCode({
         enableDispatch,
         dispatchUrl,
         dispatchCron: formattedCron,
         dispatchMessage
       });
-      setWeeklyCodeConfig(res.data);
+      setWeeklyCodeConfig(res);
       if (showAlert) showAlert('Success', 'Weekly Code Dispatch Configuration Saved!');
     } catch (err) {
       console.error('Failed to save config', err);
@@ -124,6 +127,7 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
 
   useEffect(() => {
     if (showCodeGenerator) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchWeeklyCodeConfig();
     }
   }, [showCodeGenerator]);
@@ -204,7 +208,7 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
     const localDaysArray = Array.from(localDaysSet).sort();
     
     // Format the days string
-    let daysStr = '';
+    let daysStr;
     if (localDaysArray.length === 7) {
       daysStr = 'Day';
     } else if (localDaysArray.length === 2 && localDaysArray.includes(0) && localDaysArray.includes(6)) {
@@ -230,7 +234,7 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
       let nextDate = null;
       
       for (let offset = 0; offset <= 7; offset++) {
-        const testDate = new Date(Date.now());
+        const testDate = new Date();
         testDate.setUTCDate(testDate.getUTCDate() + offset);
         testDate.setUTCHours(utcHours, utcMinutes, 0, 0);
         
@@ -252,7 +256,7 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
       if (diffDays > 0) return `Next in: ${diffDays}d ${diffHrs}h`;
       if (diffHrs > 0) return `Next in: ${diffHrs}h ${diffMins}m`;
       return `Next in: ${diffMins}m`;
-    } catch (err) {
+    } catch {
       return '';
     }
   };
@@ -319,13 +323,13 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
 
     try {
       if (editingId) {
-        const response = await api.put(`/automation/schedule/${editingId}`, payload);
-        const updatedSchedule = response.data.data;
+        const response = await automation.updateSchedule(editingId, payload);
+        const updatedSchedule = response.data;
         const currentSchedules = Array.isArray(schedules) ? schedules : [];
         setSchedules(currentSchedules.map(s => s._id === editingId ? updatedSchedule : s));
       } else {
-        const response = await api.post('/automation/schedule', payload);
-        const newSchedule = response.data.data;
+        const response = await automation.createSchedule(payload);
+        const newSchedule = response.data;
         setSchedules([newSchedule, ...(Array.isArray(schedules) ? schedules : [])]);
       }
       
@@ -346,7 +350,7 @@ export default function MessengerAutomation({ showAlert, showConfirm }) {
       'Are you sure you want to delete this scheduled reminder? It will be removed from the database and GitHub.',
       async () => {
         try {
-          await api.delete(`/automation/schedule/${id}`);
+          await automation.deleteSchedule(id);
           setSchedules(schedules.filter(s => s._id !== id));
         } catch (error) {
           console.error('Failed to delete schedule', error);
@@ -801,7 +805,7 @@ function QueueList({ items, title, queueEditingId, setQueueToView, queueToView, 
                   style={{ marginTop: '0.5rem', padding: '0.3rem 0.8rem', fontSize: '0.8rem' }}
                   onClick={async () => {
                     try {
-                      await api.patch(`/automation/schedule/${queueEditingId}/queue`, {
+                      await automation.editQueueItem(queueEditingId, {
                         targetDate: q.targetDate,
                         messageText: q.messageText
                       });
@@ -814,7 +818,7 @@ function QueueList({ items, title, queueEditingId, setQueueToView, queueToView, 
                         }
                         return s;
                       }));
-                    } catch (err) {
+                    } catch {
                       if (showAlert) showAlert('Error', 'Failed to update queue item.');
                     }
                   }}

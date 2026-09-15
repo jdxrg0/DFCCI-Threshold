@@ -1,5 +1,3 @@
-import React from 'react';
-
 const ThreadSkeleton = () => {
   // Render 3 skeleton cards to fill the viewport
   return (

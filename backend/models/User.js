@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { ROLES, ALL_ROLES } = require('../../shared/constants');
 
 const userSchema = new mongoose.Schema({
   displayName: {
@@ -29,8 +30,8 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['MEMBER', 'COUNSELOR', 'ADMIN', 'YOUTH_TREASURER'],
-    default: 'MEMBER',
+    enum: ALL_ROLES,
+    default: ROLES.MEMBER,
   },
   isVerified: {
     type: Boolean,

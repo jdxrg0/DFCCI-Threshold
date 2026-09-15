@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
+import * as usersApi from '../services/users';
+import * as threads from '../services/threads';
 import TimerButton from '../components/TimerButton';
 import useFormPersist from '../hooks/useFormPersist';
 import { useLanguage } from '../context/LanguageContext';
@@ -27,8 +28,8 @@ const SendMirror = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await api.get('/users/members');
-        setUsers(res.data);
+        const data = await usersApi.getVerifiedMembers();
+        setUsers(data);
       } catch (err) {
         console.error('Error fetching members', err);
       }
@@ -60,7 +61,7 @@ const SendMirror = () => {
 
     setLoading(true);
     try {
-      await api.post('/threads', {
+      await threads.createThread({
         receiverId: selectedUser,
         topic: topic.trim(),
         content: { concern, impact, desiredChange, bibleVerse }

@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { UserPlus, CheckCircle, RefreshCw } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import api from '../api';
+import * as auth from '../services/auth';
 import useFormPersist from '../hooks/useFormPersist';
 import logo from '../assets/logo.svg';
 
@@ -54,7 +54,7 @@ const Signup = () => {
         setFormData(prev => ({ ...prev, email: pendingEmail }));
       }
     }
-  }, []);
+  }, [step, setFormData]);
 
   // Keep localStorage in sync with current step and refresh the expiry
   useEffect(() => {
@@ -137,8 +137,8 @@ const Signup = () => {
   const handleResendOtp = async () => {
     setError(''); setMsg('');
     try {
-      const res = await api.post('/auth/resend-otp', { email: formData.email });
-      setMsg(res.data.message);
+      const data = await auth.resendOtp(formData.email);
+      setMsg(data.message);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to resend OTP');
     }

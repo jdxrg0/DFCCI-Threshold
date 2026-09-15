@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, KeyRound, Lock, CheckCircle, RefreshCw, ArrowLeft } from 'lucide-react';
-import api from '../api';
+import { Mail, KeyRound, RefreshCw, ArrowLeft } from 'lucide-react';
+import * as auth from '../services/auth';
 import { useLanguage } from '../context/LanguageContext';
 import logo from '../assets/logo.svg';
 
@@ -60,8 +60,8 @@ const ForgotPassword = () => {
     e.preventDefault();
     setError(''); setMsg(''); setLoading(true);
     try {
-      const res = await api.post('/auth/forgot-password', { email });
-      setMsg(res.data.message);
+      const data = await auth.forgotPassword(email);
+      setMsg(data.message);
       // Persist to localStorage so the state survives mobile tab kills
       localStorage.setItem(FP_STEP_KEY, '2');
       localStorage.setItem(FP_EMAIL_KEY, email);
@@ -77,7 +77,7 @@ const ForgotPassword = () => {
   const handleResend = async () => {
     setError(''); setMsg(''); setLoading(true);
     try {
-      const res = await api.post('/auth/forgot-password', { email });
+      await auth.forgotPassword(email);
       setMsg('A new reset code has been sent to your email.');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to resend code');
@@ -97,8 +97,8 @@ const ForgotPassword = () => {
     }
     setLoading(true);
     try {
-      const res = await api.post('/auth/reset-password', { email, otp, newPassword });
-      setMsg(res.data.message);
+      const data = await auth.resetPassword(email, otp, newPassword);
+      setMsg(data.message);
       // Clear all persisted reset state after successful password change
       clearPendingFP();
       setTimeout(() => navigate('/login'), 2000);

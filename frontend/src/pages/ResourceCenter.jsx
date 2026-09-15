@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
-import { Search, Download, Trash2, Library, Plus, Pencil, BookOpen, Users, Music, Compass, Eye, X, Book } from 'lucide-react';
+import * as resourcesApi from '../services/resources';
+import { Search, Trash2, Library, Plus, Pencil, BookOpen, Users, Music, Compass, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import ResourceUploadModal from '../components/ResourceUploadModal';
@@ -50,7 +50,17 @@ const ResourceCenter = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchResources();
+    const load = async () => {
+      try {
+        const data = await resourcesApi.listResources();
+        setResources(data);
+      } catch (error) {
+        console.error('Failed to fetch resources:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
   }, []);
 
   // Lock body scroll when the delete modal is open
@@ -65,21 +75,10 @@ const ResourceCenter = () => {
     };
   }, [resourceToDelete]);
 
-  const fetchResources = async () => {
-    try {
-      const { data } = await api.get('/resources');
-      setResources(data);
-    } catch (error) {
-      console.error('Failed to fetch resources:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const confirmDelete = async () => {
     if (!resourceToDelete) return;
     try {
-      await api.delete(`/resources/${resourceToDelete._id}`);
+      await resourcesApi.deleteResource(resourceToDelete._id);
       setResources(resources.filter(r => r._id !== resourceToDelete._id));
       setResourceToDelete(null);
     } catch (error) {

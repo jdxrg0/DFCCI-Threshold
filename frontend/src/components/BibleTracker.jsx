@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
-  BookOpen, ChevronDown, ChevronUp, CheckCircle2,
+  BookOpen, ChevronDown, CheckCircle2,
   Scale, Scroll, Music, Flame, Volume2, Sparkles, Globe, Mail, Heart, Crown
 } from 'lucide-react';
-import api from '../api';
+import * as devotionals from '../services/devotionals';
 import { BIBLE_VERSE_COUNTS } from '../data/bibleVerseCounts';
 
 const BIBLE_DATA = [
@@ -356,8 +356,8 @@ const BibleTracker = ({ targetMemberId }) => {
   useEffect(() => {
     const fetchProgress = async () => {
       try {
-        const res = await api.get('/devotionals/bible-progress/all', { params: { memberId: targetMemberId } });
-        setProgress(res.data || {});
+        const data = await devotionals.getBibleProgress(targetMemberId);
+        setProgress(data || {});
       } catch (err) {
         console.error(err);
       } finally {

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 
 const ThemeContext = createContext();
 
@@ -190,7 +191,7 @@ export const ThemeProvider = ({ children }) => {
       return undefined;
     }
     const onChange = (e) => setSystemDark(e.matches);
-    setSystemDark(mq.matches);
+    queueMicrotask(() => setSystemDark(mq.matches));
     // addListener is the pre-Safari-14 spelling and still the only one there
     if (mq.addEventListener) mq.addEventListener('change', onChange);
     else if (mq.addListener) mq.addListener(onChange);

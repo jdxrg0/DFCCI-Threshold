@@ -1,5 +1,3 @@
-import React from 'react';
-
 /* ──────────────────────────────────────────────────────────────────────────
    PageHeader — the app's one and only page title block.
 

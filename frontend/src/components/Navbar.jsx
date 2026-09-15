@@ -1,20 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, Sun, Wallet, BookHeart, ChevronRight, Settings } from 'lucide-react';
 import ThemePanel, { ThemePanelContent } from './ThemePanel';
-import api from '../api';
 import logo from '../assets/logo.svg';
 import { renderAvatarHelper } from '../utils/avatarHelper';
 
 // ── Module map: route prefix → { icon, dashboardPath, label } ──────────────
 // Add a new entry here whenever a new module is introduced to the platform.
-// Routes that should NOT clear the active module context (utility/overlay pages)
-const NEUTRAL_ROUTES = [];
-
 const MODULE_MAP = [
   {
     prefix: '/mirror',
@@ -76,7 +71,6 @@ const renderAvatar = (user, size = 32) => renderAvatarHelper(user, size);
 
 const Navbar = () => {
   const { user, logout } = useAuth();
-  const { theme } = useTheme();
   const { t } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
@@ -87,8 +81,9 @@ const Navbar = () => {
 
   // Persist the last known module through neutral routes (e.g. /notifications)
   const lastModuleRef = useRef(null);
-  if (activeModule) lastModuleRef.current = activeModule;
-  const displayedModule = activeModule || (NEUTRAL_ROUTES.includes(location.pathname) ? lastModuleRef.current : null);
+  useEffect(() => {
+    if (activeModule) lastModuleRef.current = activeModule;
+  }, [activeModule]);
 
   useEffect(() => {
     if (isMobileMenuOpen) {

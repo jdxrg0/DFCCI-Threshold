@@ -1,4 +1,5 @@
-import React, { createContext, useContext } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext } from 'react';
 import { translations } from '../data/i18n';
 
 const LanguageContext = createContext();

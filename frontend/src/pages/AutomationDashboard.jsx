@@ -6,7 +6,9 @@ import {
   AlertTriangle, XCircle, Info, Send, Target, Zap, RefreshCw, Pause, ExternalLink
 } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../api';
+import * as automation from '../services/automation';
+import * as settings from '../services/settings';
+import * as calendar from '../services/calendar';
 import { generateQueueFromAssignments } from '../utils/excelParser';
 import MemberDirectory from '../components/MemberDirectory';
 import PopupModal from '../components/PopupModal';
@@ -426,8 +428,8 @@ export default function AutomationDashboard() {
   // ── Loading ─────────────────────────────────────────────────────────────
   const fetchSchedules = useCallback(async () => {
     try {
-      const res = await api.get('/automation/schedules');
-      setSchedules(Array.isArray(res.data) ? res.data : []);
+      const data = await automation.listSchedules();
+      setSchedules(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to load schedules', error);
       toast('Could not load schedules.', 'error');
@@ -440,8 +442,8 @@ export default function AutomationDashboard() {
      simply never been used. */
   const fetchHealth = useCallback(async () => {
     try {
-      const res = await api.get('/automation/health');
-      setHealth(res.data);
+      const data = await automation.getAutomationHealth();
+      setHealth(data);
     } catch {
       // The probe is diagnostics; the schedules themselves must still render.
       setHealth(null);
@@ -450,18 +452,18 @@ export default function AutomationDashboard() {
 
   const fetchWeeklyCodeConfig = useCallback(async () => {
     try {
-      const res = await api.get('/settings/weekly-code');
-      setWeeklyCodeConfig(res.data);
-      if (res.data) {
-        setCodeTemplateDraft(res.data.template || 'DFCCI-S-LU-{DATE}');
-        setEnableDispatch(res.data.enableDispatch || false);
-        setDispatchUrl(res.data.dispatchUrl || '');
-        const cronParts = (res.data.dispatchCron || '0 13 * * 0').split(' ');
+      const data = await settings.getWeeklyCode();
+      setWeeklyCodeConfig(data);
+      if (data) {
+        setCodeTemplateDraft(data.template || 'DFCCI-S-LU-{DATE}');
+        setEnableDispatch(data.enableDispatch || false);
+        setDispatchUrl(data.dispatchUrl || '');
+        const cronParts = (data.dispatchCron || '0 13 * * 0').split(' ');
         if (cronParts.length >= 5) {
           setDispatchTime(`${cronParts[1].padStart(2, '0')}:${cronParts[0].padStart(2, '0')}`);
           setDispatchDay(cronParts[4]);
         }
-        setDispatchMessage(res.data.dispatchMessage || 'Here is the weekly code: {WeeklyCode}');
+        setDispatchMessage(data.dispatchMessage || 'Here is the weekly code: {WeeklyCode}');
       }
     } catch (err) {
       console.error('Failed to fetch weekly code config:', err);
@@ -479,11 +481,11 @@ export default function AutomationDashboard() {
         fetchHealth(),
         (async () => {
           try {
-            const res = await api.get('/calendar');
+            const res = await calendar.getCalendar();
             if (cancelled) return;
             const roles = new Set();
             const map = {};
-            res.data.forEach(item => {
+            res.forEach(item => {
               Object.keys(item.roles || {}).forEach(r => roles.add(r));
               if (Object.keys(item.roles || {}).length > 0) map[item.targetDate] = item.roles;
             });
@@ -783,12 +785,12 @@ export default function AutomationDashboard() {
     try {
       setIsSaving(true);
       if (editingId) {
-        const res = await api.put(`/automation/schedule/${editingId}`, payload);
-        setSchedules(prev => prev.map(s => (s._id === editingId ? res.data.data : s)));
+        const res = await automation.updateSchedule(editingId, payload);
+        setSchedules(prev => prev.map(s => (s._id === editingId ? res.data : s)));
         toast('Schedule updated.', 'success');
       } else {
-        const res = await api.post('/automation/schedule', payload);
-        setSchedules(prev => [res.data.data, ...prev]);
+        const res = await automation.createSchedule(payload);
+        setSchedules(prev => [res.data, ...prev]);
         toast('Schedule created.', 'success');
       }
       closeEditor();
@@ -806,8 +808,8 @@ export default function AutomationDashboard() {
     const next = !schedule.isActive;
     setBusyId(schedule._id);
     try {
-      const res = await api.patch(`/automation/schedule/${schedule._id}/active`, { isActive: next });
-      setSchedules(prev => prev.map(s => (s._id === schedule._id ? res.data.data : s)));
+      const res = await automation.toggleScheduleActive(schedule._id, next);
+      setSchedules(prev => prev.map(s => (s._id === schedule._id ? res.data : s)));
       toast(next ? `"${schedule.scheduleName}" resumed.` : `"${schedule.scheduleName}" paused.`, next ? 'success' : 'warning');
     } catch (error) {
       toast(error.response?.data?.msg || 'Could not change the schedule state.', 'error');
@@ -819,8 +821,8 @@ export default function AutomationDashboard() {
   const handlePreview = async (schedule) => {
     setBusyId(schedule._id);
     try {
-      const res = await api.post(`/automation/schedule/${schedule._id}/run`, { actionType: 'MAIN', dryRun: true });
-      setPreview({ schedule, data: res.data.data });
+      const res = await automation.runSchedule(schedule._id, true);
+      setPreview({ schedule, data: res.data });
     } catch (error) {
       toast(error.response?.data?.msg || 'Could not resolve a preview.', 'error');
     } finally {
@@ -835,8 +837,8 @@ export default function AutomationDashboard() {
       async () => {
         setBusyId(schedule._id);
         try {
-          const res = await api.post(`/automation/schedule/${schedule._id}/run`, { actionType: 'MAIN' });
-          const { result, schedule: updated } = res.data.data;
+          const res = await automation.runSchedule(schedule._id, false);
+          const { result, schedule: updated } = res.data;
           if (updated) setSchedules(prev => prev.map(s => (s._id === schedule._id ? updated : s)));
           
           if (result.ok && schedule.githubFileName) {
@@ -873,8 +875,8 @@ export default function AutomationDashboard() {
   const handleDuplicate = async (schedule) => {
     setBusyId(schedule._id);
     try {
-      const res = await api.post(`/automation/schedule/${schedule._id}/duplicate`);
-      setSchedules(prev => [res.data.data, ...prev]);
+      const res = await automation.duplicateSchedule(schedule._id);
+      setSchedules(prev => [res.data, ...prev]);
       toast('Copy created — it starts paused so nothing double-sends.', 'success');
     } catch (error) {
       toast(error.response?.data?.msg || 'Could not duplicate the schedule.', 'error');
@@ -889,7 +891,7 @@ export default function AutomationDashboard() {
       `"${schedule.scheduleName}" will be removed from the database and its GitHub workflow deleted. Pause it instead if you only want to stop it for now.`,
       async () => {
         try {
-          await api.delete(`/automation/schedule/${schedule._id}`);
+          await automation.deleteSchedule(schedule._id);
           setSchedules(prev => prev.filter(s => s._id !== schedule._id));
           toast('Schedule deleted.', 'success');
         } catch {
@@ -915,8 +917,8 @@ export default function AutomationDashboard() {
     if (askedForConfirmations.current.has(scheduleId)) return;
     askedForConfirmations.current.add(scheduleId);
     try {
-      const res = await api.get(`/automation/schedule/${scheduleId}/confirmations`);
-      setConfirmations(prev => ({ ...prev, [scheduleId]: res.data }));
+      const res = await automation.getScheduleConfirmations(scheduleId);
+      setConfirmations(prev => ({ ...prev, [scheduleId]: res }));
     } catch {
       // A missing confirmation view is not worth interrupting the admin over;
       // the rows simply render without a chip.
@@ -931,8 +933,8 @@ export default function AutomationDashboard() {
   const openRuns = async (schedule) => {
     setRunsFor(schedule._id);
     try {
-      const res = await api.get(`/automation/schedule/${schedule._id}/runs`);
-      setRunsData(prev => ({ ...prev, [schedule._id]: res.data }));
+      const res = await automation.getScheduleRuns(schedule._id);
+      setRunsData(prev => ({ ...prev, [schedule._id]: res }));
     } catch {
       // The already-loaded runHistory stays on screen.
     }
@@ -945,8 +947,8 @@ export default function AutomationDashboard() {
     );
     if (!needsPolling) return;
     const interval = setInterval(() => {
-      api.get(`/automation/schedule/${runsFor}/runs`).then(res => {
-        setRunsData(prev => ({ ...prev, [runsFor]: res.data }));
+      automation.getScheduleRuns(runsFor).then(res => {
+        setRunsData(prev => ({ ...prev, [runsFor]: res }));
       }).catch(() => {});
     }, 5000);
     return () => clearInterval(interval);
@@ -954,7 +956,7 @@ export default function AutomationDashboard() {
 
   const saveQueueItem = async (item) => {
     try {
-      await api.patch(`/automation/schedule/${queueFor}/queue`, {
+      await automation.editQueueItem(queueFor, {
         targetDate: item.targetDate,
         messageText: item.messageText,
         overrideChatUrl: item.overrideChatUrl
@@ -984,7 +986,7 @@ export default function AutomationDashboard() {
     try {
       setIsSavingDispatch(true);
       const [hr, min] = dispatchTime.split(':');
-      const res = await api.put('/settings/weekly-code', {
+      const res = await settings.saveWeeklyCode({
         template: codeTemplateDraft,
         enableDispatch,
         dispatchUrl,
@@ -992,8 +994,8 @@ export default function AutomationDashboard() {
         dispatchMessage,
         ...options
       });
-      setWeeklyCodeConfig(res.data);
-      toast(options.forceGenerate ? `New code: ${res.data.currentCode}` : 'Weekly code settings saved.', 'success');
+      setWeeklyCodeConfig(res);
+      toast(options.forceGenerate ? `New code: ${res.currentCode}` : 'Weekly code settings saved.', 'success');
     } catch {
       toast('Could not save the weekly code settings.', 'error');
     } finally {

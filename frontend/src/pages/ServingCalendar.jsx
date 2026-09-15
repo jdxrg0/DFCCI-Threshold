@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Upload, Plus, X, Save, UserCheck, BookOpen, Trash2, MessageCircle, Download } from 'lucide-react';
 import { 
   format, 
@@ -13,7 +13,8 @@ import {
   addDays 
 } from 'date-fns';
 import { Link } from 'react-router-dom';
-import api from '../api';
+import * as calendar from '../services/calendar';
+import * as users from '../services/users';
 import { parseExcelSchedule, downloadExcelTemplate } from '../utils/excelParser';
 import PopupModal from '../components/PopupModal';
 import MemberDirectory from '../components/MemberDirectory'; // Reusing MemberDirectory
@@ -45,7 +46,7 @@ export default function ServingCalendar() {
   
   const [popup, setPopup] = useState({ isOpen: false, title: '', message: '', isAlert: false });
   const [confirmPopup, setConfirmPopup] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
-  const showAlert = (title, message) => setPopup({ isOpen: true, title, message, isAlert: true });
+  const showAlert = useCallback((title, message) => setPopup({ isOpen: true, title, message, isAlert: true }), []);
   
   const [holdProgress, setHoldProgress] = useState(0);
   const holdIntervalRef = React.useRef(null);
@@ -79,28 +80,30 @@ export default function ServingCalendar() {
   };
 
   useEffect(() => {
-    if (!confirmPopup.isOpen) cancelHold();
+    if (!confirmPopup.isOpen) {
+      const timer = setTimeout(() => {
+        if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
+        setHoldProgress(0);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
   }, [confirmPopup.isOpen]);
 
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const [calRes, memRes] = await Promise.all([
-        api.get('/calendar'),
-        api.get('/members')
+      const [calData, memData] = await Promise.all([
+        calendar.getCalendar(),
+        users.listMembers()
       ]);
       
       const formatted = {};
-      calRes.data.forEach(item => {
+      calData.forEach(item => {
         formatted[item.targetDate] = item.roles || {};
       });
       
       const mMap = {};
-      memRes.data.forEach(m => {
+      memData.forEach(m => {
         mMap[m.name.toLowerCase()] = m.facebookChatUrl;
       });
 
@@ -112,7 +115,12 @@ export default function ServingCalendar() {
       showAlert('Error', 'Failed to fetch calendar data.');
       setLoading(false);
     }
-  };
+  }, [showAlert]);
+
+  useEffect(() => {
+    const t = setTimeout(() => fetchData(), 0);
+    return () => clearTimeout(t);
+  }, [fetchData]);
 
   const handlePrevMonth = () => setCurrentDate(subMonths(currentDate, 1));
   const handleNextMonth = () => setCurrentDate(addMonths(currentDate, 1));
@@ -140,7 +148,7 @@ export default function ServingCalendar() {
   const handleSaveDay = async () => {
     const dateKey = format(selectedDate, 'yyyy-MM-dd');
     try {
-      await api.put(`/calendar/${dateKey}`, { roles: editingRoles });
+      await calendar.saveDateRoles(dateKey, { roles: editingRoles });
       setAssignments(prev => ({ ...prev, [dateKey]: editingRoles }));
       setIsDayModalOpen(false);
     } catch (err) {
@@ -205,7 +213,7 @@ export default function ServingCalendar() {
         }
       });
 
-      await api.post('/calendar/populate', { assignments: filteredAssignments });
+      await calendar.populateCalendar({ assignments: filteredAssignments });
       showAlert('Success', 'Selected roles successfully imported to the calendar!');
       fetchData();
     } catch (err) {
@@ -225,7 +233,7 @@ export default function ServingCalendar() {
         setConfirmPopup({ ...confirmPopup, isOpen: false });
         try {
           setLoading(true);
-          await api.delete('/calendar/clear');
+          await calendar.clearCalendar();
           showAlert('Success', 'Calendar cleared successfully.');
           setAssignments({});
         } catch (err) {
@@ -272,8 +280,8 @@ export default function ServingCalendar() {
     const rows = [];
     let days = [];
     let day = startDate;
-    let formattedDate = '';
-    
+    let formattedDate;
+
     while (day <= endDate) {
       for (let i = 0; i < 7; i++) {
         formattedDate = format(day, 'd');

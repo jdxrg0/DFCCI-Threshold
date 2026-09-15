@@ -1,13 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { useLanguage } from '../context/LanguageContext';
-import { ArrowLeft, AlertCircle, Wrench, PlusCircle, FileText, CheckCircle, Clock, RefreshCw, User } from 'lucide-react';
-import api from '../api';
+import { AlertCircle, Wrench, PlusCircle, FileText, CheckCircle, Clock, RefreshCw, User } from 'lucide-react';
+import * as tickets from '../services/tickets';
 
 const TicketView = () => {
   const { id } = useParams();
-  const { user } = useAuth();
   const { t } = useLanguage();
   
   const [ticket, setTicket] = useState(null);
@@ -15,20 +13,21 @@ const TicketView = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
+    const fetchTicket = async () => {
+      try {
+        const data = await tickets.getTicket(id);
+        if (!cancelled) setTicket(data);
+      } catch (err) {
+        console.error('Failed to fetch ticket:', err);
+        if (!cancelled) setError('Could not load the request.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
     fetchTicket();
+    return () => { cancelled = true; };
   }, [id]);
-
-  const fetchTicket = async () => {
-    try {
-      const res = await api.get(`/tickets/${id}`);
-      setTicket(res.data);
-    } catch (err) {
-      console.error('Failed to fetch ticket:', err);
-      setError('Could not load the request.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const getStatusBadge = (status) => {
     let icon, bgColor, color;

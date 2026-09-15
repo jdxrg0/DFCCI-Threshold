@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import api from '../api';
+import { useState, useEffect, useCallback } from 'react';
+import * as threadsApi from '../services/threads';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -13,28 +13,29 @@ const CounselorDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  const fetchThreads = useCallback(async () => {
+    try {
+      const data = await threadsApi.getCounselorThreads();
+      setThreads(data);
+    } catch {
+      setError('Failed to fetch threads');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!['ADMIN', 'COUNSELOR'].includes(user?.role)) {
       navigate('/dashboard');
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchThreads();
-  }, [user, navigate]);
-
-  const fetchThreads = async () => {
-    try {
-      const res = await api.get('/counselor/threads');
-      setThreads(res.data);
-    } catch (err) {
-      setError('Failed to fetch threads');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [user, navigate, fetchThreads]);
 
   const handleRequestAccess = async (threadId) => {
     try {
-      await api.post(`/counselor/threads/${threadId}/request-access`);
+      await threadsApi.requestCounselorAccess(threadId);
       fetchThreads();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to request access');

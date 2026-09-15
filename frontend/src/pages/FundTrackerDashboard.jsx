@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import api from '../api';
+import * as fundsApi from '../services/funds';
+import * as users from '../services/users';
 import { Link } from 'react-router-dom';
 import {
   ArrowDownRight,
@@ -408,9 +409,9 @@ export default function FundTrackerDashboard() {
       if (filterType !== 'ALL') p.append('filterType', filterType);
       if (fundFilter) p.append('designatedFund', fundFilter);
       if (search.trim()) p.append('q', search.trim());
-      p.append('page', page);
-      p.append('limit', 10);
-      return p.toString();
+      p.append('page', String(page));
+      p.append('limit', '10');
+      return p;
     },
     [month, year, filterType, fundFilter, search]
   );
@@ -427,21 +428,21 @@ export default function FundTrackerDashboard() {
         pageCache.current = {};
 
         const [sumRes, catRes, r1, r2] = await Promise.all([
-          api.get('/funds/summary'),
-          api.get('/funds/categories'),
-          api.get(`/funds?${buildTxParams(1)}`),
-          api.get(`/funds?${buildTxParams(2)}`).catch(() => null),
+          fundsApi.getFundSummary(),
+          fundsApi.getCategories(),
+          fundsApi.listTransactions(buildTxParams(1)),
+          fundsApi.listTransactions(buildTxParams(2)).catch(() => null),
         ]);
 
-        setSummary(sumRes.data);
-        setCategories(catRes.data);
-        setTotalPages(r1.data.totalPages);
-        setTotalResults(r1.data.total);
-        setTransactions(r1.data.transactions);
+        setSummary(sumRes);
+        setCategories(catRes);
+        setTotalPages(r1.totalPages);
+        setTotalResults(r1.total);
+        setTransactions(r1.transactions);
         setCurrentPage(1);
 
-        pageCache.current[cacheKey(1)] = r1.data.transactions;
-        if (r2?.data?.transactions?.length) pageCache.current[cacheKey(2)] = r2.data.transactions;
+        pageCache.current[cacheKey(1)] = r1.transactions;
+        if (r2?.transactions?.length) pageCache.current[cacheKey(2)] = r2.transactions;
       } catch (err) {
         console.error('Failed to load fund overview:', err);
       } finally {
@@ -462,10 +463,10 @@ export default function FundTrackerDashboard() {
       }
       setLoadingOverview(true);
       try {
-        const res = await api.get(`/funds?${buildTxParams(page)}`);
-        pageCache.current[key] = res.data.transactions;
-        setTotalPages(res.data.totalPages);
-        setTransactions(res.data.transactions);
+        const res = await fundsApi.listTransactions(buildTxParams(page));
+        pageCache.current[key] = res.transactions;
+        setTotalPages(res.totalPages);
+        setTransactions(res.transactions);
         setCurrentPage(page);
       } catch (err) {
         console.error('Failed to change page:', err);
@@ -479,8 +480,8 @@ export default function FundTrackerDashboard() {
   const fetchLedger = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoadingDues(true);
-      const res = await api.get('/funds/dues/ledger');
-      setLedgerData(res.data);
+      const data = await fundsApi.getDuesLedger();
+      setLedgerData(data);
     } catch (err) {
       console.error('Failed to load dues ledger:', err);
     } finally {
@@ -491,8 +492,8 @@ export default function FundTrackerDashboard() {
   const fetchDesignatedFunds = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setLoadingFunds(true);
-      const res = await api.get('/funds/designated');
-      setDesignatedFunds(res.data);
+      const data = await fundsApi.listDesignatedFunds();
+      setDesignatedFunds(data);
     } catch (err) {
       console.error('Failed to load designated funds:', err);
     } finally {
@@ -503,8 +504,8 @@ export default function FundTrackerDashboard() {
   const fetchAnalytics = useCallback(async () => {
     try {
       setLoadingAnalytics(true);
-      const res = await api.get('/funds/analytics?months=6');
-      setAnalytics(res.data);
+      const data = await fundsApi.getAnalytics({ months: '6' });
+      setAnalytics(data);
     } catch (err) {
       console.error('Failed to load analytics:', err);
     } finally {
@@ -515,10 +516,10 @@ export default function FundTrackerDashboard() {
   const fetchAudit = useCallback(async (page = 1) => {
     try {
       setLoadingAudit(true);
-      const res = await api.get(`/funds/audit?page=${page}&limit=20`);
-      setAuditEntries(res.data.entries);
-      setAuditTotalPages(res.data.totalPages);
-      setAuditPage(res.data.page);
+      const data = await fundsApi.getFundAudit({ page: String(page), limit: '20' });
+      setAuditEntries(data.entries);
+      setAuditTotalPages(data.totalPages);
+      setAuditPage(data.page);
     } catch (err) {
       console.error('Failed to load audit log:', err);
     } finally {
@@ -530,8 +531,8 @@ export default function FundTrackerDashboard() {
     if (!isPrivileged) return;
     try {
       setLoadingReminders(true);
-      const res = await api.get('/funds/dues/reminder-preview');
-      setReminderPreview(res.data);
+      const data = await fundsApi.previewDuesReminders();
+      setReminderPreview(data);
     } catch (err) {
       console.error('Failed to load reminder preview:', err);
     } finally {
@@ -539,17 +540,31 @@ export default function FundTrackerDashboard() {
     }
   }, [isPrivileged]);
 
-  useEffect(() => { fetchOverview(); }, [fetchOverview]);
-  useEffect(() => { fetchLedger(); }, [fetchLedger]);
-  useEffect(() => { fetchDesignatedFunds(); }, [fetchDesignatedFunds]);
-  useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchOverview();
+  }, [fetchOverview]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchLedger();
+  }, [fetchLedger]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchDesignatedFunds();
+  }, [fetchDesignatedFunds]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   // Loaded on demand — most visits never open these tabs.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeTab === 'activity' && !auditEntries.length) fetchAudit(1);
   }, [activeTab, auditEntries.length, fetchAudit]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeTab === 'dues' && isPrivileged && !reminderPreview) fetchReminderPreview();
   }, [activeTab, isPrivileged, reminderPreview, fetchReminderPreview]);
 
@@ -842,8 +857,8 @@ export default function FundTrackerDashboard() {
         config = { headers: { 'Content-Type': 'multipart/form-data' } };
       }
 
-      if (editingId) await api.put(`/funds/${editingId}`, payload, config);
-      else await api.post('/funds', payload, config);
+      if (editingId) await fundsApi.updateTransaction(editingId, payload, config);
+      else await fundsApi.createTransaction(payload, config);
 
       setReceiptFile(null);
       setReceiptPreview('');
@@ -866,10 +881,7 @@ export default function FundTrackerDashboard() {
       return;
     }
     try {
-      await api.patch('/funds/categories/rename', {
-        oldName: editingCategory.original,
-        newName: editingCategory.draft.trim(),
-      });
+      await fundsApi.renameCategory(editingCategory.original, editingCategory.draft.trim());
       if (formData.category === editingCategory.original) {
         setFormData((f) => ({ ...f, category: editingCategory.draft.trim() }));
       }
@@ -886,7 +898,7 @@ export default function FundTrackerDashboard() {
       `Delete "${tx.category}" for ${peso(tx.amount)}? Any weekly dues entry linked to it is cleared too.`,
       async () => {
         try {
-          await api.delete(`/funds/${tx._id}`);
+          await fundsApi.deleteTransaction(tx._id);
           await Promise.all([fetchOverview(), fetchLedger({ silent: true }), fetchDesignatedFunds({ silent: true })]);
           fetchAnalytics();
           fetchAudit(1);
@@ -903,11 +915,11 @@ export default function FundTrackerDashboard() {
     try {
       // Pulled in on demand so the sheet writer only loads when someone
       // actually exports.
-      const [{ default: XLSX }, res] = await Promise.all([
+      const [{ default: XLSX }, data] = await Promise.all([
         import('xlsx'),
-        api.get(`/funds/export?${buildTxParams(1)}`),
+        fundsApi.exportTransactions(buildTxParams(1)),
       ]);
-      const rows = res.data.transactions.map((tx) => ({
+      const rows = data.transactions.map((tx) => ({
         Date: new Date(tx.date).toLocaleDateString('en-PH'),
         Type: tx.type,
         Category: tx.category,
@@ -934,7 +946,7 @@ export default function FundTrackerDashboard() {
       );
       XLSX.writeFile(wb, `youth-fund-${getLocalYMD(new Date())}.xlsx`);
 
-      if (res.data.capped) {
+      if (data.capped) {
         showAlert('Export truncated', 'Only the 5,000 most recent matching transactions were exported. Narrow the filters for a complete slice.');
       }
     } catch (err) {
@@ -1056,7 +1068,7 @@ ${formattedDesc}
     const description = `Registration fee (₱${fellowshipData.fee} each for ${fellowshipCount} participants)\n${[...rosterNames, ...guestNames].join('\n')}`;
 
     try {
-      await api.post('/funds', {
+      await fundsApi.createTransaction({
         type: 'EXPENSE',
         amount: fellowshipTotal,
         category: fellowshipData.eventName.trim(),
@@ -1095,8 +1107,8 @@ ${formattedDesc}
   const handleFundSubmit = async (e) => {
     e.preventDefault();
     try {
-      if (editingFundId) await api.put(`/funds/designated/${editingFundId}`, fundData);
-      else await api.post('/funds/designated', fundData);
+      if (editingFundId) await fundsApi.updateDesignatedFund(editingFundId, fundData);
+      else await fundsApi.createDesignatedFund(fundData);
       setShowFundForm(false);
       fetchDesignatedFunds();
     } catch (err) {
@@ -1110,7 +1122,7 @@ ${formattedDesc}
       `Delete "${fund.name}"? Transactions assigned to it are kept and simply become unassigned.`,
       async () => {
         try {
-          await api.delete(`/funds/designated/${fund._id}`);
+          await fundsApi.deleteDesignatedFund(fund._id);
           setShowFundForm(false);
           await Promise.all([fetchDesignatedFunds(), fetchOverview({ silent: true })]);
         } catch (err) {
@@ -1123,8 +1135,8 @@ ${formattedDesc}
   const openFundTxModal = async (fund) => {
     setFundTxModal({ isOpen: true, fund, transactions: [], loading: true, page: 1, totalPages: 1 });
     try {
-      const res = await api.get(`/funds?designatedFund=${fund._id}&page=1&limit=10`);
-      setFundTxModal((prev) => ({ ...prev, transactions: res.data.transactions, totalPages: res.data.totalPages, loading: false }));
+      const res = await fundsApi.listTransactions({ designatedFund: fund._id, page: '1', limit: '10' });
+      setFundTxModal((prev) => ({ ...prev, transactions: res.transactions, totalPages: res.totalPages, loading: false }));
     } catch (err) {
       console.error('Failed to load fund transactions:', err);
       setFundTxModal((prev) => ({ ...prev, loading: false }));
@@ -1135,8 +1147,8 @@ ${formattedDesc}
     if (!fundTxModal.fund) return;
     setFundTxModal((prev) => ({ ...prev, loading: true }));
     try {
-      const res = await api.get(`/funds?designatedFund=${fundTxModal.fund._id}&page=${page}&limit=10`);
-      setFundTxModal((prev) => ({ ...prev, transactions: res.data.transactions, totalPages: res.data.totalPages, page, loading: false }));
+      const res = await fundsApi.listTransactions({ designatedFund: fundTxModal.fund._id, page: String(page), limit: '10' });
+      setFundTxModal((prev) => ({ ...prev, transactions: res.transactions, totalPages: res.totalPages, page, loading: false }));
     } catch (err) {
       console.error('Failed to page fund transactions:', err);
       setFundTxModal((prev) => ({ ...prev, loading: false }));
@@ -1218,7 +1230,7 @@ ${formattedDesc}
       }));
 
       try {
-        await api.post('/funds/dues/ledger', { memberId, collectionDate: dateStr, amount });
+        await fundsApi.recordDuesPayment({ memberId, collectionDate: dateStr, amount });
         scheduleRefresh();
       } catch (err) {
         showAlert('Could not save', err.response?.data?.message || 'The payment did not save. Refreshing the ledger.');
@@ -1259,7 +1271,7 @@ ${formattedDesc}
     if (!newMemberName.trim()) return;
     setAddError('');
     try {
-      await api.post('/funds/dues/members', { name: newMemberName.trim() });
+      await fundsApi.addDuesMember({ name: newMemberName.trim() });
       setNewMemberName('');
       await fetchLedger({ silent: true });
     } catch (err) {
@@ -1273,7 +1285,7 @@ ${formattedDesc}
       `Remove ${member.name} from the dues roster? Their recorded payments stay in the ledger.`,
       async () => {
         try {
-          await api.delete(`/funds/dues/members/${member._id}`);
+          await fundsApi.removeDuesMember(member._id);
           fetchLedger({ silent: true });
         } catch (err) {
           showAlert('Could not remove', err.response?.data?.message || 'Failed to remove the member.');
@@ -1301,8 +1313,8 @@ ${formattedDesc}
     userSearchTimer.current = setTimeout(async () => {
       try {
         setSearchingUsers(true);
-        const res = await api.get(`/users/search?q=${encodeURIComponent(userSearchQuery)}`);
-        setUserSearchResults(res.data);
+        const data = await users.searchUsers(userSearchQuery);
+        setUserSearchResults(data);
       } catch (err) {
         console.error('User search failed:', err);
       } finally {
@@ -1314,7 +1326,7 @@ ${formattedDesc}
 
   const handleConfirmLink = async (userId) => {
     try {
-      await api.put(`/funds/dues/members/${linkModal.member._id}/link-user`, { userId });
+      await fundsApi.linkDuesMember(linkModal.member._id, userId);
       await fetchLedger({ silent: true });
       closeLinkModal();
     } catch (err) {
@@ -1328,7 +1340,7 @@ ${formattedDesc}
       `Disconnect ${member.linkedUser?.displayName} from "${member.name}"? They stop receiving dues statements.`,
       async () => {
         try {
-          await api.put(`/funds/dues/members/${member._id}/link-user`, { userId: null });
+          await fundsApi.linkDuesMember(member._id, null);
           fetchLedger({ silent: true });
         } catch (err) {
           showAlert('Could not unlink', err.response?.data?.message || 'Failed to unlink the user.');
@@ -1345,8 +1357,8 @@ ${formattedDesc}
       async () => {
         setSendingBatch(true);
         try {
-          const res = await api.post('/funds/dues/send-batch-reminders', { timing: 'Manual' });
-          showAlert('Reminders sent', res.data.message);
+          const data = await fundsApi.sendBatchReminders();
+          showAlert('Reminders sent', data.message);
           fetchReminderPreview();
         } catch (err) {
           showAlert('Could not send', err.response?.data?.message || 'The batch did not go out.');
@@ -1361,8 +1373,8 @@ ${formattedDesc}
     if (!member.linkedUser || sendingEmail) return;
     setSendingEmail(member._id);
     try {
-      const res = await api.post(`/funds/dues/members/${member._id}/send-dues-email`);
-      showAlert('Statement sent', res.data.message);
+      const data = await fundsApi.sendDuesEmail(member._id);
+      showAlert('Statement sent', data.message);
     } catch (err) {
       showAlert('Could not send', err.response?.data?.message || 'Failed to send the statement.');
     } finally {

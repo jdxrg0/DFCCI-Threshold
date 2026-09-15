@@ -30,3 +30,4 @@ frontend/.vite/
 
 # The template is documentation, not a secret — keep it tracked.
 !backend/.env.example
+!frontend/.env.example

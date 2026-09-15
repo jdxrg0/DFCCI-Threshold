@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../api';
+import * as threads from '../services/threads';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import MessageBubble from '../components/MessageBubble';
@@ -102,21 +103,21 @@ const ThreadView = () => {
       eventSource.close();
       clearInterval(timerInterval);
     };
-  }, [id]);
+  }, [id, fetchThread]);
 
   const fetchThread = useCallback(async () => {
     try {
-      let res;
+      let data;
       try {
-        res = await api.get(`/threads/${id}`);
+        data = await threads.getThread(id);
       } catch (err) {
         if (err.response?.status === 403 && ['ADMIN', 'COUNSELOR'].includes(user.role)) {
-          res = await api.get(`/counselor/threads/${id}`);
+          data = await threads.getCounselorThread(id);
         } else {
           throw err;
         }
       }
-      setThread(res?.data);
+      setThread(data);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load thread');
     } finally {
@@ -130,9 +131,7 @@ const ThreadView = () => {
 
     setReplyLoading(true);
     try {
-      await api.post(`/threads/${id}/reply`, {
-        content: { clarification, feelings, acknowledgment, hopedUnderstanding, bibleVerse: replyBibleVerse }
-      });
+      await threads.replyToThread(id, { clarification, feelings, acknowledgment, hopedUnderstanding, bibleVerse: replyBibleVerse });
       clearSavedForm();
       setForm({
         clarification: '',
@@ -151,17 +150,17 @@ const ThreadView = () => {
 
   const handleResolve = async () => {
     try {
-      await api.put(`/threads/${id}/resolve`);
+      await threads.resolveThread(id);
       setShowResolveModal(false);
       fetchThread();
-    } catch (err) {
+    } catch {
       alert('Failed to resolve thread');
     }
   };
 
   const handleAccept = async () => {
     try {
-      await api.put(`/threads/${id}/accept`);
+      await threads.acceptThread(id);
       setShowAcceptModal(false);
       fetchThread();
     } catch (err) {
@@ -171,7 +170,7 @@ const ThreadView = () => {
 
   const handleEscalate = async () => {
     try {
-      await api.post(`/threads/${id}/escalate`);
+      await threads.escalateThread(id);
       setShowEscalateModal(false);
       fetchThread();
     } catch (err) {
@@ -181,25 +180,25 @@ const ThreadView = () => {
 
   const handleEscalationConsent = async (consent) => {
     try {
-      await api.put(`/threads/${id}/consent-escalation`, { consent });
+      await threads.consentEscalation(id, consent);
       fetchThread();
-    } catch (err) {
+    } catch {
       alert('Failed to update consent');
     }
   };
 
   const handleCounselorConsent = async (consent) => {
     try {
-      await api.put(`/threads/${id}/counselor-consent`, { consent });
+      await threads.consentCounselor(id, consent);
       fetchThread();
-    } catch (err) {
+    } catch {
       alert('Failed to update consent');
     }
   };
 
   const handleRequestDeletion = async () => {
     try {
-      await api.post(`/threads/${id}/request-deletion`);
+      await threads.requestDeletion(id);
       setShowDeleteModal(false);
       fetchThread();
     } catch (err) {
@@ -209,7 +208,7 @@ const ThreadView = () => {
 
   const handleRequestRestore = async () => {
     try {
-      await api.post(`/threads/${id}/request-restore`);
+      await threads.requestRestore(id);
       setShowRestoreModal(false);
       fetchThread();
     } catch (err) {

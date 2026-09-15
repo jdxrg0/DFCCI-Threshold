@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
@@ -41,6 +41,7 @@ import ProfileSettings from './pages/ProfileSettings';
 
 const RootRedirect = () => {
   const { user, loading } = useAuth();
+  const [now] = useState(() => Date.now());
 
   // While loading, show a neutral loading state. 
   // Do NOT redirect yet, as we don't know if the user is authenticated.
@@ -57,7 +58,7 @@ const RootRedirect = () => {
     // If the user was mid-signup (step 2) and the state is still valid, send them there
     const pendingSignupStep = localStorage.getItem('dfcci_signup_step');
     const pendingSignupExpiry = localStorage.getItem('dfcci_signup_expiry');
-    const isSignupValid = pendingSignupExpiry && Date.now() < parseInt(pendingSignupExpiry, 10);
+    const isSignupValid = pendingSignupExpiry && now < parseInt(pendingSignupExpiry, 10);
     
     if (pendingSignupStep === '2' && isSignupValid) {
       return <Navigate to="/signup" replace />;
@@ -66,7 +67,7 @@ const RootRedirect = () => {
     // If the user was mid-password reset (step 2)
     const pendingFPStep = localStorage.getItem('dfcci_fp_step');
     const pendingFPExpiry = localStorage.getItem('dfcci_fp_expiry');
-    const isFPValid = pendingFPExpiry && Date.now() < parseInt(pendingFPExpiry, 10);
+    const isFPValid = pendingFPExpiry && now < parseInt(pendingFPExpiry, 10);
 
     if (pendingFPStep === '2' && isFPValid) {
       return <Navigate to="/forgot-password" replace />;

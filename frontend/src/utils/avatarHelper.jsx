@@ -1,4 +1,4 @@
-import React from 'react';
+
 
 // ── Preset avatar catalog ──
 // Flat-vector animal faces on pastel gradient discs. Every entry owns its id, display

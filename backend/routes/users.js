@@ -17,6 +17,7 @@ const AdminAudit = require('../models/AdminAudit');
 const PlatformSnapshot = require('../models/PlatformSnapshot');
 const { recordAudit, AUDIT_ACTIONS } = require('../utils/auditLog');
 const { collectPlatformStats } = require('../services/platformSnapshot');
+const { ROLE_LABELS, ROLES, ALL_ROLES } = require('../../shared/constants');
 
 const getUTC8Today = () => {
   const now = new Date();
@@ -29,12 +30,6 @@ const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString()
 
 // Declared in seniority order: the members list's 'role' sort reads the key order, and the
 // audit summaries read the labels, so both stay in step from this one place.
-const ROLE_LABELS = {
-  ADMIN: 'Admin',
-  COUNSELOR: 'Counselor',
-  YOUTH_TREASURER: 'Youth Treasurer',
-  MEMBER: 'Member',
-};
 const ROLE_ORDER = Object.keys(ROLE_LABELS);
 
 // Admin-typed text goes straight into a $regex, so anything with regex meaning has to be
@@ -188,7 +183,7 @@ router.get('/', requireAuth, requireRole(['ADMIN']), async (req, res) => {
 
     const total = facet[0]?.total?.[0]?.n || 0;
     const verified = facet[0]?.verified?.[0]?.n || 0;
-    const byRole = { ADMIN: 0, COUNSELOR: 0, YOUTH_TREASURER: 0, MEMBER: 0 };
+    const byRole = Object.fromEntries(ALL_ROLES.map(r => [r, 0]));
     for (const row of facet[0]?.byRole || []) {
       if (row._id in byRole) byRole[row._id] = row.n;
     }
@@ -579,7 +574,7 @@ router.put('/:id/role', requireAuth, requireRole(['ADMIN']), async (req, res) =>
       return res.status(400).json({ message: 'You cannot change your own role.' });
     }
 
-    if (!['MEMBER', 'COUNSELOR', 'ADMIN', 'YOUTH_TREASURER'].includes(role)) {
+    if (!ALL_ROLES.includes(role)) {
       return res.status(400).json({ message: 'Invalid role' });
     }
 
