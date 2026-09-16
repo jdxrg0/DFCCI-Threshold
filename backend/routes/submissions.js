@@ -10,23 +10,20 @@ const github = require('../services/github');
  *
  * A report that completes a lineup dispatches a workflow, so an open endpoint
  * meant an anonymous POST could cause a real Messenger post. The guard is
- * deliberately backward compatible: until BOT_WEBHOOK_SECRET is set on this
- * server the endpoint still accepts reports, because turning it on before the
- * bot sends the header would silently drop every confirmation.
+ * deliberately fail-closed: until BOT_WEBHOOK_SECRET is configured this server
+ * (and the repository secret the bot sends as x-bot-secret) cannot be
+ * deployed on the same set. Without a configured secret nobody, not even the
+ * legitimate bot, gets through.
  */
-let warnedOpen = false;
 const requireBotSecret = (req, res, next) => {
   const expected = process.env.BOT_WEBHOOK_SECRET;
 
   if (!expected) {
-    if (!warnedOpen) {
-      warnedOpen = true;
-      console.warn(
-        '[Submissions API] BOT_WEBHOOK_SECRET is not set — /report is accepting unauthenticated ' +
-        'reports. Set it here and as a repository secret on the bot, then restart.'
-      );
-    }
-    return next();
+    console.error(
+      '[Submissions API] BOT_WEBHOOK_SECRET is not set — rejecting all reports. ' +
+      'Set it here and as a repository secret on the bot, then restart.'
+    );
+    return res.status(503).json({ error: 'Webhook not configured' });
   }
 
   const header = req.get('x-bot-secret')

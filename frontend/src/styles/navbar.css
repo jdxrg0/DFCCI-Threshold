@@ -5,22 +5,12 @@
 /* ── Bar ────────────────────────────────────────────────────────────────── */
 .glass-nav {
   /* index.css sets these with !important, so they must be overridden in kind */
-  background: color-mix(in srgb, var(--bg-color) 72%, transparent) !important;
-  backdrop-filter: blur(20px) saturate(1.6) !important;
-  -webkit-backdrop-filter: blur(20px) saturate(1.6) !important;
+  background: var(--surface-solid) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   border-bottom: 1px solid var(--hairline) !important;
+  box-shadow: var(--shadow-sm);
   z-index: 110;
-}
-
-/* Brand-coloured hairline under the bar, so the chrome reads as part of the
-   product rather than a floating panel. */
-.glass-nav::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 -1px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--ring), transparent);
-  pointer-events: none;
 }
 
 .navbar-header {
@@ -82,14 +72,12 @@
   border: 1px solid var(--hairline);
   border-radius: var(--r-full) !important;
   background: var(--surface-1);
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
-    transform var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 
 .nav-profile-link:hover {
   background: var(--tint-primary);
   border-color: var(--ring);
-  transform: translateY(-1px);
 }
 
 .nav-profile-name {
@@ -136,12 +124,10 @@
 
   /* ── Mobile sheet ─────────────────────────────────────────────────────── */
   .mobile-nav-menu {
-    background: color-mix(in srgb, var(--bg-color) 88%, transparent);
-    backdrop-filter: blur(28px) saturate(1.4);
-    -webkit-backdrop-filter: blur(28px) saturate(1.4);
-    padding: 5rem var(--sp-4) var(--sp-6);
+    background: var(--surface-solid);
+    border-top: 1px solid var(--hairline);
+    padding: var(--sp-5) var(--sp-4) var(--sp-6);
     gap: var(--sp-4);
-    animation: dash-stagger-fade-in var(--dur) var(--ease-out) both;
   }
 
   .mobile-menu-profile-card {
@@ -157,7 +143,7 @@
   .mobile-menu-profile-card:hover,
   .mobile-menu-profile-card:active {
     border-color: var(--ring);
-    box-shadow: var(--shadow-lg), var(--shadow-glow);
+    box-shadow: var(--shadow-md);
   }
 
   .mobile-menu-avatar-glow {

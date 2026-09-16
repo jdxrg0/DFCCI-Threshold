@@ -277,7 +277,7 @@
 }
 
 body {
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
   color: var(--text-main);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -394,7 +394,7 @@ a.btn, a.btn:hover {
   border: 1px solid var(--border-color);
   border-radius: var(--radius);
   color: var(--text-main);
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 1rem;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   backdrop-filter: blur(4px);
@@ -2610,7 +2610,7 @@ a.btn-primary:hover:not(:disabled) {
   background-color: rgba(255, 255, 255, 0.4) !important;
   backdrop-filter: blur(4px);
   color: var(--text-main);
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 1rem;
 }
 
@@ -3089,7 +3089,7 @@ a.btn-primary:hover:not(:disabled) {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   box-shadow: 0 2px 4px rgba(0,0,0,0.5);
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 
 .book-card-tag {
@@ -3100,7 +3100,7 @@ a.btn-primary:hover:not(:disabled) {
   color: white;
   backdrop-filter: blur(4px);
   border: 1px solid rgba(255,255,255,0.2);
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
@@ -3448,7 +3448,7 @@ a.btn-primary:hover:not(:disabled) {
   color: var(--text-main);
   cursor: pointer;
   font-size: 0.95rem;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-weight: 500;
   text-align: left;
   transition: border-color 0.2s ease, background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
@@ -3861,7 +3861,7 @@ a.btn-primary:hover:not(:disabled) {
 }
 
 .resource-reading-title {
-  font-family: 'Outfit', 'Inter', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 2.4rem;
   font-weight: 850;
   color: var(--text-main);
@@ -4124,7 +4124,7 @@ a.btn-primary:hover:not(:disabled) {
   border: 1px solid var(--border-color) !important;
   border-radius: 0.85rem !important;
   padding: 1rem 1.25rem !important;
-  font-family: 'Outfit', 'Inter', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-size: 1rem !important;
   line-height: 1.55 !important;
   font-style: italic;

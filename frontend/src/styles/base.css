@@ -11,38 +11,22 @@ body::before {
      compositing path on the hottest full-screen layer. */
 }
 
-/* A fine grain over the mesh keeps large flat areas from banding. */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.5;
-  background-image: radial-gradient(
-    circle at 1px 1px,
-    color-mix(in srgb, var(--text-main) 7%, transparent) 1px,
-    transparent 0
-  );
-  background-size: 4px 4px;
-}
-
 body {
-  font-family: 'Outfit', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: var(--fs-body);
   line-height: 1.6;
   letter-spacing: -0.005em;
 }
 
-/* ── Headings — heavier and tighter than before ─────────────────────────── */
+/* ── Headings — firm but not theatrical ─────────────────────────────────── */
 h1, h2, h3, h4 {
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: var(--tracking-tight);
-  line-height: 1.15;
+  line-height: 1.2;
   text-wrap: balance;
 }
 
-h1 { font-size: var(--fs-h1); font-weight: 900; }
+h1 { font-size: var(--fs-h1); font-weight: 800; }
 h2 { font-size: var(--fs-h2); }
 h3 { font-size: var(--fs-h3); }
 
@@ -117,12 +101,10 @@ p { text-wrap: pretty; }
 }
 
 .text-gradient {
-  background: var(--grad-brand);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  /* Guards against the gradient clipping descenders on tight line-heights */
-  padding-bottom: 0.06em;
+  color: var(--primary);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  padding-bottom: 0;
 }
 
 /* ── Page header: shared eyebrow / title / subtitle / actions block ─────── */
@@ -194,7 +176,7 @@ p { text-wrap: pretty; }
   background: linear-gradient(90deg, var(--hairline), transparent);
 }
 
-/* ── Back button — now a solid pill rather than a bare text link ────────── */
+/* ── Back button — a quiet outlined pill rather than a bare text link ───── */
 .back-btn {
   display: inline-flex;
   align-items: center;
@@ -202,21 +184,20 @@ p { text-wrap: pretty; }
   padding: 0.5rem 0.95rem 0.5rem 0.7rem;
   margin-bottom: var(--sp-4);
   font-size: var(--fs-sm);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-muted);
   background: var(--surface-1);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-full);
-  box-shadow: var(--shadow-sm);
+  border-radius: var(--r-md);
+  box-shadow: none;
   transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease),
-    background var(--dur) var(--ease), transform var(--dur) var(--ease);
+    background var(--dur) var(--ease);
 }
 
 .back-btn:hover {
   color: var(--primary);
   border-color: var(--ring);
   background: var(--tint-primary);
-  transform: translateX(-2px);
 }
 
 /* ── Motion ─────────────────────────────────────────────────────────────── */
@@ -259,7 +240,4 @@ p { text-wrap: pretty; }
   .page-head-actions { width: 100%; }
 
   .dashboard-section-title { margin: var(--sp-6) 0 var(--sp-3); }
-
-  /* The grain overlay is pure cost on low-end phones */
-  body::after { display: none; }
 }

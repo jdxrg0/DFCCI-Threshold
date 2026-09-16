@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import * as auth from '../services/auth';
 import useFormPersist from '../hooks/useFormPersist';
-import logo from '../assets/logo.svg';
+import logo from '../assets/logo.webp';
 
 const SIGNUP_STEP_KEY = 'dfcci_signup_step';
 const SIGNUP_EMAIL_KEY = 'dfcci_signup_pending_email';

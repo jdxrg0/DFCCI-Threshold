@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import * as resources from '../services/resources';
 import { Download, BookOpen } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
+import sanitizeHtml from '../utils/sanitizeHtml';
 
 const getDownloadUrl = (url) => {
   if (!url) return '';
@@ -158,7 +159,9 @@ const ResourceDetail = () => {
           {resource.description ? (
             <div
               className="quill-content"
-              dangerouslySetInnerHTML={{ __html: resource.description.replace(/&nbsp;|\u00A0/g, ' ') }}
+              dangerouslySetInnerHTML={{
+                __html: sanitizeHtml(resource.description.replace(/&nbsp;|\u00A0/g, ' '))
+              }}
             />
           ) : (
             <p style={{ fontStyle: 'italic', color: 'var(--text-muted)', textAlign: 'center', padding: '4rem 0' }}>

@@ -133,6 +133,13 @@ const threadSchema = new mongoose.Schema({
 
 threadSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 5184000 }); // 60 days in seconds
 
+// Every user-facing list is filtered by party + deletedAt:null, and the admin
+// escalated list by status + deletedAt:null. The TTL index alone (deletedAt)
+// cannot serve those.
+threadSchema.index({ sender: 1, deletedAt: 1 });
+threadSchema.index({ receiver: 1, deletedAt: 1 });
+threadSchema.index({ status: 1, deletedAt: 1 });
+
 threadSchema.post('save', function(doc) {
   appEmitter.emit(`threadUpdate_${doc._id.toString()}`);
 });

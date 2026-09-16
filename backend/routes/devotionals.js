@@ -6,6 +6,7 @@ const User = require('../models/User');
 const { parsePassage } = require('../utils/passageParser');
 const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
 const { sendDevotionalStreakReminders } = require('../utils/reminderScheduler');
+const { isValidObjectId, badObjectId } = require('../utils/objectId');
 
 // ─── Helper: normalise a Date to midnight UTC ──────────────────────────────
 const toDateOnly = (d) => {
@@ -204,6 +205,8 @@ router.get('/check-gap', requireAuth, requireVerified, async (req, res) => {
 // ─── GET a single devotional ────────────────────────────────────────────────
 router.get('/:id', requireAuth, requireVerified, async (req, res) => {
   try {
+    if (badObjectId(res, req.params.id)) return;
+
     const devotional = await Devotional.findById(req.params.id)
       .populate('member', 'displayName email')
       .populate('acknowledgedBy', 'displayName');
@@ -211,7 +214,7 @@ router.get('/:id', requireAuth, requireVerified, async (req, res) => {
     if (!devotional) return res.status(404).json({ message: 'Devotional not found' });
 
     // Access: owner or leader
-    const isOwner = devotional.member._id.toString() === req.user._id.toString();
+    const isOwner = devotional.member?._id?.toString() === req.user._id.toString();
     const isLeader = ['ADMIN', 'COUNSELOR'].includes(req.user.role);
 
     if (!isOwner && !isLeader) {
@@ -234,6 +237,12 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
     if (!passageStr?.trim()) return res.status(400).json({ message: 'Chapters/Verses are required.' });
     if (!summary?.trim()) return res.status(400).json({ message: 'Summary is required.' });
     if (!application?.trim()) return res.status(400).json({ message: 'Application is required.' });
+
+    for (const [field, max] of [['book', 100], ['passageStr', 500], ['summary', 2000], ['application', 2000], ['prayerFocus', 2000]]) {
+      if (tooLong(req.body[field], max)) {
+        return res.status(400).json({ message: `${field} is too long (max ${max} characters).` });
+      }
+    }
 
     let parsedPassages;
     try {
@@ -283,27 +292,43 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
         const prevEntry = await Devotional.findOne({
           member: req.user._id,
           date: { $lt: devotionDate }
-        }).sort({ date: -1 });
+        }).sort({ date: -1 }).select('date');
 
         if (prevEntry) {
           const lastEntryDate = toDateOnly(prevEntry.date);
+          const gapDates = [];
           let current = new Date(lastEntryDate);
           current.setUTCDate(current.getUTCDate() + 1);
 
           while (current < devotionDate) {
-            const exists = await Devotional.findOne({ member: req.user._id, date: current });
-            if (!exists) {
-              await Devotional.create({
+            gapDates.push(new Date(current));
+            current.setUTCDate(current.getUTCDate() + 1);
+          }
+
+          if (gapDates.length > 0) {
+            // One range query instead of a findOne per gap day, then one
+            // insertMany for everything that is genuinely missing.
+            const existing = await Devotional.find({
+              member: req.user._id,
+              date: { $gte: lastEntryDate, $lte: devotionDate }
+            }).select('date').lean();
+            const existingSet = new Set(existing.map(e => toDateOnly(e.date).getTime()));
+
+            const toInsert = gapDates
+              .filter(d => !existingSet.has(toDateOnly(d).getTime()))
+              .map(d => ({
                 member: req.user._id,
-                date: new Date(current),
+                date: d,
                 book: 'None',
                 passage: 'None (Confessed)',
                 summary: 'Confessed did not devotion.',
                 application: 'Confessed did not devotion.',
                 status: 'Missed',
-              });
+              }));
+
+            if (toInsert.length > 0) {
+              await Devotional.insertMany(toInsert);
             }
-            current.setUTCDate(current.getUTCDate() + 1);
           }
         }
       } catch (err) {
@@ -366,6 +391,8 @@ router.post('/missed', requireAuth, requireVerified, async (req, res) => {
 // ─── PUT edit own devotional (only if not yet acknowledged) ─────────────────
 router.put('/:id', requireAuth, requireVerified, async (req, res) => {
   try {
+    if (badObjectId(res, req.params.id)) return;
+
     const devotional = await Devotional.findById(req.params.id);
     if (!devotional) return res.status(404).json({ message: 'Devotional not found' });
 
@@ -408,6 +435,8 @@ router.put('/:id', requireAuth, requireVerified, async (req, res) => {
 // ─── DELETE own devotional ──────────────────────────────────────────────────
 router.delete('/:id', requireAuth, requireVerified, async (req, res) => {
   try {
+    if (badObjectId(res, req.params.id)) return;
+
     const devotional = await Devotional.findById(req.params.id);
     if (!devotional) return res.status(404).json({ message: 'Devotional not found' });
 
@@ -433,7 +462,7 @@ router.get('/leader/all', requireAuth, requireVerified, requireRole(['ADMIN', 'C
     const { memberId, status, page = 1, limit = 15 } = req.query;
     const filter = {};
 
-    if (memberId) filter.member = memberId;
+    if (memberId && isValidObjectId(memberId)) filter.member = memberId;
     if (status) filter.status = status;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
@@ -537,6 +566,8 @@ router.get('/leader/stats', requireAuth, requireVerified, requireRole(['ADMIN', 
 // ─── PUT acknowledge a devotional ───────────────────────────────────────────
 router.put('/:id/acknowledge', requireAuth, requireVerified, requireRole(['ADMIN', 'COUNSELOR']), async (req, res) => {
   try {
+    if (badObjectId(res, req.params.id)) return;
+
     const devotional = await Devotional.findById(req.params.id)
       .populate('member', 'displayName email');
     if (!devotional) return res.status(404).json({ message: 'Devotional not found' });
@@ -574,28 +605,30 @@ router.post('/leader/test-streak-reminders', requireAuth, requireVerified, requi
   }
 });
 
-module.exports = router;
-
 // ─── GET bible reading progress ──────────────────────────────────────────────
 router.get('/bible-progress/all', requireAuth, requireVerified, async (req, res) => {
   try {
     let targetUserId = req.user._id;
-    
+
     // Allow leaders to view other members' progress
-    if (req.query.memberId && ['ADMIN', 'COUNSELOR'].includes(req.user.role)) {
+    if (
+      req.query.memberId &&
+      ['ADMIN', 'COUNSELOR'].includes(req.user.role) &&
+      isValidObjectId(req.query.memberId)
+    ) {
       targetUserId = req.query.memberId;
     }
 
     const entries = await Devotional.find({ member: targetUserId, status: { $ne: 'Missed' } })
       .select('book parsedPassages')
       .lean();
-    
+
     // Create an object grouping verses by chapter by book: { "Genesis": { "1": 31, "2": 10 } }
     const progress = {};
     for (const entry of entries) {
       if (!entry.book || !entry.parsedPassages) continue;
       if (!progress[entry.book]) progress[entry.book] = {};
-      
+
       for (const [ch, verses] of Object.entries(entry.parsedPassages)) {
         if (!progress[entry.book][ch]) progress[entry.book][ch] = new Set();
         verses.forEach(v => progress[entry.book][ch].add(v));
@@ -617,3 +650,5 @@ router.get('/bible-progress/all', requireAuth, requireVerified, async (req, res)
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+module.exports = router;

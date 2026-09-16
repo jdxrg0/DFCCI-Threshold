@@ -3,6 +3,7 @@ const router = express.Router();
 const BibleVideo = require('../models/BibleVideo');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 const { upload, cloudinary } = require('../utils/cloudinary');
+const { badObjectId } = require('../utils/objectId');
 
 // GET all videos (sorted newest first)
 router.get('/', requireAuth, async (req, res) => {
@@ -48,6 +49,11 @@ router.post('/', requireAuth, requireRole(['ADMIN']), upload.single('video'), as
     console.error('Error uploading Bible video:', error);
     res.status(500).json({ message: 'Server error uploading video' });
   }
+});
+
+router.use('/:id', (req, res, next) => {
+  if (badObjectId(res, req.params.id)) return;
+  next();
 });
 
 // DELETE video (Admin only)

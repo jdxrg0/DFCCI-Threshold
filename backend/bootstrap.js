@@ -1,6 +1,9 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const multer = require('multer');
+
+const { apiLimiter } = require('./middleware/rateLimiters');
 
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
@@ -74,10 +77,23 @@ function createApp() {
   app.use(express.json());
   app.use(cookieParser());
 
+  // Backstop against firehose abuse across the whole API surface.
+  app.use('/api', apiLimiter);
+
   registerRoutes(app);
 
   // Global error handler — must be registered after all routes
   app.use((err, req, res, _next) => {
+    // Oversized uploads are a client mistake, not a server fault. Route-scoped
+    // handlers (funds) already map this to 413; this catches the rest so users
+    // don't read a 500 for a too-big profile picture.
+    if (err instanceof multer.MulterError) {
+      const message = err.code === 'LIMIT_FILE_SIZE'
+        ? 'File too large. Maximum size is 5MB.'
+        : err.message;
+      return res.status(413).json({ message });
+    }
+
     console.error('[Error]', err.message);
     const status = err.status || err.statusCode || 500;
     const message = process.env.NODE_ENV === 'production'

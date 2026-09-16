@@ -3,6 +3,7 @@ const DuesMember = require('../models/DuesMember');
 const DuesPayment = require('../models/DuesPayment');
 const Devotional = require('../models/Devotional');
 const sendEmail = require('./sendEmail');
+const { escapeHtml } = require('./escapeHtml');
 
 const START_DATE = new Date('2026-05-01');
 
@@ -38,8 +39,11 @@ const calculateArrears = async (user) => {
 
     if (!member) return null;
 
-    const payments = await DuesPayment.find({ member: member._id });
-    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const [paid] = await DuesPayment.aggregate([
+      { $match: { member: member._id } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]);
+    const totalPaid = paid?.total || 0;
 
     const nowSystem = new Date();
     const now = new Date(nowSystem.getTime() + 8 * 60 * 60 * 1000);
@@ -154,7 +158,7 @@ const sendDuesReminders = async (timing) => {
                 </tr>
                 <tr>
                   <td align="center" style="color:#475569;font-size:16px;line-height:1.6;padding-bottom:20px;font-family:sans-serif;">
-                    ${template.greeting(user.displayName)}
+                    ${template.greeting(escapeHtml(user.displayName))}
                   </td>
                 </tr>
                 <tr>
@@ -281,7 +285,7 @@ const sendDevotionalStreakReminders = async (hoursLeft, targetMemberId = null) =
                 </tr>
                 <tr>
                   <td align="center" style="color:#cbd5e1;font-size:16px;line-height:1.6;padding-bottom:25px;font-family:sans-serif;">
-                    Hi <strong>${user.displayName}</strong>, you are doing incredibly well keeping up your daily devotional habit! 
+                    Hi <strong>${escapeHtml(user.displayName)}</strong>, you are doing incredibly well keeping up your daily devotional habit! 
                     However, we noticed you haven't logged your passage for today yet.
                   </td>
                 </tr>

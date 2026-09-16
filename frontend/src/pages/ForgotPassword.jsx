@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, KeyRound, RefreshCw, ArrowLeft } from 'lucide-react';
 import * as auth from '../services/auth';
 import { useLanguage } from '../context/LanguageContext';
-import logo from '../assets/logo.svg';
+import logo from '../assets/logo.webp';
 
 const FP_STEP_KEY = 'dfcci_fp_step';
 const FP_EMAIL_KEY = 'dfcci_fp_pending_email';

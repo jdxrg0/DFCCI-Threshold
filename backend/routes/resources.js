@@ -3,6 +3,7 @@ const router = express.Router();
 const Resource = require('../models/Resource');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 const { upload, cloudinary } = require('../utils/cloudinary');
+const { badObjectId } = require('../utils/objectId');
 
 // GET all resources
 router.get('/', requireAuth, async (req, res) => {
@@ -13,6 +14,11 @@ router.get('/', requireAuth, async (req, res) => {
     console.error('Error fetching resources:', error);
     res.status(500).json({ message: 'Server error' });
   }
+});
+
+router.use('/:id', (req, res, next) => {
+  if (badObjectId(res, req.params.id)) return;
+  next();
 });
 
 // GET single resource by ID

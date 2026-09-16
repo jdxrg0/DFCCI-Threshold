@@ -9,6 +9,33 @@ import TimerButton from '../components/TimerButton';
 import useFormPersist from '../hooks/useFormPersist';
 import { Check, X, ShieldAlert, CheckCircle, Hourglass, Trash2 } from 'lucide-react';
 
+/* Modal tones map straight onto existing button classes, so no inline-style
+   identity churn and no colour hacks in the render tree. */
+const MODAL_TONES = {
+  primary: 'btn btn-primary',
+  blue: 'btn btn-blue',
+  red: 'btn btn-red',
+};
+
+const ConfirmModal = ({ title, body, onConfirm, onClose, confirmLabel, cancelLabel, confirmIcon, tone = 'primary' }) => (
+  <div className="confirm-modal-backdrop">
+    <div className="card confirm-modal">
+      <h3 className="confirm-modal__title">{title}</h3>
+      <p className="confirm-modal__body">{body}</p>
+      <div className="confirm-modal__actions">
+        {cancelLabel && (
+          <button type="button" onClick={onClose} className="btn btn-secondary" title={cancelLabel}>
+            <X size={20} aria-hidden="true" /> <span>{cancelLabel}</span>
+          </button>
+        )}
+        <button type="button" onClick={onConfirm} className={MODAL_TONES[tone]} title={confirmLabel}>
+          {confirmIcon}{confirmLabel}
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
 const formatRelativeTime = (dateString) => {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -60,13 +87,8 @@ const ThreadView = () => {
   const { clarification, feelings, acknowledgment, hopedUnderstanding, replyBibleVerse } = form;
   const [replyLoading, setReplyLoading] = useState(false);
 
-  // Modal state
-  const [showResolveModal, setShowResolveModal] = useState(false);
-  const [showEscalateModal, setShowEscalateModal] = useState(false);
-  const [showAcceptModal, setShowAcceptModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showRestoreModal, setShowRestoreModal] = useState(false);
-  const [showCooldownModal, setShowCooldownModal] = useState(false);
+  // Modal state: 'resolve' | 'accept' | 'escalate' | 'delete' | 'restore' | 'cooldown' | null
+  const [modal, setModal] = useState(null);
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
@@ -82,7 +104,6 @@ const ThreadView = () => {
         const data = JSON.parse(event.data);
         if (data.type === 'UPDATE') {
           fetchThread();
-          setNow(new Date());
         }
       } catch (err) {
         console.error('Error parsing SSE data:', err);
@@ -94,16 +115,34 @@ const ThreadView = () => {
       // EventSource auto-reconnects natively
     };
 
-    // Update local 'now' state for UI timers (cooldowns) every 10 seconds, zero network cost
-    const timerInterval = setInterval(() => {
-      setNow(new Date());
-    }, 10000);
-
     return () => {
       eventSource.close();
-      clearInterval(timerInterval);
     };
   }, [id, fetchThread]);
+
+  // Cooldown ticker. Runs at minute granularity (the UI only shows whole
+  // minutes), only while a cooldown is actually live, and never while the tab
+  // is hidden Ã¢â‚¬â€ so this page stops re-rendering every 10 seconds.
+  useEffect(() => {
+    const lastMsg = thread?.messages?.[thread.messages.length - 1];
+    if (!lastMsg) return undefined;
+    const startTs = lastMsg.readAt
+      ? new Date(lastMsg.readAt).getTime()
+      : lastMsg.createdAt ? new Date(lastMsg.createdAt).getTime() : Date.now();
+    const cooldownEndsAt = startTs + 60 * 60 * 1000;
+    if (cooldownEndsAt <= Date.now()) return undefined;
+
+    const timer = setInterval(() => {
+      if (document.hidden) return;
+      if (cooldownEndsAt <= Date.now()) {
+        clearInterval(timer);
+        setNow(new Date());
+        return;
+      }
+      setNow(new Date());
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [thread]);
 
   const fetchThread = useCallback(async () => {
     try {
@@ -151,7 +190,7 @@ const ThreadView = () => {
   const handleResolve = async () => {
     try {
       await threads.resolveThread(id);
-      setShowResolveModal(false);
+      setModal(null);
       fetchThread();
     } catch {
       alert('Failed to resolve thread');
@@ -161,7 +200,7 @@ const ThreadView = () => {
   const handleAccept = async () => {
     try {
       await threads.acceptThread(id);
-      setShowAcceptModal(false);
+      setModal(null);
       fetchThread();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to accept thread');
@@ -171,7 +210,7 @@ const ThreadView = () => {
   const handleEscalate = async () => {
     try {
       await threads.escalateThread(id);
-      setShowEscalateModal(false);
+      setModal(null);
       fetchThread();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to request escalation');
@@ -199,7 +238,7 @@ const ThreadView = () => {
   const handleRequestDeletion = async () => {
     try {
       await threads.requestDeletion(id);
-      setShowDeleteModal(false);
+      setModal(null);
       fetchThread();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to request deletion');
@@ -209,7 +248,7 @@ const ThreadView = () => {
   const handleRequestRestore = async () => {
     try {
       await threads.requestRestore(id);
-      setShowRestoreModal(false);
+      setModal(null);
       fetchThread();
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to request restore');
@@ -507,7 +546,7 @@ const ThreadView = () => {
         <div className="flex gap-3" style={{ marginTop: '1rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-color)', flexWrap: 'wrap' }}>
           
           {isSender && thread.status !== 'Resolved' && thread.deletionRequestStatus !== 'Pending' && !thread.deletedAt && (
-             <button onClick={() => isCooldownActive() ? setShowCooldownModal(true) : setShowDeleteModal(true)} 
+             <button onClick={() => isCooldownActive() ? setModal('cooldown') : setModal('delete')} 
                className="btn btn-danger" 
                style={{ flex: 1, minWidth: '160px', opacity: isCooldownActive() ? 0.5 : 1 }} 
                title={isCooldownActive() ? "Nasa cooldown pa" : "Humiling ng Pagbura"}
@@ -522,136 +561,62 @@ const ThreadView = () => {
                 <Hourglass size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('waiting_approval')}</span>
               </button>
             ) : (
-              <button onClick={() => setShowEscalateModal(true)} className="btn btn-secondary" style={{ flex: 1, minWidth: '160px' }}>
+              <button onClick={() => setModal('escalate')} className="btn btn-secondary" style={{ flex: 1, minWidth: '160px' }}>
                 <ShieldAlert size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('request_support')}</span>
               </button>
             )
           )}
 
           {isReceiver && thread.status === 'Active' && (
-            <button onClick={() => setShowAcceptModal(true)} className="btn btn-success" style={{ flex: 2, minWidth: '200px' }}>
+            <button onClick={() => setModal('accept')} className="btn btn-success" style={{ flex: 2, minWidth: '200px' }}>
               <CheckCircle size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('accept_btn')}</span>
             </button>
           )}
 
           {isSender && (
-            <button onClick={() => setShowResolveModal(true)} className="btn btn-success" style={{ flex: 2, minWidth: '200px' }}>
+            <button onClick={() => setModal('resolve')} className="btn btn-success" style={{ flex: 2, minWidth: '200px' }}>
               <CheckCircle size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('resolved_btn')}</span>
             </button>
           )}
           
           {isSender && thread.deletedAt && thread.restoreRequestStatus !== 'Pending' && (
-             <button onClick={() => setShowRestoreModal(true)} className="btn btn-primary" style={{ flex: 1, minWidth: '160px' }}>
+             <button onClick={() => setModal('restore')} className="btn btn-primary" style={{ flex: 1, minWidth: '160px' }}>
                <CheckCircle size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('request_restore')}</span>
              </button>
           )}
         </div>
       )}
 
-      {/* Resolve Modal */}
-      {showResolveModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="card" style={{ maxWidth: '400px', width: '90%' }}>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>{t('are_you_sure')}</h3>
-            <p style={{ marginBottom: '1.5rem' }}>{t('resolve_modal_body')}</p>
-            <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-              <button onClick={() => setShowResolveModal(false)} className="btn btn-secondary" style={{ padding: '0.6rem 1rem', flex: 1 }} title={t('not_yet')}>
-                <X size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('not_yet')}</span>
-              </button>
-              <button onClick={handleResolve} className="btn btn-primary" style={{ padding: '0.6rem 1rem', flex: 1 }} title={t('yes')}>
-                <Check size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('yes')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Confirmation modals (one shared overlay + declarative configs) */}
+      {modal === 'resolve' && (
+        <ConfirmModal title={t('are_you_sure')} body={t('resolve_modal_body')}
+          cancelLabel={t('not_yet')} confirmLabel={t('yes')} confirmIcon={<Check size={20} aria-hidden="true" />}
+          tone="primary" onConfirm={handleResolve} onClose={() => setModal(null)} />
       )}
-
-      {/* Accept Modal */}
-      {showAcceptModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="card" style={{ maxWidth: '400px', width: '90%' }}>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>{t('accept_modal_title')}</h3>
-            <p style={{ marginBottom: '1.5rem' }}>{t('accept_modal_body')}</p>
-            <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-              <button onClick={() => setShowAcceptModal(false)} className="btn btn-secondary" style={{ padding: '0.6rem 1rem', flex: 1 }} title={t('back')}>
-                <X size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('back')}</span>
-              </button>
-              <button onClick={handleAccept} className="btn btn-primary" style={{ backgroundColor: '#3B82F6', border: 'none', padding: '0.6rem 1rem', flex: 1 }} title={t('yes')}>
-                <Check size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('yes')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {modal === 'accept' && (
+        <ConfirmModal title={t('accept_modal_title')} body={t('accept_modal_body')}
+          cancelLabel={t('back')} confirmLabel={t('yes')} confirmIcon={<Check size={20} aria-hidden="true" />}
+          tone="blue" onConfirm={handleAccept} onClose={() => setModal(null)} />
       )}
-
-      {/* Escalate Modal */}
-      {showEscalateModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="card" style={{ maxWidth: '400px', width: '90%' }}>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>{t('need_support')}</h3>
-            <p style={{ marginBottom: '1.5rem' }}>{t('escalate_modal_body')}</p>
-            <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-              <button onClick={() => setShowEscalateModal(false)} className="btn btn-secondary" style={{ padding: '0.6rem 1rem', flex: 1 }} title={t('cancel')}>
-                <X size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('cancel')}</span>
-              </button>
-              <button onClick={handleEscalate} className="btn btn-primary" style={{ padding: '0.6rem 1rem', flex: 1 }} title={t('yes_request')}>
-                <ShieldAlert size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('yes_request')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {modal === 'escalate' && (
+        <ConfirmModal title={t('need_support')} body={t('escalate_modal_body')}
+          cancelLabel={t('cancel')} confirmLabel={t('yes_request')} confirmIcon={<ShieldAlert size={20} aria-hidden="true" />}
+          tone="primary" onConfirm={handleEscalate} onClose={() => setModal(null)} />
       )}
-      {/* Delete Request Modal */}
-      {showDeleteModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="card" style={{ maxWidth: '400px', width: '90%' }}>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>{t('request_deletion_title')}</h3>
-            <p style={{ marginBottom: '1.5rem' }}>{t('deletion_modal_body')}</p>
-            <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-              <button onClick={() => setShowDeleteModal(false)} className="btn btn-secondary" style={{ padding: '0.6rem 1rem', flex: 1 }} title={t('cancel')}>
-                <X size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('cancel')}</span>
-              </button>
-              <button onClick={handleRequestDeletion} className="btn btn-primary" style={{ backgroundColor: '#EF4444', border: 'none', padding: '0.6rem 1rem', flex: 1 }} title={t('yes_request')}>
-                <Trash2 size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('yes_request')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {modal === 'delete' && (
+        <ConfirmModal title={t('request_deletion_title')} body={t('deletion_modal_body')}
+          cancelLabel={t('cancel')} confirmLabel={t('yes_request')} confirmIcon={<Trash2 size={20} aria-hidden="true" />}
+          tone="red" onConfirm={handleRequestDeletion} onClose={() => setModal(null)} />
       )}
-
-      {/* Restore Request Modal */}
-      {showRestoreModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="card" style={{ maxWidth: '400px', width: '90%' }}>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>{t('request_restore_title')}</h3>
-            <p style={{ marginBottom: '1.5rem' }}>{t('restore_modal_body')}</p>
-            <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-              <button onClick={() => setShowRestoreModal(false)} className="btn btn-secondary" style={{ padding: '0.6rem 1rem', flex: 1 }} title={t('cancel')}>
-                <X size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('cancel')}</span>
-              </button>
-              <button onClick={handleRequestRestore} className="btn btn-primary" style={{ backgroundColor: '#3B82F6', border: 'none', padding: '0.6rem 1rem', flex: 1 }} title={t('yes_request')}>
-                <CheckCircle size={20} /> <span style={{ marginLeft: '0.5rem' }}>{t('yes_request')}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+      {modal === 'restore' && (
+        <ConfirmModal title={t('request_restore_title')} body={t('restore_modal_body')}
+          cancelLabel={t('cancel')} confirmLabel={t('yes_request')} confirmIcon={<CheckCircle size={20} aria-hidden="true" />}
+          tone="blue" onConfirm={handleRequestRestore} onClose={() => setModal(null)} />
       )}
-
-      {/* Cooldown Modal */}
-      {showCooldownModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div className="card" style={{ maxWidth: '400px', width: '90%' }}>
-            <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Hourglass size={20} color="var(--primary)" /> {t('cooldown_title')}
-            </h3>
-            <p style={{ marginBottom: '1.5rem' }}>{t('cooldown_modal_body')}</p>
-            <div className="flex gap-3">
-              <button onClick={() => setShowCooldownModal(false)} className="btn btn-primary" style={{ padding: '0.6rem 1rem', flex: 1 }}>
-                {t('understood')}
-              </button>
-            </div>
-          </div>
-        </div>
+      {modal === 'cooldown' && (
+        <ConfirmModal title={<><Hourglass size={20} aria-hidden="true" color="var(--primary)" /> {t('cooldown_title')}</>}
+          body={t('cooldown_modal_body')} confirmLabel={t('understood')}
+          tone="primary" onConfirm={() => setModal(null)} onClose={() => setModal(null)} />
       )}
     </div>
   );

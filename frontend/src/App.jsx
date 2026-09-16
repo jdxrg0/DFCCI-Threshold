@@ -1,43 +1,53 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { LanguageProvider } from './context/LanguageContext';
 import Navbar from './components/Navbar';
 import BackBar from './components/BackBar';
-import AnimatedBackdrop from './components/AnimatedBackdrop';
 
 import ProtectedRoute from './components/ProtectedRoute';
+import NameChangePrompt from './components/NameChangePrompt';
 import { useAuth } from './context/AuthContext';
 
+// First-paint critical pages stay eager.
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import ForgotPassword from './pages/ForgotPassword';
 import PortalDashboard from './pages/PortalDashboard';
-import MirrorDashboard from './pages/MirrorDashboard';
-import SendMirror from './pages/SendMirror';
-import ThreadView from './pages/ThreadView';
-import AdminPanel from './pages/AdminPanel';
-import AutomationDashboard from './pages/AutomationDashboard';
-import ServingCalendar from './pages/ServingCalendar';
-import CounselorDashboard from './pages/CounselorDashboard';
-import ModuleDocs from './pages/ModuleDocs';
-import TicketsDashboard from './pages/TicketsDashboard';
-import CreateTicket from './pages/CreateTicket';
-import TicketView from './pages/TicketView';
-import AffirmationDashboard from './pages/AffirmationDashboard';
-import SendAffirmation from './pages/SendAffirmation';
-import AffirmationView from './pages/AffirmationView';
-import FundTrackerDashboard from './pages/FundTrackerDashboard';
-import ResourceCenter from './pages/ResourceCenter';
-import ResourceDetail from './pages/ResourceDetail';
 import ForceLogout from './pages/ForceLogout';
-import GamesDashboard from './pages/GamesDashboard';
-import QuizPlay from './pages/QuizPlay';
-import QuizCreate from './pages/QuizCreate';
-import DevotionalDashboard from './pages/DevotionalDashboard';
-import SubmitDevotional from './pages/SubmitDevotional';
-import DevotionalView from './pages/DevotionalView';
-import ProfileSettings from './pages/ProfileSettings';
+
+// Everything else is split per-route so the big modules (Fund Tracker, Admin,
+// Automation Hub…) only download when the user actually opens them.
+const MirrorDashboard = lazy(() => import('./pages/MirrorDashboard'));
+const SendMirror = lazy(() => import('./pages/SendMirror'));
+const ThreadView = lazy(() => import('./pages/ThreadView'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel'));
+const AutomationDashboard = lazy(() => import('./pages/AutomationDashboard'));
+const ServingCalendar = lazy(() => import('./pages/ServingCalendar'));
+const CounselorDashboard = lazy(() => import('./pages/CounselorDashboard'));
+const ModuleDocs = lazy(() => import('./pages/ModuleDocs'));
+const TicketsDashboard = lazy(() => import('./pages/TicketsDashboard'));
+const CreateTicket = lazy(() => import('./pages/CreateTicket'));
+const TicketView = lazy(() => import('./pages/TicketView'));
+const AffirmationDashboard = lazy(() => import('./pages/AffirmationDashboard'));
+const SendAffirmation = lazy(() => import('./pages/SendAffirmation'));
+const AffirmationView = lazy(() => import('./pages/AffirmationView'));
+const FundTrackerDashboard = lazy(() => import('./pages/FundTrackerDashboard'));
+const ResourceCenter = lazy(() => import('./pages/ResourceCenter'));
+const ResourceDetail = lazy(() => import('./pages/ResourceDetail'));
+const GamesDashboard = lazy(() => import('./pages/GamesDashboard'));
+const QuizPlay = lazy(() => import('./pages/QuizPlay'));
+const QuizCreate = lazy(() => import('./pages/QuizCreate'));
+const DevotionalDashboard = lazy(() => import('./pages/DevotionalDashboard'));
+const SubmitDevotional = lazy(() => import('./pages/SubmitDevotional'));
+const DevotionalView = lazy(() => import('./pages/DevotionalView'));
+const ProfileSettings = lazy(() => import('./pages/ProfileSettings'));
+
+const PageSkeleton = () => (
+  <div className="app-container" style={{ justifyContent: 'center', alignItems: 'center', paddingTop: '3rem' }}>
+    <div className="skeleton-title" style={{ width: '140px' }} />
+  </div>
+);
 
 const RootRedirect = () => {
   const { user, loading } = useAuth();
@@ -79,8 +89,6 @@ const RootRedirect = () => {
   return <Navigate to="/dashboard" replace />;
 };
 
-import NameChangePrompt from './components/NameChangePrompt';
-
 const App = () => {
   return (
     <LanguageProvider>
@@ -95,7 +103,6 @@ const App = () => {
       <AuthProvider>
         <Router>
           <div className="app-container">
-            <AnimatedBackdrop />
             <NameChangePrompt />
             <Navbar />
             <main className="main-content">
@@ -103,7 +110,8 @@ const App = () => {
                   Route hierarchy lives in data/navMap.js — do not add
                   per-page back buttons. */}
               <BackBar />
-              <Routes>
+              <Suspense fallback={<PageSkeleton />}>
+                <Routes>
                 {/* Public / Landing logic */}
                 <Route path="/" element={<RootRedirect />} />
                 <Route path="/force-logout" element={<ForceLogout />} />
@@ -147,7 +155,8 @@ const App = () => {
                 <Route path="/devotionals" element={<ProtectedRoute><DevotionalDashboard /></ProtectedRoute>} />
                 <Route path="/devotionals/submit" element={<ProtectedRoute><SubmitDevotional /></ProtectedRoute>} />
                 <Route path="/devotionals/:id" element={<ProtectedRoute><DevotionalView /></ProtectedRoute>} />
-              </Routes>
+                </Routes>
+              </Suspense>
             </main>
           </div>
         </Router>

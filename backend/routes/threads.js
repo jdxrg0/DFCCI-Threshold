@@ -5,9 +5,19 @@ const sendEmail = require('../utils/sendEmail');
 const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
 const appEmitter = require('../utils/eventEmitter');
 const { recordAudit, AUDIT_ACTIONS } = require('../utils/auditLog');
+const { badObjectId } = require('../utils/objectId');
+const { LIMITS, tooLong } = require('../utils/limits');
 
 // An admin reviewing the log recognises a thread by who it is between, never by its id.
 const threadLabel = (thread) => `${thread.sender?.displayName || 'Unknown'} → ${thread.receiver?.displayName || 'Unknown'}`;
+
+// Emails are fire-and-forget side effects. Deleting a user leaves null behind in
+// populated refs, so an unguarded recipient would turn a successful mutation into
+// a 500 after the save already committed.
+const notifyEmail = (to, subject, html) => {
+  if (!to) return;
+  sendEmail(to, subject, html).catch(err => console.error('Failed to send email:', err));
+};
 
 // Get all pending deletion requests (Admin only)
 router.get('/admin/deletion-requests', requireAuth, requireVerified, requireRole(['ADMIN']), async (req, res) => {
@@ -50,17 +60,17 @@ router.put('/admin/:id/approve-deletion', requireAuth, requireVerified, requireR
       summary: `Approved the deletion of the thread ${label}`,
     });
 
-    sendEmail(
-      thread.sender.email,
+    notifyEmail(
+      thread.sender?.email,
       'Thread Deletion Approved',
       '<p>Your request to delete the thread has been approved. It will be permanently removed in 60 days.</p>'
-    ).catch(err => console.error('Failed to send email:', err));
+    );
 
-    sendEmail(
-      thread.receiver.email,
+    notifyEmail(
+      thread.receiver?.email,
       'Thread Deleted',
       '<p>A thread you were participating in has been deleted.</p>'
-    ).catch(err => console.error('Failed to send email:', err));
+    );
 
     res.json({ message: 'Deletion approved', thread });
   } catch (error) {
@@ -96,11 +106,11 @@ router.put('/admin/:id/reject-deletion', requireAuth, requireVerified, requireRo
       summary: `Rejected the deletion request for the thread ${label}`,
     });
 
-    sendEmail(
-      thread.sender.email,
+    notifyEmail(
+      thread.sender?.email,
       'Thread Deletion Rejected',
       '<p>Your request to delete the thread has been rejected by an administrator.</p>'
-    ).catch(err => console.error('Failed to send email:', err));
+    );
 
     res.json({ message: 'Deletion rejected', thread });
   } catch (error) {
@@ -152,17 +162,17 @@ router.put('/admin/:id/approve-restore', requireAuth, requireVerified, requireRo
       summary: `Approved the restoration of the thread ${label}`,
     });
 
-    sendEmail(
-      thread.sender.email,
+    notifyEmail(
+      thread.sender?.email,
       'Thread Restoration Approved',
       '<p>Your request to restore the thread has been approved. It is back in your active dashboard.</p>'
-    ).catch(err => console.error('Failed to send email:', err));
+    );
 
-    sendEmail(
-      thread.receiver.email,
+    notifyEmail(
+      thread.receiver?.email,
       'Thread Restored',
       '<p>A previously deleted thread you were participating in has been restored and is back in your dashboard.</p>'
-    ).catch(err => console.error('Failed to send email:', err));
+    );
 
     res.json({ message: 'Restoration approved', thread });
   } catch (error) {
@@ -198,11 +208,11 @@ router.put('/admin/:id/reject-restore', requireAuth, requireVerified, requireRol
       summary: `Rejected the restore request for the thread ${label}`,
     });
 
-    sendEmail(
-      thread.sender.email,
+    notifyEmail(
+      thread.sender?.email,
       'Thread Restoration Rejected',
       '<p>Your request to restore the thread has been rejected by an administrator.</p>'
-    ).catch(err => console.error('Failed to send email:', err));
+    );
 
     res.json({ message: 'Restoration rejected', thread });
   } catch (error) {
@@ -264,7 +274,7 @@ router.get('/', requireAuth, requireVerified, async (req, res) => {
     const formattedThreads = threads.map(t => {
       const threadObj = t.toObject();
       if (type === 'received') {
-        threadObj.sender = { _id: t.sender._id, displayName: 'Anonymous' };
+        threadObj.sender = { _id: t.sender?._id, displayName: 'Anonymous' };
       }
       // If type === 'sent', the sender CAN see the receiver's display name.
       return threadObj;
@@ -298,8 +308,28 @@ router.get('/archive', requireAuth, requireVerified, async (req, res) => {
   }
 });
 
+// A malformed :id otherwise reaches findById and surfaces a CastError as a 500
+// 'Server error'. Registered after the static prefixes (/admin, /archive, ...)
+// so those are matched first, and before every /:id handler below.
+router.use('/:id', (req, res, next) => {
+  if (badObjectId(res, req.params.id)) return;
+  next();
+});
+
 // SSE endpoint for thread updates
-router.get('/:id/events', requireAuth, requireVerified, (req, res) => {
+router.get('/:id/events', requireAuth, requireVerified, async (req, res) => {
+  // The stream must not leak activity to someone who is not on the thread.
+  // An authenticated member could otherwise watch another pair's mirror —
+  // including the anonymous receiver's — update in real time.
+  const thread = await Thread.findById(req.params.id).select('sender receiver');
+  if (!thread) return res.status(404).json({ message: 'Thread not found' });
+
+  const isSender = String(thread.sender) === String(req.user._id);
+  const isReceiver = String(thread.receiver) === String(req.user._id);
+  if (!isSender && !isReceiver) {
+    return res.status(403).json({ message: 'Access denied' });
+  }
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -338,8 +368,8 @@ router.get('/:id', requireAuth, requireVerified, async (req, res) => {
       return res.status(404).json({ message: 'Thread not found' });
     }
 
-    const isSender = thread.sender._id.toString() === req.user._id.toString();
-    const isReceiver = thread.receiver._id.toString() === req.user._id.toString();
+    const isSender = thread.sender?._id?.toString() === req.user._id.toString();
+    const isReceiver = thread.receiver?._id?.toString() === req.user._id.toString();
 
     if (!isSender && !isReceiver) {
       return res.status(403).json({ message: 'Access denied' });
@@ -365,12 +395,12 @@ router.get('/:id', requireAuth, requireVerified, async (req, res) => {
     const threadObj = thread.toObject();
 
     if (isReceiver) {
-      threadObj.sender = { _id: thread.sender._id, displayName: 'Anonymous' };
+      threadObj.sender = { _id: thread.sender?._id, displayName: 'Anonymous' };
     } else if (isSender) {
       // Sender can view full thread details, even if resolved.
       // We don't expose receiver email
-      threadObj.receiver = { _id: thread.receiver._id, displayName: thread.receiver.displayName };
-      threadObj.sender = { _id: thread.sender._id, displayName: thread.sender.displayName };
+      threadObj.receiver = { _id: thread.receiver?._id, displayName: thread.receiver?.displayName };
+      threadObj.sender = { _id: thread.sender?._id, displayName: thread.sender?.displayName };
     }
 
     res.json(threadObj);
@@ -452,6 +482,14 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
     if (receiverId === req.user._id.toString()) {
       return res.status(400).json({ message: 'You cannot send a mirror to yourself.' });
     }
+    for (const field of ['concern', 'impact', 'desiredChange']) {
+      if (tooLong(content?.[field], 'THREAD_FIELD')) {
+        return res.status(400).json({ message: `${field} is too long (max ${LIMITS.THREAD_FIELD} characters).` });
+      }
+    }
+    if (tooLong(content?.bibleVerse, 'THREAD_VERSE')) {
+      return res.status(400).json({ message: 'bibleVerse is too long (max 2000 characters).' });
+    }
 
     const thread = new Thread({
       sender: req.user._id,
@@ -473,14 +511,11 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
     
     await thread.populate('receiver');
 
-    // Send email in background
-
-    // Send email in background
-    sendEmail(
-      thread.receiver.email,
+    notifyEmail(
+      thread.receiver?.email,
       'You have received a Gentle Mirror message',
       '<p>You have received a Gentle Mirror message. Log in to read it.</p>'
-    ).catch(err => console.error('Failed to send email notification:', err));
+    );
 
     res.status(201).json({ message: 'Mirror sent successfully', thread });
   } catch (error) {
@@ -501,8 +536,8 @@ router.post('/:id/reply', requireAuth, requireVerified, async (req, res) => {
       return res.status(400).json({ message: 'Thread is closed to new replies.' });
     }
 
-    const isSender = thread.sender._id.toString() === req.user._id.toString();
-    const isReceiver = thread.receiver._id.toString() === req.user._id.toString();
+    const isSender = thread.sender?._id?.toString() === req.user._id.toString();
+    const isReceiver = thread.receiver?._id?.toString() === req.user._id.toString();
 
     if (!isSender && !isReceiver) {
       return res.status(403).json({ message: 'Access denied' });
@@ -530,6 +565,14 @@ router.post('/:id/reply', requireAuth, requireVerified, async (req, res) => {
     }
 
     const { content } = req.body;
+    for (const field of ['clarification', 'feelings', 'acknowledgment', 'hopedUnderstanding']) {
+      if (tooLong(content?.[field], 'THREAD_FIELD')) {
+        return res.status(400).json({ message: `${field} is too long (max ${LIMITS.THREAD_FIELD} characters).` });
+      }
+    }
+    if (tooLong(content?.bibleVerse, 'THREAD_VERSE')) {
+      return res.status(400).json({ message: 'bibleVerse is too long (max 2000 characters).' });
+    }
 
     thread.messages.push({
       authorType,
@@ -549,29 +592,29 @@ router.post('/:id/reply', requireAuth, requireVerified, async (req, res) => {
     // Check if auto-escalation should happen
     if (thread.senderRepliesUsed >= 3 && thread.receiverRepliesUsed >= 3) {
       thread.status = 'Escalated';
-      
-      sendEmail(
-        thread.sender.email,
+
+      notifyEmail(
+        thread.sender?.email,
         'Thread Escalated',
         '<p>Your thread has automatically been escalated to a counselor because the maximum reply limit was reached.</p>'
-      ).catch(e => console.error(e));
-      
-      sendEmail(
-        thread.receiver.email,
+      );
+
+      notifyEmail(
+        thread.receiver?.email,
         'Thread Escalated',
         '<p>Your thread has automatically been escalated to a counselor because the maximum reply limit was reached.</p>'
-      ).catch(e => console.error(e));
+      );
     }
 
     await thread.save();
 
     const notifyUser = isSender ? thread.receiver : thread.sender;
 
-    sendEmail(
-      notifyUser.email,
+    notifyEmail(
+      notifyUser?.email,
       'New reply in your Gentle Mirror thread',
       '<p>You have a new reply in your Gentle Mirror thread. Log in to read it.</p>'
-    ).catch(err => console.error('Failed to send email notification:', err));
+    );
 
     res.json({ message: 'Reply sent successfully', thread });
   } catch (error) {
@@ -600,11 +643,11 @@ router.put('/:id/resolve', requireAuth, requireVerified, async (req, res) => {
     thread.resolvedAt = new Date();
     await thread.save();
 
-    sendEmail(
-      thread.receiver.email,
+    notifyEmail(
+      thread.receiver?.email,
       'Your Gentle Mirror thread has been resolved',
       '<p>Your thread has been marked as resolved. Thank you for your openness to growth.</p>'
-    ).catch(err => console.error('Failed to send email notification:', err));
+    );
 
     res.json({ message: 'Thread resolved successfully', thread });
   } catch (error) {
@@ -633,11 +676,11 @@ router.put('/:id/accept', requireAuth, requireVerified, async (req, res) => {
     thread.acceptedAt = new Date();
     await thread.save();
 
-    sendEmail(
-      thread.sender.email,
+    notifyEmail(
+      thread.sender?.email,
       'Your Gentle Mirror has been accepted',
       '<p>The receiver has accepted your Gentle Mirror and is willing to change.</p>'
-    ).catch(err => console.error('Failed to send email notification:', err));
+    );
 
     res.json({ message: 'Thread accepted successfully', thread });
   } catch (error) {
@@ -656,8 +699,8 @@ router.post('/:id/escalate', requireAuth, requireVerified, async (req, res) => {
       return res.status(400).json({ message: 'Thread is not active' });
     }
 
-    const isSender = thread.sender._id.toString() === req.user._id.toString();
-    const isReceiver = thread.receiver._id.toString() === req.user._id.toString();
+    const isSender = thread.sender?._id?.toString() === req.user._id.toString();
+    const isReceiver = thread.receiver?._id?.toString() === req.user._id.toString();
 
     if (!isSender && !isReceiver) return res.status(403).json({ message: 'Access denied' });
 
@@ -679,11 +722,11 @@ router.post('/:id/escalate', requireAuth, requireVerified, async (req, res) => {
 
     const notifyUser = isSender ? thread.receiver : thread.sender;
 
-    sendEmail(
-      notifyUser.email,
+    notifyEmail(
+      notifyUser?.email,
       'Counselor Support Requested',
       '<p>The other person in your Gentle Mirror thread is requesting counselor support. Log in to review the request.</p>'
-    ).catch(err => console.error('Failed to send email notification:', err));
+    );
 
     res.json({ message: 'Escalation requested', thread });
   } catch (error) {
@@ -703,8 +746,8 @@ router.put('/:id/consent-escalation', requireAuth, requireVerified, async (req, 
     const thread = await Thread.findById(req.params.id).populate('sender').populate('receiver');
     if (!thread) return res.status(404).json({ message: 'Thread not found' });
 
-    const isSender = thread.sender._id.toString() === req.user._id.toString();
-    const isReceiver = thread.receiver._id.toString() === req.user._id.toString();
+    const isSender = thread.sender?._id?.toString() === req.user._id.toString();
+    const isReceiver = thread.receiver?._id?.toString() === req.user._id.toString();
 
     if (!isSender && !isReceiver) return res.status(403).json({ message: 'Access denied' });
 
@@ -721,11 +764,11 @@ router.put('/:id/consent-escalation', requireAuth, requireVerified, async (req, 
       thread.escalationDeclinedCount = (thread.escalationDeclinedCount || 0) + 1;
       // notify requester
       const notifyUser = isSender ? thread.receiver : thread.sender;
-      sendEmail(
-        notifyUser.email,
+      notifyEmail(
+        notifyUser?.email,
         'Counselor Support Declined',
         '<p>The other person in your Gentle Mirror thread has declined the request for counselor support.</p>'
-      ).catch(err => console.error('Failed to send email notification:', err));
+      );
     } else if (thread.earlyEscalationSenderConsent === 'Approved' && thread.earlyEscalationReceiverConsent === 'Approved') {
       thread.status = 'Escalated';
       // Notify counselors

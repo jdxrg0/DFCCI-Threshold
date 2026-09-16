@@ -5,10 +5,10 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { Shield, Users, LogOut, LogIn, UserPlus, Menu, X, ScanLine, Sun, Wallet, BookHeart, ChevronRight, Settings } from 'lucide-react';
 import ThemePanel, { ThemePanelContent } from './ThemePanel';
-import logo from '../assets/logo.svg';
+import logo from '../assets/logo.webp';
 import { renderAvatarHelper } from '../utils/avatarHelper';
 
-// ── Module map: route prefix → { icon, dashboardPath, label } ──────────────
+// â”€â”€ Module map: route prefix â†’ { icon, dashboardPath, label } â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Add a new entry here whenever a new module is introduced to the platform.
 const MODULE_MAP = [
   {
@@ -41,7 +41,7 @@ const MODULE_MAP = [
   },
 ];
 
-// ── Mobile hamburger theme section (expandable) ───────────────────────────
+// â”€â”€ Mobile hamburger theme section (expandable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const MobileThemeSection = ({ onClose }) => {
   const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
@@ -131,7 +131,7 @@ const Navbar = () => {
           </div>
         </div>
 
-        {/* ── Desktop navigation ── */}
+        {/* â”€â”€ Desktop navigation â”€â”€ */}
         <div className="desktop-nav">
           {user ? (
             <>
@@ -208,11 +208,11 @@ const Navbar = () => {
             </>
           )}
 
-          {/* Theme panel (palette icon — floating) */}
+          {/* Theme panel (palette icon â€” floating) */}
           <ThemePanel />
         </div>
 
-        {/* ── Mobile header row (icons + hamburger) ── */}
+        {/* â”€â”€ Mobile header row (icons + hamburger) â”€â”€ */}
         <div className="mobile-header-row">
 
 
@@ -226,7 +226,7 @@ const Navbar = () => {
           </button>
         </div>
 
-        {/* ── Mobile slide-out menu ── */}
+        {/* â”€â”€ Mobile slide-out menu â”€â”€ */}
         {isMobileMenuOpen && createPortal(
           <div className="mobile-nav-menu">
             {user ? (

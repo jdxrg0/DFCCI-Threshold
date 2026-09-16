@@ -4,6 +4,7 @@ const EmailLog = require('../models/EmailLog');
 const sendEmail = require('../utils/sendEmail');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 const { recordAudit, AUDIT_ACTIONS } = require('../utils/auditLog');
+const { escapeRegex } = require('../utils/escapeRegex');
 
 // @route   GET /api/emails
 // @desc    Get all email logs (Admin only, paginated, searchable, filterable)
@@ -18,9 +19,10 @@ router.get('/', requireAuth, requireRole(['ADMIN']), async (req, res) => {
     const query = {};
 
     if (search) {
+      const safeSearch = escapeRegex(search);
       query.$or = [
-        { to: { $regex: search, $options: 'i' } },
-        { subject: { $regex: search, $options: 'i' } },
+        { to: { $regex: safeSearch, $options: 'i' } },
+        { subject: { $regex: safeSearch, $options: 'i' } },
       ];
     }
 

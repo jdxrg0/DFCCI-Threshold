@@ -6,18 +6,108 @@ const User = require('../models/User');
 const PendingUser = require('../models/PendingUser');
 const sendEmail = require('../utils/sendEmail');
 const { requireAuth } = require('../middleware/authMiddleware');
+const { loginLimiter, otpVerifyLimiter, emailSendLimiter } = require('../middleware/rateLimiters');
+const { safeEqualNum } = require('../utils/timingSafe');
+const { validatePassword } = require('../utils/passwordPolicy');
 const { OAuth2Client } = require('google-auth-library');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
+// Signed with the configured secret only — never a fallback. The server
+// refuses to boot without JWT_SECRET, so a missing value is a boot-time
+// failure, not a silently downgraded signature.
+const JWT_SECRET = process.env.JWT_SECRET;
+
 // Map to track resend-otp rate limits (email -> timestamp)
 const resendRateLimits = new Map();
 
-router.post('/signup', async (req, res) => {
+// Per-email OTP attempt tracking (flow + email -> { count, windowStart }).
+// The IP-relevant work is done by otpVerifyLimiter; this layer stops a fast
+// attacker from rotating IPs to brute-force one victim's six-digit code, and
+// from hammering reset-password once the code is known to exist.
+const OTP_ATTEMPT_WINDOW = 15 * 60 * 1000; // matches the code lifetime
+const OTP_ATTEMPT_MAX = 10;
+const otpAttempts = new Map();
+
+const otpLocked = (flow, email) => {
+  const entry = otpAttempts.get(`${flow}:${email}`);
+  if (!entry) return false;
+  if (Date.now() - entry.windowStart > OTP_ATTEMPT_WINDOW) {
+    otpAttempts.delete(`${flow}:${email}`);
+    return false;
+  }
+  return entry.count >= OTP_ATTEMPT_MAX;
+};
+
+const registerOtpFailure = (flow, email) => {
+  const key = `${flow}:${email}`;
+  const entry = otpAttempts.get(key);
+  if (!entry || Date.now() - entry.windowStart > OTP_ATTEMPT_WINDOW) {
+    otpAttempts.set(key, { count: 1, windowStart: Date.now() });
+  } else {
+    entry.count += 1;
+  }
+
+  // Prune stale entries so the map cannot grow without bound.
+  if (otpAttempts.size > 5000) {
+    const cutoff = Date.now() - OTP_ATTEMPT_WINDOW;
+    for (const [key, entry] of otpAttempts) {
+      if (entry.windowStart < cutoff) otpAttempts.delete(key);
+    }
+  }
+};
+
+const clearOtpAttempts = (flow, email) => {
+  otpAttempts.delete(`${flow}:${email}`);
+};
+
+// Per-account login failure tracking. loginLimiter already caps attempts by
+// IP; this layer prevents a distributed attacker from rotating IPs to guess
+// one victim's password, and protects the unverified-member paths above /
+// before the bcrypt.compare call.
+const LOGIN_ATTEMPT_WINDOW = 15 * 60 * 1000;
+const LOGIN_ATTEMPT_MAX = 5;
+const loginAttempts = new Map();
+
+const loginLocked = (email) => {
+  const entry = loginAttempts.get(email);
+  if (!entry) return false;
+  if (Date.now() - entry.windowStart > LOGIN_ATTEMPT_WINDOW) {
+    loginAttempts.delete(email);
+    return false;
+  }
+  return entry.count >= LOGIN_ATTEMPT_MAX;
+};
+
+const registerLoginFailure = (email) => {
+  const entry = loginAttempts.get(email);
+  if (!entry || Date.now() - entry.windowStart > LOGIN_ATTEMPT_WINDOW) {
+    loginAttempts.set(email, { count: 1, windowStart: Date.now() });
+  } else {
+    entry.count += 1;
+  }
+  if (loginAttempts.size > 5000) {
+    const cutoff = Date.now() - LOGIN_ATTEMPT_WINDOW;
+    for (const [key, entry] of loginAttempts) {
+      if (entry.windowStart < cutoff) loginAttempts.delete(key);
+    }
+  }
+};
+
+const clearLoginAttempts = (email) => {
+  loginAttempts.delete(email);
+};
+
+router.post('/signup', emailSendLimiter, async (req, res) => {
   try {
     const { displayName, email, password } = req.body;
-    
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      return res.status(400).json({ message: passwordError });
+    }
+
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ message: 'User with this email already exists' });
@@ -49,14 +139,22 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-router.post('/verify-otp', async (req, res) => {
+router.post('/verify-otp', otpVerifyLimiter, async (req, res) => {
   try {
     const { email, otp } = req.body;
-    
-    const pendingUser = await PendingUser.findOne({ email });
+
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+    if (otpLocked('verify', normalizedEmail)) {
+      return res.status(429).json({ message: 'Too many verification attempts. Try again in 15 minutes.' });
+    }
+
+    const pendingUser = await PendingUser.findOne({ email: normalizedEmail });
 
     if (!pendingUser) {
-      const existingUser = await User.findOne({ email });
+      const existingUser = await User.findOne({ email: normalizedEmail });
       if (existingUser) {
         // An admin can re-issue an OTP straight onto an existing unverified row, which leaves
         // no PendingUser to match. A pendingEmail code belongs to the email-change flow, so it
@@ -65,7 +163,7 @@ router.post('/verify-otp', async (req, res) => {
           !existingUser.isVerified &&
           !existingUser.pendingEmail &&
           existingUser.otp &&
-          existingUser.otp === otp &&
+          safeEqualNum(existingUser.otp, otp) &&
           existingUser.otpExpires &&
           existingUser.otpExpires > Date.now()
         ) {
@@ -74,14 +172,17 @@ router.post('/verify-otp', async (req, res) => {
           existingUser.otpExpires = undefined;
           await existingUser.save();
 
+          clearOtpAttempts('verify', normalizedEmail);
           return res.json({ message: 'Account verified successfully. You can now log in.' });
         }
+        registerOtpFailure('verify', normalizedEmail);
         return res.status(400).json({ message: 'User is already verified' });
       }
       return res.status(404).json({ message: 'Pending registration not found or expired. Please sign up again.' });
     }
 
-    if (pendingUser.otp !== otp) {
+    if (!safeEqualNum(pendingUser.otp, otp)) {
+      registerOtpFailure('verify', normalizedEmail);
       return res.status(400).json({ message: 'Invalid verification code' });
     }
 
@@ -97,7 +198,8 @@ router.post('/verify-otp', async (req, res) => {
     });
     
     await user.save();
-    await PendingUser.deleteOne({ email });
+    await PendingUser.deleteOne({ email: normalizedEmail });
+    clearOtpAttempts('verify', normalizedEmail);
 
     res.json({ message: 'Account verified successfully. You can now log in.' });
   } catch (error) {
@@ -106,7 +208,7 @@ router.post('/verify-otp', async (req, res) => {
   }
 });
 
-router.post('/resend-otp', async (req, res) => {
+router.post('/resend-otp', emailSendLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     
@@ -134,6 +236,15 @@ router.post('/resend-otp', async (req, res) => {
 
     resendRateLimits.set(email, Date.now());
 
+    // Prune stale entries so the map cannot grow without bound. Entries warm
+    // for one rate-limit window, then drop away.
+    if (resendRateLimits.size > 1000) {
+      const cutoff = Date.now() - 60000;
+      for (const [key, sentAt] of resendRateLimits) {
+        if (sentAt < cutoff) resendRateLimits.delete(key);
+      }
+    }
+
     // Send email asynchronously
     sendEmail(
       email, 
@@ -148,12 +259,22 @@ router.post('/resend-otp', async (req, res) => {
   }
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email });
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    if (loginLocked(normalizedEmail)) {
+      return res.status(429).json({ message: 'Too many failed attempts. Try again in 15 minutes.' });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) {
+      registerLoginFailure(normalizedEmail);
       return res.status(400).json({ message: 'Invalid credentials' });
     }
 
@@ -163,10 +284,15 @@ router.post('/login', async (req, res) => {
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      registerLoginFailure(normalizedEmail);
       return res.status(400).json({ message: 'Invalid credentials' });
     }
+    clearLoginAttempts(normalizedEmail);
 
-    const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '7d' });
+    if (!JWT_SECRET) {
+      return res.status(500).json({ message: 'Server error' });
+    }
+    const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -195,7 +321,7 @@ router.post('/login', async (req, res) => {
   }
 });
 
-router.post('/google', async (req, res) => {
+router.post('/google', loginLimiter, async (req, res) => {
   try {
     const { credential, confirmedName } = req.body;
     
@@ -232,7 +358,10 @@ router.post('/google', async (req, res) => {
       await user.save();
     }
 
-    const token = jwt.sign({ userId: user._id, role: user.role }, process.env.JWT_SECRET || 'fallback_secret', { expiresIn: '7d' });
+    if (!JWT_SECRET) {
+      return res.status(500).json({ message: 'Server error' });
+    }
+    const token = jwt.sign({ userId: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
 
     res.cookie('token', token, {
       httpOnly: true,
@@ -261,7 +390,7 @@ router.post('/google', async (req, res) => {
   }
 });
 
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', emailSendLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
@@ -292,13 +421,31 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', otpVerifyLimiter, async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
-    const user = await User.findOne({ email });
+
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) return res.status(400).json({ message: 'Email is required' });
+    if (!newPassword || String(newPassword).trim() === '') {
+      return res.status(400).json({ message: 'New password is required' });
+    }
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ message: passwordError });
+    }
+    if (otpLocked('reset', normalizedEmail)) {
+      return res.status(429).json({ message: 'Too many reset attempts. Try again in 15 minutes.' });
+    }
+
+    const user = await User.findOne({ email: normalizedEmail });
 
     if (!user) return res.status(404).json({ message: 'Account not found.' });
-    if (!user.otp || user.otp !== otp) return res.status(400).json({ message: 'Invalid reset code.' });
+    if (!user.otp) return res.status(400).json({ message: 'Invalid reset code.' });
+    if (!safeEqualNum(user.otp, otp)) {
+      registerOtpFailure('reset', normalizedEmail);
+      return res.status(400).json({ message: 'Invalid reset code.' });
+    }
     if (user.otpExpires < Date.now()) return res.status(400).json({ message: 'Reset code has expired. Please request a new one.' });
 
     const salt = await bcrypt.genSalt(10);
@@ -307,6 +454,7 @@ router.post('/reset-password', async (req, res) => {
     user.otpExpires = undefined;
     await user.save();
 
+    clearOtpAttempts('reset', normalizedEmail);
     res.json({ message: 'Password reset successfully. You can now log in.' });
   } catch (error) {
     console.error('Reset password error:', error);

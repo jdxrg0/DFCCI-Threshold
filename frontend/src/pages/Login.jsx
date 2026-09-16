@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import useFormPersist from '../hooks/useFormPersist';
 import * as auth from '../services/auth';
-import logo from '../assets/logo.svg';
+import logo from '../assets/logo.webp';
 
 const Login = () => {
   const [form, setForm, clearSavedForm] = useFormPersist('login_draft', { email: '', password: '' }, ['password']);

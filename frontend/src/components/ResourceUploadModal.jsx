@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import * as resources from '../services/resources';
-import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { useLanguage } from '../context/LanguageContext';
 import { X, UploadCloud, Save, FileText } from 'lucide-react';
+
+// Only downloaded when the modal actually opens — the editor is heavy.
+const ReactQuill = lazy(() => import('react-quill-new'));
 
 const ResourceUploadModal = ({ onClose, onSuccess, resourceToEdit }) => {
   const { t } = useLanguage();
@@ -142,12 +144,14 @@ const ResourceUploadModal = ({ onClose, onSuccess, resourceToEdit }) => {
                 {t('abstract') || 'Description / Abstract'}
               </label>
               <div className="quill-custom" style={{ border: '1px solid var(--border-color)', borderRadius: '0.75rem', overflow: 'hidden' }}>
-                <ReactQuill 
-                  theme="snow" 
-                  value={formData.description} 
-                  onChange={handleQuillChange}
-                  style={{ background: 'var(--bg-color)', color: 'var(--text-main)' }}
-                />
+                <Suspense fallback={<div style={{ padding: '1rem', color: 'var(--text-muted)', background: 'var(--bg-color)', fontSize: '0.85rem' }}>Loading editor…</div>}>
+                  <ReactQuill 
+                    theme="snow" 
+                    value={formData.description} 
+                    onChange={handleQuillChange}
+                    style={{ background: 'var(--bg-color)', color: 'var(--text-main)' }}
+                  />
+                </Suspense>
               </div>
             </div>
 

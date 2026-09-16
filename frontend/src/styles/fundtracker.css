@@ -34,19 +34,9 @@
   padding: var(--sp-6);
   margin-bottom: var(--sp-5);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-xl);
-  background: var(--grad-surface);
-  box-shadow: var(--shadow-lg);
-}
-
-.ft-hero::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(34rem 20rem at 6% -10%, var(--tint-primary-strong), transparent 70%),
-    radial-gradient(28rem 18rem at 104% 120%, color-mix(in srgb, var(--secondary) 20%, transparent), transparent 70%);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-sm);
 }
 
 .ft-hero > * { position: relative; z-index: 1; }
@@ -947,16 +937,14 @@
   overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: var(--r-lg);
-  background: var(--grad-surface);
+  background: var(--surface-1);
   box-shadow: var(--shadow-sm);
-  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
-    border-color var(--dur) var(--ease);
+  transition: box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease);
 }
 
 .ft-fundcard:hover {
-  transform: translateY(-3px);
   border-color: color-mix(in srgb, var(--fund) 45%, transparent);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .ft-fundcard__accent { height: 4px; background: var(--fund); }

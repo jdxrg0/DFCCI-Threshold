@@ -34,16 +34,15 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  padding: var(--sp-4);
-  background: var(--surface-1);
+  padding: var(--sp-3);
+  background: var(--grad-surface);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-lg);
+  border-radius: var(--r-md);
   box-shadow: var(--shadow-sm);
   transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 
 .ah-stat:hover {
-  transform: translateY(-2px);
   border-color: var(--ring);
 }
 
@@ -61,7 +60,7 @@
 .ah-stat-head svg { color: var(--primary); flex-shrink: 0; }
 
 .ah-stat-value {
-  font-size: 1.55rem;
+  font-size: 1.3rem;
   font-weight: 900;
   line-height: 1.1;
   letter-spacing: var(--tracking-tight);
@@ -72,7 +71,7 @@
 
 .ah-stat-value.is-code {
   font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
-  font-size: 1.05rem;
+  font-size: 0.9rem;
   letter-spacing: 0;
 }
 
@@ -119,13 +118,13 @@
 
 .ah-search input {
   width: 100%;
-  padding: 0.62rem 0.9rem 0.62rem 2.4rem;
+  padding: 0.45rem 0.9rem 0.45rem 2.4rem;
   font: inherit;
   font-size: var(--fs-sm);
   color: var(--text-main);
   background: var(--surface-3);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-full);
+  border-radius: var(--r-sm);
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 
@@ -197,19 +196,19 @@
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
-  padding: var(--sp-5);
+  padding: var(--sp-4);
   background: var(--grad-surface);
   border: 1px solid var(--hairline);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-md);
-  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+  /* Grid item: keep 1fr tracks from being inflated by long nowrap text. */
+  min-width: 0;
 }
 
 .ah-card:hover {
-  transform: translateY(-3px);
   border-color: var(--ring);
-  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  box-shadow: var(--shadow-sm);
 }
 
 /* A paused schedule stays legible but visibly inert. */
@@ -219,23 +218,6 @@
 }
 
 .ah-card.is-paused .ah-card-title { color: var(--text-muted); }
-
-/* The accent rail doubles as the status light. */
-.ah-card::before {
-  content: "";
-  position: absolute;
-  top: var(--sp-5);
-  bottom: var(--sp-5);
-  left: 0;
-  width: 3px;
-  border-radius: 0 var(--r-full) var(--r-full) 0;
-  background: var(--grad-brand);
-  opacity: 0.9;
-}
-
-.ah-card.is-paused::before {
-  background: var(--hairline-strong);
-}
 
 .ah-card-top {
   display: flex;
@@ -266,9 +248,9 @@
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.18rem 0.55rem;
+  padding: 0.25rem 0.6rem;
   font-size: 0.7rem;
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1.5;
   white-space: nowrap;
   border-radius: var(--r-full);
@@ -354,9 +336,9 @@
 a.ah-target:hover { color: var(--primary); border-color: var(--ring); }
 
 .ah-target span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
 }
 
 .ah-message {
@@ -660,7 +642,7 @@ a.ah-target:hover { color: var(--primary); border-color: var(--ring); }
 .ah-select,
 .ah-textarea {
   width: 100%;
-  padding: 0.65rem 0.85rem;
+  padding: 0.55rem 0.75rem;
   font: inherit;
   font-size: var(--fs-sm);
   color: var(--text-main);
@@ -740,7 +722,7 @@ a.ah-target:hover { color: var(--primary); border-color: var(--ring); }
     transform var(--dur-fast) var(--ease);
 }
 
-.ah-choice:hover { transform: translateY(-2px); border-color: var(--ring); }
+.ah-choice:hover { border-color: var(--ring); }
 
 .ah-choice.is-active {
   background: var(--tint-primary);
@@ -835,7 +817,6 @@ a.ah-target:hover { color: var(--primary); border-color: var(--ring); }
 
 .ah-token-btn:hover {
   border-color: var(--primary);
-  transform: translateY(-1px);
 }
 
 /* Live preview */
@@ -942,10 +923,9 @@ a.ah-target:hover { color: var(--primary); border-color: var(--ring); }
   flex: 1;
   min-width: 0;
   font-size: var(--fs-xs);
+  line-height: 1.4;
   color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .ah-queue-body {
@@ -1076,14 +1056,30 @@ a.ah-target:hover { color: var(--primary); border-color: var(--ring); }
 
   .ah-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-2); }
   .ah-stat { padding: var(--sp-3); border-radius: var(--r-md); }
-  .ah-stat-value { font-size: 1.25rem; }
-  .ah-stat-value.is-code { font-size: 0.9rem; }
+  .ah-stat-value { font-size: 0.95rem; }
+  .ah-stat-value.is-code { font-size: 0.8rem; }
 
   .ah-grid { grid-template-columns: 1fr; gap: var(--sp-3); }
   .ah-card { padding: var(--sp-4); border-radius: var(--r-md); }
 
   .ah-field-row,
   .ah-choice-grid { grid-template-columns: 1fr; }
+
+  /* The seven icon actions no longer share the line with the last-run text.
+     Run state gets its own row; the action pill drops below, right-aligned,
+     and wraps only if a narrow phone still can't hold it. */
+  .ah-card-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+  }
+
+  .ah-card-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    row-gap: 0.35rem;
+    border-radius: var(--r-md);
+  }
 
   /* Modals become bottom sheets — reachable with one thumb. */
   .ah-overlay { padding: 0; align-items: flex-end; }
@@ -1108,6 +1104,54 @@ a.ah-target:hover { color: var(--primary); border-color: var(--ring); }
 @keyframes ah-sheet {
   from { opacity: 0; transform: translateY(100%); }
   to { opacity: 1; transform: none; }
+}
+
+/* ── Touch targets ─────────────────────────────────────────────────────── */
+@media (pointer: coarse) {
+  /* 36px keeps all seven actions on one line down to 360px while staying a
+     comfortable thumb target. */
+  .ah-icon-btn { width: 36px; height: 36px; }
+
+  .ah-segment-btn { padding: 0.45rem 0.85rem; }
+
+  .ah-day { padding: 0.6rem 0.2rem; }
+
+  .ah-mini-btn,
+  .ah-token-btn { padding: 0.4rem 0.7rem; }
+
+  .ah-queue-head { padding: var(--sp-3) var(--sp-4); }
+}
+
+/* ── No stuck hover on touch ───────────────────────────────────────────── */
+@media (hover: none) {
+  .ah-stat:hover { border-color: var(--hairline); }
+
+  .ah-segment-btn:hover { color: var(--text-muted); }
+
+  .ah-card:hover {
+    border-color: var(--hairline);
+    box-shadow: var(--shadow-sm);
+  }
+
+  a.ah-target:hover { color: var(--text-main); border-color: var(--hairline); }
+
+  .ah-icon-btn:hover:not(:disabled) { color: var(--text-muted); background: transparent; }
+
+  .ah-icon-btn.is-danger:hover:not(:disabled) { color: var(--text-muted); background: transparent; }
+
+  .ah-choice:hover { border-color: var(--hairline-strong); }
+
+  .ah-day:hover { color: var(--text-muted); border-color: var(--hairline-strong); }
+
+  .ah-mini-btn:hover {
+    color: var(--text-muted);
+    border-color: var(--hairline-strong);
+    border-style: dashed;
+  }
+
+  .ah-token-btn:hover { border-color: transparent; }
+
+  .ah-queue-head:hover { background: transparent; }
 }
 
 @media (prefers-reduced-motion: reduce) {

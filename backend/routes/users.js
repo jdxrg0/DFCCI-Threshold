@@ -18,6 +18,9 @@ const PlatformSnapshot = require('../models/PlatformSnapshot');
 const { recordAudit, AUDIT_ACTIONS } = require('../utils/auditLog');
 const { collectPlatformStats } = require('../services/platformSnapshot');
 const { ROLE_LABELS, ROLES, ALL_ROLES } = require('../../shared/constants');
+const { escapeHtml } = require('../utils/escapeHtml');
+const { safeEqualNum } = require('../utils/timingSafe');
+const { validatePassword } = require('../utils/passwordPolicy');
 
 const getUTC8Today = () => {
   const now = new Date();
@@ -759,7 +762,7 @@ router.put('/:id/verify', requireAuth, requireRole(['ADMIN']), async (req, res) 
           user.email,
           'Your DFCCI Threshold account is verified',
           `<h3>Your account is ready</h3>
-           <p>Hi ${user.displayName}, an administrator has verified your DFCCI Threshold account.</p>
+           <p>Hi ${escapeHtml(user.displayName)}, an administrator has verified your DFCCI Threshold account.</p>
            <p>You can now sign in with your email and password — no verification code needed.</p>`
         );
       } catch (err) {
@@ -831,7 +834,7 @@ router.post('/:id/resend-otp', requireAuth, requireRole(['ADMIN']), async (req, 
         destination,
         'Your New DFCCI Threshold Verification Code',
         `<h3>New Verification Code</h3>
-         <p>Hi ${user.displayName}, an administrator has issued a new code for your DFCCI Threshold account.</p>
+         <p>Hi ${escapeHtml(user.displayName)}, an administrator has issued a new code for your DFCCI Threshold account.</p>
          <p>Your 6-digit verification code is: <strong>${otp}</strong></p>
          <p>Enter it on the sign-in verification screen to finish activating your account.</p>
          <p>This code will expire in 15 minutes.</p>`
@@ -1029,7 +1032,7 @@ router.post('/me/verify-email-otp', requireAuth, async (req, res) => {
       return res.status(400).json({ message: 'No pending email update found.' });
     }
 
-    if (!user.otp || user.otp !== otp) {
+    if (!user.otp || !safeEqualNum(user.otp, otp)) {
       return res.status(400).json({ message: 'Invalid verification code.' });
     }
 
@@ -1141,6 +1144,10 @@ router.put('/me/update-password', requireAuth, async (req, res) => {
 
     if (!newPassword || newPassword.trim() === '') {
       return res.status(400).json({ message: 'New password is required' });
+    }
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ message: passwordError });
     }
 
     const user = await User.findById(req.user._id);

@@ -5,42 +5,20 @@
 /* ── Cards ──────────────────────────────────────────────────────────────── */
 .card {
   position: relative;
-  background: var(--grad-surface);
+  background: var(--surface-1);
   border: 1px solid var(--hairline);
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   padding: var(--sp-5);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
-    border-color var(--dur) var(--ease);
-}
-
-/* Hairline highlight along the top edge — reads as a lit surface. */
-.card::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  border-radius: inherit;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--primary) 45%, transparent),
-    transparent
-  );
-  opacity: 0;
-  transition: opacity var(--dur) var(--ease);
-  pointer-events: none;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
 }
 
 .card:hover {
-  transform: translateY(-3px);
-  border-color: var(--ring);
-  box-shadow: var(--shadow-lg), var(--shadow-glow);
+  border-color: var(--hairline-strong);
+  box-shadow: var(--shadow-md);
 }
-
-.card:hover::after { opacity: 1; }
 
 /* Opt-out for cards used as static containers rather than interactive tiles */
 .card.card-flat:hover {
@@ -60,34 +38,30 @@
   padding: 0.65rem 1.35rem;
   font-family: inherit;
   font-size: var(--fs-sm);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.01em;
   border: 1px solid transparent;
-  border-radius: var(--r-full);
+  border-radius: var(--r-md);
   cursor: pointer;
   white-space: nowrap;
-  box-shadow: var(--shadow-sm);
-  transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur) var(--ease),
-    background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+  box-shadow: none;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
     color var(--dur) var(--ease), filter var(--dur) var(--ease);
 }
 
-.btn:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+.btn:active:not(:disabled) { filter: brightness(0.96); }
 
 .btn-primary {
   background: var(--grad-brand);
   color: var(--on-primary);
   border-color: transparent;
-  box-shadow: var(--shadow-sm), var(--shadow-glow);
 }
 
 .btn-primary:hover:not(:disabled),
 a.btn-primary:hover:not(:disabled) {
   background: var(--grad-brand);
   color: var(--on-primary);
-  filter: brightness(1.08) saturate(1.05);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md), 0 16px 34px -12px var(--glow);
+  filter: brightness(1.08);
 }
 
 .btn-secondary {
@@ -95,26 +69,23 @@ a.btn-primary:hover:not(:disabled) {
   color: var(--text-main);
   border-color: var(--hairline);
   backdrop-filter: none;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--tint-primary);
   border-color: var(--ring);
   color: var(--primary);
-  transform: translateY(-2px);
 }
 
 .btn-success {
-  background: linear-gradient(135deg, var(--success) 0%, color-mix(in srgb, var(--success) 70%, #000) 100%);
+  background: var(--success);
   color: #fff;
   border-color: transparent;
 }
 
 .btn-success:hover:not(:disabled) {
-  filter: brightness(1.08);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  filter: brightness(1.06);
   color: #fff;
 }
 
@@ -129,8 +100,28 @@ a.btn-primary:hover:not(:disabled) {
   background: var(--danger);
   color: #fff;
   border-color: transparent;
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+}
+
+.btn-blue {
+  background: #3b82f6;
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-blue:hover:not(:disabled) {
+  filter: brightness(1.06);
+  color: #fff;
+}
+
+.btn-red {
+  background: #ef4444;
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-red:hover:not(:disabled) {
+  filter: brightness(1.06);
+  color: #fff;
 }
 
 .btn:disabled {
@@ -374,6 +365,58 @@ table {
   letter-spacing: var(--tracking-tight);
 }
 
+/* Confirmation-dialog shell (ThreadView + friends). Themed surface via
+   .modal-panel; these own layout only and can never repaint on prop churn. */
+.confirm-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.confirm-modal {
+  max-width: 400px;
+  width: 90%;
+}
+
+.confirm-modal__title {
+  margin: 0 0 1rem;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.confirm-modal__body {
+  margin: 0 0 1.5rem;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+.confirm-modal__actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.confirm-modal__actions > .btn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
 /* ── Appearance mode switch (Light / Dark / System) ─────────────────────── */
 .mode-switch {
   display: grid;
@@ -530,7 +573,7 @@ table {
 .theme-swatch {
   border-radius: var(--r-md);
   padding: var(--sp-2) var(--sp-1);
-  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease);
+  transition: background var(--dur) var(--ease);
 }
 
 .theme-swatch-label {
@@ -542,7 +585,7 @@ table {
   max-width: 100%;
 }
 
-.theme-swatch:hover { transform: translateY(-2px); }
+.theme-swatch { border-radius: var(--r-md); }
 
 .theme-swatch.active {
   background: var(--tint-primary);
@@ -592,4 +635,144 @@ table {
   max-width: 1200px;
   margin: 0 auto var(--sp-3, 0.75rem);
   padding: 0 1rem;
+}
+
+/* ── PopupModal ─────────────────────────────────────────────────────────
+   The shared confirm/alert/prompt dialog (confirm dialogs in Admin, Thread
+   View, automation, …). Rendered through a portal straight onto <body>, so it
+   is themed via tokens and centres on a phone-finger-friendly way: a centred
+   card on wide screens, a full-width bottom sheet at or under 480px. */
+.popup-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-4);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.popup-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 400px;
+  padding: var(--sp-5);
+  background: var(--surface-solid);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  animation: popup-in var(--dur) var(--ease-out);
+}
+
+.popup-modal__close {
+  position: absolute;
+  top: var(--sp-2);
+  right: var(--sp-2);
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--r-full);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.popup-modal__close:hover {
+  color: var(--text-main);
+  background: var(--tint-primary);
+}
+
+.popup-modal__title {
+  margin: 0;
+  padding-right: var(--sp-5);
+  font-size: 1.2rem;
+  font-weight: 800;
+  letter-spacing: var(--tracking-tight);
+  color: var(--text-main);
+}
+
+.popup-modal__body {
+  margin: 0;
+  color: var(--text-main);
+  line-height: 1.5;
+}
+
+.popup-modal__field {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  font: inherit;
+  /* 16px keeps iOS from auto-zooming on focus (see no-zoom.css) */
+  font-size: 16px;
+  color: var(--text-main);
+  background: var(--surface-3);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--r-sm);
+}
+
+.popup-modal__field:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.popup-modal__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: var(--sp-1);
+}
+
+.popup-modal__actions .btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+}
+
+@keyframes popup-in {
+  from { opacity: 0; transform: scale(0.96) translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes popup-sheet {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ── Compact screens: the dialog docks to a thumb height ──────────────── */
+@media (max-width: 480px) {
+  .popup-modal-backdrop {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .popup-modal {
+    max-width: none;
+    max-height: 92vh;
+    overflow-y: auto;
+    border-radius: var(--r-lg) var(--r-lg) 0 0;
+    border-bottom: none;
+    padding: var(--sp-5) var(--sp-4) calc(var(--sp-5) + env(safe-area-inset-bottom, 0px));
+    animation-name: popup-sheet;
+  }
+
+  .popup-modal__actions { flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popup-modal { animation: none; }
 }

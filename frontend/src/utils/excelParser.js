@@ -1,6 +1,5 @@
-import * as XLSX from 'xlsx';
-
-export const downloadExcelTemplate = () => {
+export const downloadExcelTemplate = async () => {
+  const XLSX = await import('xlsx');
   const currentYear = new Date().getFullYear();
   const wsData = [
     [`Serving Schedule ${currentYear}`],
@@ -33,6 +32,7 @@ export const downloadExcelTemplate = () => {
 };
 
 export const parseExcelSchedule = async (file) => {
+  const XLSX = await import('xlsx');
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {

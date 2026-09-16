@@ -13,20 +13,9 @@
   padding: var(--sp-7) var(--sp-6);
   margin-bottom: var(--sp-6);
   border: 1px solid var(--hairline);
-  border-radius: var(--r-xl);
-  background: var(--grad-surface);
-  box-shadow: var(--shadow-lg);
-}
-
-.ticket-hero-banner::before,
-.games-hero-banner::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(36rem 20rem at 8% 0%, var(--tint-primary-strong), transparent 70%),
-    radial-gradient(30rem 18rem at 100% 100%, color-mix(in srgb, var(--secondary) 18%, transparent), transparent 70%);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Banner contents must clear the wash */
@@ -65,23 +54,19 @@
   align-items: center;
   gap: var(--sp-4);
   padding: var(--sp-5);
-  background: var(--grad-surface);
+  background: var(--surface-1);
   border: 1px solid var(--hairline);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 
 .ticket-card-glass:hover,
 .thread-card-glass:hover,
 .affirmation-card-glass:hover,
 .games-card-glass:hover {
-  transform: translateY(-3px);
   border-color: var(--ring);
-  box-shadow: var(--shadow-md), var(--shadow-glow);
+  box-shadow: var(--shadow-md);
 }
 
 /* Devotional's cards stack an accent bar over their content instead of sitting
@@ -90,18 +75,16 @@
    this module had been hand-rolling a flat card with a heavier border. */
 .devotional-card-glass {
   overflow: hidden;
-  background: var(--grad-surface);
+  background: var(--surface-1);
   border: 1px solid var(--hairline);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-sm);
-  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease),
-    box-shadow var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
 }
 
 .devotional-card-glass:hover {
-  transform: translateY(-3px);
   border-color: var(--ring);
-  box-shadow: var(--shadow-md), var(--shadow-glow);
+  box-shadow: var(--shadow-md);
 }
 
 /* ── Bottom tab bar (mobile) ────────────────────────────────────────────── */
@@ -123,9 +106,7 @@
   }
 
   .dashboard-tabs {
-    background: color-mix(in srgb, var(--bg-color) 85%, transparent) !important;
-    backdrop-filter: blur(20px) saturate(1.4);
-    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    background: var(--surface-solid) !important;
     border-top: 1px solid var(--hairline) !important;
   }
 }

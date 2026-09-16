@@ -1,17 +1,25 @@
 /* ==========================================================================
    Redesign: Animated backdrop
    --------------------------------------------------------------------------
-   Layered on top of the static --bg-mesh that base.css paints in body::before.
-   Two effects, both driven off the active theme's seed colours so all fifteen
-   families get this for free:
+   DISABLED by the minimal redesign. The drifting orbs and cursor glow below
+   painted the old colourful, glassy surface; the flat look has no use for
+   them, and this file is now kept inert so nothing repaints if the
+   component is ever remounted. `.bg-fx { display: none }` is the only live
+   rule; the rest is retained for reference (and easy reversal).
+
+   Original behaviour (for context):
+   The component mounted a fixed, viewport-sized box layered on top of the
+   static --bg-mesh that base.css paints in body::before:
 
      .bg-fx-orb   slow-drifting colour blobs (pure CSS)
      .bg-fx-glow  a light that trails the cursor (transform driven from
                   components/AnimatedBackdrop.jsx)
 
-   Everything lives at z-index -1 inside a contained box, so it paints above
-   the grain, below the app, and never triggers layout elsewhere.
+   Everything lived at z-index -1 inside a contained box, so it painted above
+   the grain, below the app, and never triggered layout elsewhere.
    ========================================================================== */
+
+.bg-fx { display: none; }
 
 /* ── Tint strengths ───────────────────────────────────────────────────────
    Light and dark need OPPOSITE strategies, not one token scaled.

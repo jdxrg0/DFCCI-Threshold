@@ -101,12 +101,20 @@ class AutomationScheduler {
   }
 
   /* Best-effort debug log. A read-only filesystem (container, serverless) must
-     not be able to take the scheduler down, so the file write is guarded. */
+     not be able to take the scheduler down, so the file write is guarded. The
+     log is also capped at 1MB: it grows a line per dispatch and would otherwise
+     balloon unboundedly on a long-lived host. */
   log(msg) {
     console.log(msg);
     try {
-      require('fs').appendFileSync('scheduler_debug.log', `[${new Date().toISOString()}] ${msg}
-`);
+      const fs = require('fs');
+      const file = 'scheduler_debug.log';
+      try {
+        if (fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024) {
+          fs.writeFileSync(file, `[${new Date().toISOString()}] (rotated: log exceeded 1MB)\n`);
+        }
+      } catch (e) { /* rotation is best-effort */ }
+      fs.appendFileSync(file, `[${new Date().toISOString()}] ${msg}\n`);
     } catch (e) { /* console output is enough */ }
   }
 

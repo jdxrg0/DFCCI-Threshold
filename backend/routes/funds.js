@@ -10,8 +10,10 @@ const { sendDuesReminders, resolveRosterMember } = require('../utils/reminderSch
 const { requireAuth, requireVerified, requireRole } = require('../middleware/authMiddleware');
 const { uploadReceipt } = require('../utils/receiptUpload');
 const { cloudinary } = require('../utils/cloudinary');
+const { badObjectId } = require('../utils/objectId');
 const AuditLog = require('../models/AuditLog');
 const { recordFundAudit, diffTransaction, describe } = require('../utils/fundAudit');
+const { escapeHtml } = require('../utils/escapeHtml');
 
 const adminOrTreasurerAuth = [requireAuth, requireVerified, requireRole(['ADMIN', 'YOUTH_TREASURER'])];
 
@@ -81,9 +83,13 @@ function duesSundaysToDate() {
 }
 
 // Helper: calculate total arrears for a member
+// Aggregated in the database; the old version pulled every payment into memory.
 async function calcMemberArrears(memberId) {
-  const payments = await DuesPayment.find({ member: memberId });
-  const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+  const [paid] = await DuesPayment.aggregate([
+    { $match: { member: memberId } },
+    { $group: { _id: null, total: { $sum: '$amount' } } },
+  ]);
+  const totalPaid = paid?.total || 0;
   return duesSundaysToDate() * DUES_WEEKLY_AMOUNT - totalPaid;
 }
 
@@ -428,6 +434,8 @@ router.post('/', adminOrTreasurerAuth, uploadReceipt.single('receipt'), async (r
 // Update a transaction
 router.put('/:id', adminOrTreasurerAuth, uploadReceipt.single('receipt'), async (req, res) => {
   try {
+    if (badObjectId(res, req.params.id)) return;
+
     const { amount, type, category, description, date, designatedFund, removeReceipt } = req.body;
 
     const transaction = await Transaction.findById(req.params.id);
@@ -514,6 +522,8 @@ router.put('/:id', adminOrTreasurerAuth, uploadReceipt.single('receipt'), async 
 // Delete a transaction
 router.delete('/:id', adminOrTreasurerAuth, async (req, res) => {
   try {
+    if (badObjectId(res, req.params.id)) return;
+
     const transaction = await Transaction.findById(req.params.id);
 
     if (!transaction) {
@@ -573,6 +583,8 @@ router.post('/dues/members', adminOrTreasurerAuth, async (req, res) => {
 // Soft-delete (deactivate) a roster member
 router.delete('/dues/members/:id', adminOrTreasurerAuth, async (req, res) => {
   try {
+    if (badObjectId(res, req.params.id)) return;
+
     const member = await DuesMember.findById(req.params.id);
     if (!member) return res.status(404).json({ message: 'Member not found' });
     member.isActive = false;
@@ -590,8 +602,8 @@ router.delete('/dues/members/:id', adminOrTreasurerAuth, async (req, res) => {
 router.get('/dues/ledger', requireAuth, requireVerified, async (req, res) => {
   try {
     const [members, payments] = await Promise.all([
-      DuesMember.find({ isActive: true }).sort({ name: 1 }).populate('linkedUser', 'displayName email'),
-      DuesPayment.find({}),
+      DuesMember.find({ isActive: true }).sort({ name: 1 }).populate('linkedUser', 'displayName email').lean(),
+      DuesPayment.find({}).lean(),
     ]);
 
     // The rate and start date used to be duplicated as literals on the client.
@@ -620,7 +632,10 @@ router.post('/dues/ledger', adminOrTreasurerAuth, async (req, res) => {
     const { memberId, collectionDate, amount } = req.body;
     if (!memberId || !collectionDate) return res.status(400).json({ message: 'memberId and collectionDate required' });
 
+    if (badObjectId(res, memberId)) return;
+
     const dDate = new Date(collectionDate);
+    if (isNaN(dDate.getTime())) return res.status(400).json({ message: 'Invalid collectionDate' });
     // Expand window by ±24 hours to handle timezone shifts between local and Vercel UTC
     const startDate = new Date(dDate.getTime() - 24 * 60 * 60 * 1000);
     const endDate = new Date(dDate.getTime() + 48 * 60 * 60 * 1000);
@@ -699,11 +714,14 @@ router.post('/dues/ledger', adminOrTreasurerAuth, async (req, res) => {
 // Link or unlink a registered user to a roster member (Admin/Treasurer only)
 router.put('/dues/members/:id/link-user', adminOrTreasurerAuth, async (req, res) => {
   try {
+    if (badObjectId(res, req.params.id)) return;
+
     const { userId } = req.body; // pass null/undefined to unlink
     const member = await DuesMember.findById(req.params.id);
     if (!member) return res.status(404).json({ message: 'Member not found' });
 
     if (userId) {
+      if (badObjectId(res, userId)) return;
       const user = await User.findById(userId);
       if (!user) return res.status(404).json({ message: 'User not found' });
       member.linkedUser = user._id;
@@ -751,7 +769,7 @@ router.post('/dues/members/:id/send-dues-email', adminOrTreasurerAuth, async (re
               </tr>
               <tr>
                 <td align="center" style="color:#475569;font-size:16px;line-height:1.6;padding-bottom:20px;font-family:sans-serif;">
-                  Hi <strong>${user.displayName}</strong>! Here's your current dues status as of today.
+                  Hi <strong>${escapeHtml(user.displayName)}</strong>! Here's your current dues status as of today.
                 </td>
               </tr>
               <tr>
@@ -816,25 +834,36 @@ router.get('/dues/reminder-preview', adminOrTreasurerAuth, async (req, res) => {
     // on linkedUser alone made the preview show "no roster" for people the email
     // then greeted with a real balance, because the mailer also falls back to an
     // exact name match.
-    const withArrears = await Promise.all(
-      recipients.map(async (u) => {
-        const member = await resolveRosterMember(u);
-        const arrears = member ? await calcMemberArrears(member._id) : null;
-        return {
-          ...u,
-          rosterName: member?.name || null,
-          matchedBy: member ? (String(member.linkedUser || '') === String(u._id) ? 'link' : 'name') : null,
-          arrears,
-        };
-      })
+    const matched = await Promise.all(
+      recipients.map(async (u) => ({ u, member: await resolveRosterMember(u) }))
     );
+
+    // One aggregate across every matched member instead of a payment query per
+    // recipient — showcases how many round trips the old version amortised.
+    const paidTotals = new Map();
+    const memberIds = matched.filter(x => x.member).map(x => x.member._id);
+    if (memberIds.length > 0) {
+      const rows = await DuesPayment.aggregate([
+        { $match: { member: { $in: memberIds } } },
+        { $group: { _id: '$member', total: { $sum: '$amount' } } },
+      ]);
+      rows.forEach(r => paidTotals.set(r._id.toString(), r.total));
+    }
+
+    const expectedPerMember = duesSundaysToDate() * DUES_WEEKLY_AMOUNT;
+    const withArrears = matched.map(({ u, member }) => ({
+      ...u,
+      rosterName: member?.name || null,
+      matchedBy: member ? (String(member.linkedUser || '') === String(u._id) ? 'link' : 'name') : null,
+      arrears: member ? expectedPerMember - (paidTotals.get(member._id.toString()) || 0) : null,
+    }));
 
     res.json({
       recipients: withArrears,
       total: withArrears.length,
       verifiedCount,
       unsubscribedCount: verifiedCount - withArrears.length,
-      expectedToDate: duesSundaysToDate() * DUES_WEEKLY_AMOUNT,
+      expectedToDate: expectedPerMember,
     });
   } catch (err) {
     console.error('Error building reminder preview:', err);

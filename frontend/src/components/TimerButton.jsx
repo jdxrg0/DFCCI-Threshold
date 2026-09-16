@@ -24,6 +24,17 @@ const TimerButton = ({
   const [timeLeft, setTimeLeft] = useState(duration);
   const [message, setMessage] = useState(null);
   const progressRef = useRef(null);
+  // Wall-clock deadline for the countdown. Ticking against a timestamp (rather
+  // than decrementing state each second) keeps the countdown accurate even
+  // when the browser throttles intervals in a background tab.
+  const endTsRef = useRef(0);
+  const intervalRef = useRef(null);
+  const onConfirmRef = useRef(onConfirm);
+  // Keep the ref pointing at the latest onConfirm without recreating the
+  // countdown interval every time the parent re-renders.
+  useEffect(() => {
+    onConfirmRef.current = onConfirm;
+  });
 
   // Sync timeLeft if duration prop changes while not counting
   useEffect(() => {
@@ -37,15 +48,22 @@ const TimerButton = ({
 
   useEffect(() => {
     if (!isCounting) return;
-    if (timeLeft <= 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsCounting(false);
-      if (onConfirm) onConfirm();
-      return;
-    }
-    const timer = setInterval(() => setTimeLeft(prev => prev - 1), 1000);
-    return () => clearInterval(timer);
-  }, [isCounting, timeLeft, onConfirm]);
+    endTsRef.current = Date.now() + duration * 1000;
+    intervalRef.current = setInterval(() => {
+      const remaining = Math.max(0, Math.round((endTsRef.current - Date.now()) / 1000));
+      setTimeLeft(remaining);
+      if (remaining <= 0) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+        setIsCounting(false);
+        if (onConfirmRef.current) onConfirmRef.current();
+      }
+    }, 1000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+  }, [isCounting, duration]);
 
   useEffect(() => {
     if (isCounting) {

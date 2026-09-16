@@ -65,11 +65,31 @@ const sendEmail = async (to, subject, html, retries = 3, backoff = 1000) => {
       return { ok: true, dev: true };
     }
 
+    // The relay authenticates callers with a shared secret. It must come from
+    // the environment — a hardcoded 'dfcci_secret' fallback used to leak the
+    // same value into every deployment and into this public repo.
+    const appPassword = process.env.EMAIL_APP_PASSWORD;
+    if (!appPassword) {
+      console.error('EMAIL_APP_PASSWORD is not set; cannot dispatch email to the apps-script relay.');
+      try {
+        await EmailLog.create({
+          to,
+          subject,
+          html: finalHtml,
+          status: 'failed',
+          error: 'EMAIL_APP_PASSWORD is not set',
+        });
+      } catch (logError) {
+        console.error('Failed to create failed-email log:', logError.message);
+      }
+      return { ok: false, dev: false, error: 'EMAIL_APP_PASSWORD is not set' };
+    }
+
     // Google Apps Script doesn't explicitly need headers, just the body
     const response = await fetch(process.env.APPS_SCRIPT_URL, {
       method: 'POST',
       body: JSON.stringify({
-        secret: process.env.EMAIL_APP_PASSWORD || 'dfcci_secret', // Security token
+        secret: appPassword, // Security token
         to: to,
         subject: subject,
         html: finalHtml

@@ -36,8 +36,11 @@ const MyFruits = () => {
     
     fetchMyFruits();
 
-    // Poll every 15 seconds to keep the numbers updated in real-time
+    // Poll every 15 seconds to keep the numbers updated in real-time.
+    // Skip the fetch while the tab is hidden so backgrounded phones aren't
+    // hammering the API for data nobody is looking at.
     const intervalId = setInterval(() => {
+      if (document.hidden) return;
       fetchMyFruits(true);
     }, 15000);
 

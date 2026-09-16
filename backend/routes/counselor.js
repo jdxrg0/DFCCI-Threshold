@@ -3,6 +3,13 @@ const router = express.Router();
 const Thread = require('../models/Thread');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 const sendEmail = require('../utils/sendEmail');
+const { badObjectId } = require('../utils/objectId');
+
+// Emails are fire-and-forget side effects; a deleted user leaves a null populate.
+const notifyEmail = (to, subject, html) => {
+  if (!to) return;
+  sendEmail(to, subject, html).catch(err => console.error('Failed to send email:', err));
+};
 
 // List escalated threads requiring attention
 router.get('/threads', requireAuth, requireRole(['COUNSELOR', 'ADMIN']), async (req, res) => {
@@ -28,6 +35,12 @@ router.get('/threads', requireAuth, requireRole(['COUNSELOR', 'ADMIN']), async (
   }
 });
 
+// Guard the /threads/:id handlers (registered after the static /threads list).
+router.use('/threads/:id', (req, res, next) => {
+  if (badObjectId(res, req.params.id)) return;
+  next();
+});
+
 // Request consent from parties
 router.post('/threads/:id/request-access', requireAuth, requireRole(['COUNSELOR', 'ADMIN']), async (req, res) => {
   try {
@@ -49,17 +62,17 @@ router.post('/threads/:id/request-access', requireAuth, requireRole(['COUNSELOR'
     thread.counselorId = req.user._id;
     await thread.save();
 
-    sendEmail(
-      thread.sender.email,
+    notifyEmail(
+      thread.sender?.email,
       'Counselor Access Request',
       '<p>A counselor is requesting access to view your escalated thread. Log in to approve or decline the request.</p>'
-    ).catch(err => console.error(err));
+    );
 
-    sendEmail(
-      thread.receiver.email,
+    notifyEmail(
+      thread.receiver?.email,
       'Counselor Access Request',
       '<p>A counselor is requesting access to view your escalated thread. Log in to approve or decline the request.</p>'
-    ).catch(err => console.error(err));
+    );
 
     res.json({ message: 'Consent requested from both parties', thread });
   } catch (error) {

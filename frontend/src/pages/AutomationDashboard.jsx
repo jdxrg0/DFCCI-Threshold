@@ -421,7 +421,11 @@ export default function AutomationDashboard() {
 
   // Countdowns stay honest without hammering re-renders.
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30000);
+    const timer = setInterval(() => {
+      // Rerendering the whole hub every 30s is pointless while hidden.
+      if (document.hidden) return;
+      setNow(new Date());
+    }, 30000);
     return () => clearInterval(timer);
   }, []);
 
@@ -947,6 +951,7 @@ export default function AutomationDashboard() {
     );
     if (!needsPolling) return;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       automation.getScheduleRuns(runsFor).then(res => {
         setRunsData(prev => ({ ...prev, [runsFor]: res }));
       }).catch(() => {});

@@ -3,6 +3,7 @@ const router = express.Router();
 const QuizSet = require('../models/QuizSet');
 const QuizAttempt = require('../models/QuizAttempt');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
+const { badObjectId } = require('../utils/objectId');
 
 // ── Helper: strip correctIndex and explanations from questions for the player ────────────────
 const sanitizeQuiz = (quiz) => {
@@ -33,6 +34,12 @@ router.get('/quizzes', requireAuth, async (req, res) => {
     console.error('Error fetching quizzes:', error);
     res.status(500).json({ message: 'Server error' });
   }
+});
+
+// Guard the /quizzes/:id handlers (registered after the static /quizzes list).
+router.use('/quizzes/:id', (req, res, next) => {
+  if (badObjectId(res, req.params.id)) return;
+  next();
 });
 
 // ── GET /quizzes/:id — get full quiz for playing (correctIndex stripped) ─────
@@ -300,6 +307,11 @@ router.get('/leaderboard', requireAuth, async (req, res) => {
 });
 
 // ── GET /leaderboard/:quizId — per-quiz leaderboard ─────────────────────────
+router.use('/leaderboard/:quizId', (req, res, next) => {
+  if (badObjectId(res, req.params.quizId)) return;
+  next();
+});
+
 router.get('/leaderboard/:quizId', requireAuth, async (req, res) => {
   try {
     // Get best attempt per user for this quiz

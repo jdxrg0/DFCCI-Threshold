@@ -3,6 +3,8 @@ const router = express.Router();
 const Ticket = require('../models/Ticket');
 const { requireAuth, requireRole } = require('../middleware/authMiddleware');
 const { recordAudit, AUDIT_ACTIONS } = require('../utils/auditLog');
+const { badObjectId } = require('../utils/objectId');
+const { LIMITS, tooLong } = require('../utils/limits');
 const auth = requireAuth;
 const adminAuth = [requireAuth, requireRole(['ADMIN'])];
 
@@ -13,6 +15,12 @@ router.post('/', auth, async (req, res) => {
 
     if (!title || !description || !type) {
       return res.status(400).json({ msg: 'Please provide title, description, and type' });
+    }
+    if (tooLong(title, 'TICKET_TITLE')) {
+      return res.status(400).json({ msg: `Title is too long (max ${LIMITS.TICKET_TITLE} characters)` });
+    }
+    if (tooLong(description, 'TICKET_DESCRIPTION')) {
+      return res.status(400).json({ msg: `Description is too long (max ${LIMITS.TICKET_DESCRIPTION} characters)` });
     }
 
     const newTicket = new Ticket({
@@ -55,6 +63,11 @@ router.get('/', adminAuth, async (req, res) => {
 });
 
 // Get single ticket by ID
+router.use('/:id', (req, res, next) => {
+  if (badObjectId(res, req.params.id)) return;
+  next();
+});
+
 router.get('/:id', auth, async (req, res) => {
   try {
     const ticket = await Ticket.findById(req.params.id).populate('createdBy', 'displayName email');
@@ -64,7 +77,7 @@ router.get('/:id', auth, async (req, res) => {
     }
 
     // Ensure the user owns the ticket or is an admin
-    if (ticket.createdBy._id.toString() !== req.user._id.toString() && req.user.role !== 'ADMIN') {
+    if (ticket.createdBy?._id?.toString() !== req.user._id.toString() && req.user.role !== 'ADMIN') {
       return res.status(403).json({ msg: 'Not authorized' });
     }
 
