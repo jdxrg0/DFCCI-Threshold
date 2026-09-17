@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 
 // These should be set in GitHub Action environment
 const e2eePin = process.env.FB_E2EE_PIN;
-const backendUrl = process.env.BACKEND_API_URL || 'https://dfcci-threshold.onrender.com';
+const backendUrl = process.env.BACKEND_API_URL || 'https://dfcci-threshold-3sbv.onrender.com';
 const chatsToCheckStr = process.env.CHATS_TO_CHECK || '[]';
 const referenceCode = process.env.REFERENCE_CODE; // e.g., DFCCI-S-LU-071926
 
