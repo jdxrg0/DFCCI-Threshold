@@ -239,7 +239,7 @@ router.post('/', requireAuth, requireVerified, async (req, res) => {
     if (!application?.trim()) return res.status(400).json({ message: 'Application is required.' });
 
     for (const [field, max] of [['book', 100], ['passageStr', 500], ['summary', 2000], ['application', 2000], ['prayerFocus', 2000]]) {
-      if (tooLong(req.body[field], max)) {
+      if (String(req.body[field] ?? '').length > max) {
         return res.status(400).json({ message: `${field} is too long (max ${max} characters).` });
       }
     }
